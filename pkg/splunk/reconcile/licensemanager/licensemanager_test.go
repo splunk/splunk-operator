@@ -930,10 +930,12 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 				MonitoringConsoleRef: corev1.ObjectReference{
 					Name: "mcName",
 				},
@@ -1136,10 +1138,12 @@ func TestLicenseManagerWithReadyState(t *testing.T) {
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 				LicenseManagerRef: licenseObjRef,
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 			AppFrameworkConfig: appFrameworkSpec,
 		},

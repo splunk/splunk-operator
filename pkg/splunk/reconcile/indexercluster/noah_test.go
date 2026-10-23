@@ -100,7 +100,9 @@ func newNoahIndexerDependencyTestCR(generation int64, noahClusterName string) *e
 			Replicas:       1,
 			NoahClusterRef: &corev1.LocalObjectReference{Name: noahClusterName},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				},
 			},
 		},
 	}
@@ -1273,7 +1275,9 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 			Replicas:       3,
 			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				},
 			},
 		},
 	}
@@ -1406,7 +1410,9 @@ func TestApplyNoahIndexerResourcesDefersBeforeDefaultsGarbageCollection(t *testi
 			Replicas:       1,
 			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec:              enterpriseApi.Spec{Image: "splunk/splunk:new"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:new"},
+				},
 				LicenseManagerRef: corev1.ObjectReference{Name: "license-manager", Namespace: "licenses"},
 			},
 		},
@@ -2603,7 +2609,9 @@ func TestNoahIndexerResourcesRecoverAfterDependencyRecreation(t *testing.T) {
 			Replicas:       1,
 			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				},
 			},
 		},
 	}
@@ -2620,7 +2628,9 @@ func TestNoahIndexerResourcesRecoverAfterDependencyRecreation(t *testing.T) {
 			Replicas:       1,
 			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				},
 			},
 		},
 	}

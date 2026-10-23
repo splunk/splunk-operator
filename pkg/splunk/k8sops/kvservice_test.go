@@ -56,11 +56,6 @@ func TestGetKVServiceDeployment(t *testing.T) {
 	cr.Spec.ImagePullPolicy = "IfNotPresent"
 	cr.Spec.ServiceAccount = "kvservice-sa"
 	cr.Spec.Replicas = 1
-	cr.Spec.LivenessInitialDelaySeconds = 90
-	cr.Spec.ReadinessInitialDelaySeconds = 75
-	cr.Spec.LivenessProbe = &enterpriseApi.Probe{InitialDelaySeconds: 60, TimeoutSeconds: 9, PeriodSeconds: 12, FailureThreshold: 8}
-	cr.Spec.ReadinessProbe = &enterpriseApi.Probe{InitialDelaySeconds: 65, TimeoutSeconds: 7, PeriodSeconds: 10, FailureThreshold: 6}
-	cr.Spec.StartupProbe = &enterpriseApi.Probe{InitialDelaySeconds: 60, TimeoutSeconds: 5, PeriodSeconds: 10, FailureThreshold: 20}
 
 	deployment, err := GetKVServiceDeployment(ctx, c, cr)
 	if err != nil {

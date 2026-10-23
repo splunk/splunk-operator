@@ -2531,10 +2531,12 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		},
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 		Status: enterpriseApi.StandaloneStatus{
@@ -2580,10 +2582,12 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		},
 		Spec: enterpriseApiV3.LicenseMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 	}
@@ -2613,10 +2617,12 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		},
 		Spec: enterpriseApi.MonitoringConsoleSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 		Status: enterpriseApi.MonitoringConsoleStatus{},
@@ -2647,10 +2653,12 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		},
 		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 		Status: enterpriseApiV3.ClusterMasterStatus{},
@@ -2681,10 +2689,12 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		},
 		Spec: enterpriseApi.IndexerClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 		Status: enterpriseApi.IndexerClusterStatus{
@@ -2717,10 +2727,12 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		},
 		Spec: enterpriseApi.SearchHeadClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 		Status: enterpriseApi.SearchHeadClusterStatus{
@@ -2764,10 +2776,12 @@ func TestFetchCurrentCRWithStatusUpdate(t *testing.T) {
 		},
 		Spec: enterpriseApi.IngestorClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 		Status: enterpriseApi.IngestorClusterStatus{
@@ -2899,11 +2913,13 @@ func TestGetCurrentImage(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:latest",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           "splunk/splunk:latest",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 	}

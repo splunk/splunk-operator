@@ -24,6 +24,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -65,11 +66,22 @@ func GetKVServiceDeployment(ctx context.Context, c splcommon.ControllerClient, c
 	if secret == nil {
 		return nil, fmt.Errorf("deployment secret for %s is unavailable", desired.Name)
 	}
-	spec := cr.Spec.CommonSplunkSpec.DeepCopy()
-	if err := updateSplunkPodTemplateWithConfig(ctx, c, &desired.Spec.Template, cr, spec, splcommon.SplunkKVService, nil, secret.Name); err != nil {
-		return nil, err
+	spec := cr.Spec.CommonWorkloadSpec.DeepCopy()
+	resources.ConfigureWorkloadPortsAndVolumes(&desired.Spec.Template, spec)
+	configureWorkloadVolumes(ctx, c, &desired.Spec.Template, cr, spec, splcommon.SplunkKVService, secret.Name)
+	resources.ConfigureWorkloadSecurity(&desired.Spec.Template)
+	defaultsURL := "/mnt/splunk-secrets/default.yml"
+	if spec.Defaults != "" {
+		defaultsURL = "/mnt/splunk-defaults/default.yml," + defaultsURL
 	}
-	resources.ConfigureKVServiceHTTPProbes(&desired.Spec.Template)
+	env := getWorkloadEnv(defaultsURL, splcommon.SplunkKVService.ToRole())
+	env = append(env, corev1.EnvVar{Name: splunkKVStoreDefaultTypeEnv, Value: splunkKVStoreTypeLocal})
+	env = resources.RemoveDuplicateEnvVars(append(spec.ExtraEnv, env...))
+	for idx := range desired.Spec.Template.Spec.Containers {
+		desired.Spec.Template.Spec.Containers[idx].Resources = spec.Resources
+		desired.Spec.Template.Spec.Containers[idx].Env = env
+	}
+	resources.ConfigureKVServiceHTTPProbes(&desired.Spec.Template, &cr.Spec)
 	return desired, nil
 }
 

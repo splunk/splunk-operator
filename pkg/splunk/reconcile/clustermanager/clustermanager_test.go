@@ -1040,11 +1040,13 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		},
 		Spec: enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Image:           "splunk/splunk:latest",
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Image:           "splunk/splunk:latest",
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 	}
@@ -1055,11 +1057,13 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Image:           "splunk/splunk:latest",
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Image:           "splunk/splunk:latest",
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: "test-lm",
 				},
@@ -1158,11 +1162,13 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:latest",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           "splunk/splunk:latest",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: "test",
 				},
@@ -1180,11 +1186,13 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 		},
 		Spec: enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           "splunk/splunk:latest",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           "splunk/splunk:latest",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: "test",
 				},
@@ -1363,10 +1371,12 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 				MonitoringConsoleRef: corev1.ObjectReference{
 					Name: "mcName",
 				},
@@ -1742,10 +1752,12 @@ func TestClusterManagerUpdatesMonitoringConsoleAnnotations(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 	}
@@ -1756,10 +1768,12 @@ func TestClusterManagerUpdatesMonitoringConsoleAnnotations(t *testing.T) {
 		},
 		Spec: enterpriseApi.MonitoringConsoleSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: "test",
 				},

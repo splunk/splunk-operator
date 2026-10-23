@@ -275,6 +275,11 @@ func GetStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 
 // SetVolumeDefaults sets default modes for Secret and ConfigMap volumes.
 func SetVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
+	SetWorkloadVolumeDefaults(&spec.CommonWorkloadSpec)
+}
+
+// SetWorkloadVolumeDefaults sets default modes for shared Secret and ConfigMap volumes.
+func SetWorkloadVolumeDefaults(spec *enterpriseApi.CommonWorkloadSpec) {
 	if spec.Volumes == nil {
 		spec.Volumes = []corev1.Volume{}
 	}

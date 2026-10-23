@@ -106,9 +106,11 @@ func (testcaseenv *TestCaseEnv) UpdateMonitoringConsoleRefAndVerify(ctx context.
 func (testcaseenv *TestCaseEnv) DeployStandaloneWithMCRef(ctx context.Context, deployment *Deployment, deploymentName string, mcName string) (*enterpriseApi.Standalone, error) {
 	spec := enterpriseApi.StandaloneSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "IfNotPresent",
-				Image:           testcaseenv.GetSplunkImage(),
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "IfNotPresent",
+					Image:           testcaseenv.GetSplunkImage(),
+				},
 			},
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,

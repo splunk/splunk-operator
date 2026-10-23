@@ -300,13 +300,20 @@ func TestTelemetryUpdateLastTransmissionTime_RepeatedCalls(t *testing.T) {
 func TestTelemetryCollectDeploymentTelData_AllKinds(t *testing.T) {
 	ctx := context.TODO()
 	crs := map[string][]client.Object{
-		"Standalone":        {&enterpriseApi.Standalone{TypeMeta: metav1.TypeMeta{Kind: "Standalone"}, ObjectMeta: metav1.ObjectMeta{Name: "standalone1"}, Spec: enterpriseApi.StandaloneSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("1Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("2Gi")}}}}}}},
-		"LicenseManager":    {&enterpriseApi.LicenseManager{TypeMeta: metav1.TypeMeta{Kind: "LicenseManager"}, ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApi.LicenseManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3"), corev1.ResourceMemory: resource.MustParse("3Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4"), corev1.ResourceMemory: resource.MustParse("4Gi")}}}}}}},
-		"LicenseMaster":     {&enterpriseApiV3.LicenseMaster{TypeMeta: metav1.TypeMeta{Kind: "LicenseMaster"}, ObjectMeta: metav1.ObjectMeta{Name: "lmast1"}, Spec: enterpriseApiV3.LicenseMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("5"), corev1.ResourceMemory: resource.MustParse("5Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("6"), corev1.ResourceMemory: resource.MustParse("6Gi")}}}}}}},
-		"SearchHeadCluster": {&enterpriseApi.SearchHeadCluster{TypeMeta: metav1.TypeMeta{Kind: "SearchHeadCluster"}, ObjectMeta: metav1.ObjectMeta{Name: "shc1"}, Spec: enterpriseApi.SearchHeadClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("7"), corev1.ResourceMemory: resource.MustParse("7Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("8"), corev1.ResourceMemory: resource.MustParse("8Gi")}}}}}}},
-		"IndexerCluster":    {&enterpriseApi.IndexerCluster{TypeMeta: metav1.TypeMeta{Kind: "IndexerCluster"}, ObjectMeta: metav1.ObjectMeta{Name: "idx1"}, Spec: enterpriseApi.IndexerClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("9"), corev1.ResourceMemory: resource.MustParse("9Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10"), corev1.ResourceMemory: resource.MustParse("10Gi")}}}}}}},
-		"ClusterManager":    {&enterpriseApi.ClusterManager{TypeMeta: metav1.TypeMeta{Kind: "ClusterManager"}, ObjectMeta: metav1.ObjectMeta{Name: "cmgr1"}, Spec: enterpriseApi.ClusterManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("11"), corev1.ResourceMemory: resource.MustParse("11Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("12"), corev1.ResourceMemory: resource.MustParse("12Gi")}}}}}}},
-		"ClusterMaster":     {&enterpriseApiV3.ClusterMaster{TypeMeta: metav1.TypeMeta{Kind: "ClusterMaster"}, ObjectMeta: metav1.ObjectMeta{Name: "cmast1"}, Spec: enterpriseApiV3.ClusterMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("13"), corev1.ResourceMemory: resource.MustParse("13Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("14"), corev1.ResourceMemory: resource.MustParse("14Gi")}}}}}}},
+		"Standalone": {&enterpriseApi.Standalone{TypeMeta: metav1.TypeMeta{Kind: "Standalone"}, ObjectMeta: metav1.ObjectMeta{Name: "standalone1"}, Spec: enterpriseApi.StandaloneSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("1Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("2Gi")}}}}}}}},
+		"LicenseManager": {&enterpriseApi.LicenseManager{TypeMeta: metav1.TypeMeta{Kind: "LicenseManager"}, ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApi.LicenseManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3"), corev1.ResourceMemory: resource.MustParse("3Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4"), corev1.ResourceMemory: resource.MustParse("4Gi")}}}}}}}},
+		"LicenseMaster": {&enterpriseApiV3.LicenseMaster{TypeMeta: metav1.TypeMeta{Kind: "LicenseMaster"}, ObjectMeta: metav1.ObjectMeta{Name: "lmast1"}, Spec: enterpriseApiV3.LicenseMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("5"), corev1.ResourceMemory: resource.MustParse("5Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("6"), corev1.ResourceMemory: resource.MustParse("6Gi")}}}}}}}},
+		"SearchHeadCluster": {&enterpriseApi.SearchHeadCluster{TypeMeta: metav1.TypeMeta{Kind: "SearchHeadCluster"}, ObjectMeta: metav1.ObjectMeta{Name: "shc1"}, Spec: enterpriseApi.SearchHeadClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("7"), corev1.ResourceMemory: resource.MustParse("7Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("8"), corev1.ResourceMemory: resource.MustParse("8Gi")}}}}}}}},
+		"IndexerCluster": {&enterpriseApi.IndexerCluster{TypeMeta: metav1.TypeMeta{Kind: "IndexerCluster"}, ObjectMeta: metav1.ObjectMeta{Name: "idx1"}, Spec: enterpriseApi.IndexerClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("9"), corev1.ResourceMemory: resource.MustParse("9Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10"), corev1.ResourceMemory: resource.MustParse("10Gi")}}}}}}}},
+		"ClusterManager": {&enterpriseApi.ClusterManager{TypeMeta: metav1.TypeMeta{Kind: "ClusterManager"}, ObjectMeta: metav1.ObjectMeta{Name: "cmgr1"}, Spec: enterpriseApi.ClusterManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("11"), corev1.ResourceMemory: resource.MustParse("11Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("12"), corev1.ResourceMemory: resource.MustParse("12Gi")}}}}}}}},
+		"ClusterMaster": {&enterpriseApiV3.ClusterMaster{TypeMeta: metav1.TypeMeta{Kind: "ClusterMaster"}, ObjectMeta: metav1.ObjectMeta{Name: "cmast1"}, Spec: enterpriseApiV3.ClusterMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("13"), corev1.ResourceMemory: resource.MustParse("13Gi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("14"), corev1.ResourceMemory: resource.MustParse("14Gi")}}}}}}}},
 	}
 	fakeClient := &FakeListClient{crs: crs}
 	deploymentData := make(map[string]interface{})
@@ -513,10 +520,12 @@ func TestHandleMonitoringConsoles_OneCR(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "mc1"},
 		Spec: enterpriseApi.MonitoringConsoleSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
-						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+							Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+						},
 					},
 				},
 			},
@@ -559,10 +568,12 @@ func TestHandleMonitoringConsoles_MultipleCRs(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "mc1"},
 		Spec: enterpriseApi.MonitoringConsoleSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
-						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+							Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+						},
 					},
 				},
 			},
@@ -572,10 +583,12 @@ func TestHandleMonitoringConsoles_MultipleCRs(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "mc2"},
 		Spec: enterpriseApi.MonitoringConsoleSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3"), corev1.ResourceMemory: resource.MustParse("6Gi")},
-						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4"), corev1.ResourceMemory: resource.MustParse("8Gi")},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3"), corev1.ResourceMemory: resource.MustParse("6Gi")},
+							Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4"), corev1.ResourceMemory: resource.MustParse("8Gi")},
+						},
 					},
 				},
 			},
@@ -658,10 +671,12 @@ func TestHandleStandalones_OneCR(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "s1"},
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
-						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+							Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+						},
 					},
 				},
 			},
@@ -690,7 +705,9 @@ func TestHandleStandalones_ResourceDefaultsDisabled(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "s1"},
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{DisableResourceDefaults: true},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{DisableResourceDefaults: true},
+				},
 			},
 		},
 	}
@@ -716,10 +733,12 @@ func TestHandleStandalones_MultipleCRs(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "s1"},
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
-						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+							Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
+						},
 					},
 				},
 			},
@@ -729,10 +748,12 @@ func TestHandleStandalones_MultipleCRs(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "s2"},
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")},
-						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")},
+							Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")},
+						},
 					},
 				},
 			},
@@ -768,7 +789,8 @@ func TestHandleStandalones_ListError(t *testing.T) {
 	}
 }
 func TestHandleStandalones_EdgeResourceSpecs(t *testing.T) {
-	cr := &enterpriseApi.Standalone{ObjectMeta: metav1.ObjectMeta{Name: "s1"}, Spec: enterpriseApi.StandaloneSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}
+	cr := &enterpriseApi.Standalone{ObjectMeta: metav1.ObjectMeta{Name: "s1"}, Spec: enterpriseApi.StandaloneSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}}
 	mockClient := &FakeListClient{crs: map[string][]client.Object{"Standalone": {cr}}}
 	ctx := context.TODO()
 	data, _, err := handleStandalones(ctx, mockClient)
@@ -804,10 +826,12 @@ func TestHandleLicenseManagers_OneCR(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "lm1"},
 		Spec: enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
-						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+							Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+						},
 					},
 				},
 			},
@@ -832,8 +856,10 @@ func TestHandleLicenseManagers_OneCR(t *testing.T) {
 	}
 }
 func TestHandleLicenseManagers_MultipleCRs(t *testing.T) {
-	cr1 := &enterpriseApi.LicenseManager{ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApi.LicenseManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}
-	cr2 := &enterpriseApi.LicenseManager{ObjectMeta: metav1.ObjectMeta{Name: "lm2"}, Spec: enterpriseApi.LicenseManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}
+	cr1 := &enterpriseApi.LicenseManager{ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApi.LicenseManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}}
+	cr2 := &enterpriseApi.LicenseManager{ObjectMeta: metav1.ObjectMeta{Name: "lm2"}, Spec: enterpriseApi.LicenseManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}}
 	mockClient := &FakeListClient{crs: map[string][]client.Object{"LicenseManager": {cr1, cr2}}}
 	ctx := context.TODO()
 	data, _, err := handleLicenseManagers(ctx, mockClient)
@@ -864,7 +890,8 @@ func TestHandleLicenseManagers_ListError(t *testing.T) {
 	}
 }
 func TestHandleLicenseManagers_EdgeResourceSpecs(t *testing.T) {
-	cr := &enterpriseApi.LicenseManager{ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApi.LicenseManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}
+	cr := &enterpriseApi.LicenseManager{ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApi.LicenseManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}}
 	mockClient := &FakeListClient{crs: map[string][]client.Object{"LicenseManager": {cr}}}
 	ctx := context.TODO()
 	data, _, err := handleLicenseManagers(ctx, mockClient)
@@ -900,10 +927,12 @@ func TestHandleLicenseMasters_OneCR(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "lm1"},
 		Spec: enterpriseApiV3.LicenseMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
-						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+							Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+						},
 					},
 				},
 			},
@@ -928,8 +957,10 @@ func TestHandleLicenseMasters_OneCR(t *testing.T) {
 	}
 }
 func TestHandleLicenseMasters_MultipleCRs(t *testing.T) {
-	cr1 := &enterpriseApiV3.LicenseMaster{ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApiV3.LicenseMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}
-	cr2 := &enterpriseApiV3.LicenseMaster{ObjectMeta: metav1.ObjectMeta{Name: "lm2"}, Spec: enterpriseApiV3.LicenseMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}
+	cr1 := &enterpriseApiV3.LicenseMaster{ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApiV3.LicenseMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}}
+	cr2 := &enterpriseApiV3.LicenseMaster{ObjectMeta: metav1.ObjectMeta{Name: "lm2"}, Spec: enterpriseApiV3.LicenseMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}}
 	mockClient := &FakeListClient{crs: map[string][]client.Object{"LicenseMaster": {cr1, cr2}}}
 	ctx := context.TODO()
 	data, _, err := handleLicenseMasters(ctx, mockClient)
@@ -960,7 +991,8 @@ func TestHandleLicenseMasters_ListError(t *testing.T) {
 	}
 }
 func TestHandleLicenseMasters_EdgeResourceSpecs(t *testing.T) {
-	cr := &enterpriseApiV3.LicenseMaster{ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApiV3.LicenseMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}
+	cr := &enterpriseApiV3.LicenseMaster{ObjectMeta: metav1.ObjectMeta{Name: "lm1"}, Spec: enterpriseApiV3.LicenseMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}}
 	mockClient := &FakeListClient{crs: map[string][]client.Object{"LicenseMaster": {cr}}}
 	ctx := context.TODO()
 	data, _, err := handleLicenseMasters(ctx, mockClient)
@@ -996,10 +1028,12 @@ func TestHandleSearchHeadClusters_OneCR(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "shc1"},
 		Spec: enterpriseApi.SearchHeadClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
-						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+							Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+						},
 					},
 				},
 			},
@@ -1024,8 +1058,10 @@ func TestHandleSearchHeadClusters_OneCR(t *testing.T) {
 	}
 }
 func TestHandleSearchHeadClusters_MultipleCRs(t *testing.T) {
-	cr1 := &enterpriseApi.SearchHeadCluster{ObjectMeta: metav1.ObjectMeta{Name: "shc1"}, Spec: enterpriseApi.SearchHeadClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}
-	cr2 := &enterpriseApi.SearchHeadCluster{ObjectMeta: metav1.ObjectMeta{Name: "shc2"}, Spec: enterpriseApi.SearchHeadClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}
+	cr1 := &enterpriseApi.SearchHeadCluster{ObjectMeta: metav1.ObjectMeta{Name: "shc1"}, Spec: enterpriseApi.SearchHeadClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}}
+	cr2 := &enterpriseApi.SearchHeadCluster{ObjectMeta: metav1.ObjectMeta{Name: "shc2"}, Spec: enterpriseApi.SearchHeadClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}}
 	mockClient := &FakeListClient{crs: map[string][]client.Object{"SearchHeadCluster": {cr1, cr2}}}
 	ctx := context.TODO()
 	data, _, err := handleSearchHeadClusters(ctx, mockClient)
@@ -1056,7 +1092,8 @@ func TestHandleSearchHeadClusters_ListError(t *testing.T) {
 	}
 }
 func TestHandleSearchHeadClusters_EdgeResourceSpecs(t *testing.T) {
-	cr := &enterpriseApi.SearchHeadCluster{ObjectMeta: metav1.ObjectMeta{Name: "shc1"}, Spec: enterpriseApi.SearchHeadClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}
+	cr := &enterpriseApi.SearchHeadCluster{ObjectMeta: metav1.ObjectMeta{Name: "shc1"}, Spec: enterpriseApi.SearchHeadClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}}
 	mockClient := &FakeListClient{crs: map[string][]client.Object{"SearchHeadCluster": {cr}}}
 	ctx := context.TODO()
 	data, _, err := handleSearchHeadClusters(ctx, mockClient)
@@ -1092,10 +1129,12 @@ func TestHandleIndexerClusters_OneCR(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "idx1"},
 		Spec: enterpriseApi.IndexerClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
-						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+							Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+						},
 					},
 				},
 			},
@@ -1120,8 +1159,10 @@ func TestHandleIndexerClusters_OneCR(t *testing.T) {
 	}
 }
 func TestHandleIndexerClusters_MultipleCRs(t *testing.T) {
-	cr1 := &enterpriseApi.IndexerCluster{ObjectMeta: metav1.ObjectMeta{Name: "idx1"}, Spec: enterpriseApi.IndexerClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}
-	cr2 := &enterpriseApi.IndexerCluster{ObjectMeta: metav1.ObjectMeta{Name: "idx2"}, Spec: enterpriseApi.IndexerClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}
+	cr1 := &enterpriseApi.IndexerCluster{ObjectMeta: metav1.ObjectMeta{Name: "idx1"}, Spec: enterpriseApi.IndexerClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}}
+	cr2 := &enterpriseApi.IndexerCluster{ObjectMeta: metav1.ObjectMeta{Name: "idx2"}, Spec: enterpriseApi.IndexerClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}}
 	mockClient := &FakeListClient{crs: map[string][]client.Object{"IndexerCluster": {cr1, cr2}}}
 	ctx := context.TODO()
 	data, _, err := handleIndexerClusters(ctx, mockClient)
@@ -1152,7 +1193,8 @@ func TestHandleIndexerClusters_ListError(t *testing.T) {
 	}
 }
 func TestHandleIndexerClusters_EdgeResourceSpecs(t *testing.T) {
-	cr := &enterpriseApi.IndexerCluster{ObjectMeta: metav1.ObjectMeta{Name: "idx1"}, Spec: enterpriseApi.IndexerClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}
+	cr := &enterpriseApi.IndexerCluster{ObjectMeta: metav1.ObjectMeta{Name: "idx1"}, Spec: enterpriseApi.IndexerClusterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}}
 	mockClient := &FakeListClient{crs: map[string][]client.Object{"IndexerCluster": {cr}}}
 	ctx := context.TODO()
 	data, _, err := handleIndexerClusters(ctx, mockClient)
@@ -1188,10 +1230,12 @@ func TestHandleClusterManagers_OneCR(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "cmgr1"},
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
-						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+							Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+						},
 					},
 				},
 			},
@@ -1216,8 +1260,10 @@ func TestHandleClusterManagers_OneCR(t *testing.T) {
 	}
 }
 func TestHandleClusterManagers_MultipleCRs(t *testing.T) {
-	cr1 := &enterpriseApi.ClusterManager{ObjectMeta: metav1.ObjectMeta{Name: "cmgr1"}, Spec: enterpriseApi.ClusterManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}
-	cr2 := &enterpriseApi.ClusterManager{ObjectMeta: metav1.ObjectMeta{Name: "cmgr2"}, Spec: enterpriseApi.ClusterManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}
+	cr1 := &enterpriseApi.ClusterManager{ObjectMeta: metav1.ObjectMeta{Name: "cmgr1"}, Spec: enterpriseApi.ClusterManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}}
+	cr2 := &enterpriseApi.ClusterManager{ObjectMeta: metav1.ObjectMeta{Name: "cmgr2"}, Spec: enterpriseApi.ClusterManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}}
 	mockClient := &FakeListClient{crs: map[string][]client.Object{"ClusterManager": {cr1, cr2}}}
 	ctx := context.TODO()
 	data, _, err := handleClusterManagers(ctx, mockClient)
@@ -1248,7 +1294,8 @@ func TestHandleClusterManagers_ListError(t *testing.T) {
 	}
 }
 func TestHandleClusterManagers_EdgeResourceSpecs(t *testing.T) {
-	cr := &enterpriseApi.ClusterManager{ObjectMeta: metav1.ObjectMeta{Name: "cmgr1"}, Spec: enterpriseApi.ClusterManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}
+	cr := &enterpriseApi.ClusterManager{ObjectMeta: metav1.ObjectMeta{Name: "cmgr1"}, Spec: enterpriseApi.ClusterManagerSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}}
 	mockClient := &FakeListClient{crs: map[string][]client.Object{"ClusterManager": {cr}}}
 	ctx := context.TODO()
 	data, _, err := handleClusterManagers(ctx, mockClient)
@@ -1284,10 +1331,12 @@ func TestHandleClusterMasters_OneCR(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "cmast1"},
 		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
-						Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("2Gi")},
+							Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2"), corev1.ResourceMemory: resource.MustParse("4Gi")},
+						},
 					},
 				},
 			},
@@ -1312,8 +1361,10 @@ func TestHandleClusterMasters_OneCR(t *testing.T) {
 	}
 }
 func TestHandleClusterMasters_MultipleCRs(t *testing.T) {
-	cr1 := &enterpriseApiV3.ClusterMaster{ObjectMeta: metav1.ObjectMeta{Name: "cmast1"}, Spec: enterpriseApiV3.ClusterMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}
-	cr2 := &enterpriseApiV3.ClusterMaster{ObjectMeta: metav1.ObjectMeta{Name: "cmast2"}, Spec: enterpriseApiV3.ClusterMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}
+	cr1 := &enterpriseApiV3.ClusterMaster{ObjectMeta: metav1.ObjectMeta{Name: "cmast1"}, Spec: enterpriseApiV3.ClusterMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}}}}}}}
+	cr2 := &enterpriseApiV3.ClusterMaster{ObjectMeta: metav1.ObjectMeta{Name: "cmast2"}, Spec: enterpriseApiV3.ClusterMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("3")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4")}}}}}}}
 	mockClient := &FakeListClient{crs: map[string][]client.Object{"ClusterMaster": {cr1, cr2}}}
 	ctx := context.TODO()
 	data, _, err := handleClusterMasters(ctx, mockClient)
@@ -1344,7 +1395,8 @@ func TestHandleClusterMasters_ListError(t *testing.T) {
 	}
 }
 func TestHandleClusterMasters_EdgeResourceSpecs(t *testing.T) {
-	cr := &enterpriseApiV3.ClusterMaster{ObjectMeta: metav1.ObjectMeta{Name: "cmast1"}, Spec: enterpriseApiV3.ClusterMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}
+	cr := &enterpriseApiV3.ClusterMaster{ObjectMeta: metav1.ObjectMeta{Name: "cmast1"}, Spec: enterpriseApiV3.ClusterMasterSpec{CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{Resources: corev1.ResourceRequirements{}}}}}}
 	mockClient := &FakeListClient{crs: map[string][]client.Object{"ClusterMaster": {cr}}}
 	ctx := context.TODO()
 	data, _, err := handleClusterMasters(ctx, mockClient)

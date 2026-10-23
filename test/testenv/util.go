@@ -102,11 +102,13 @@ func newStandalone(name, ns, splunkImage string) *enterpriseApi.Standalone {
 
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           splunkImage,
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           splunkImage,
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 	}
@@ -145,24 +147,26 @@ func newLicenseManager(name, ns, licenseConfigMapName, splunkImage string) *ente
 
 		Spec: enterpriseApi.LicenseManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Volumes: []corev1.Volume{
-					{
-						Name: "licenses",
-						VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: licenseConfigMapName,
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Volumes: []corev1.Volume{
+						{
+							Name: "licenses",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: licenseConfigMapName,
+									},
 								},
 							},
 						},
 					},
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           splunkImage,
+					},
 				},
 				// TODO: Ensure the license file is actually called "enterprise.lic" when creating the config map
 				LicenseURL: "/mnt/licenses/enterprise.lic",
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           splunkImage,
-				},
 			},
 		},
 	}
@@ -183,24 +187,26 @@ func newLicenseMaster(name, ns, licenseConfigMapName, splunkImage string) *enter
 
 		Spec: enterpriseApiV3.LicenseMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Volumes: []corev1.Volume{
-					{
-						Name: "licenses",
-						VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: licenseConfigMapName,
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Volumes: []corev1.Volume{
+						{
+							Name: "licenses",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: licenseConfigMapName,
+									},
 								},
 							},
 						},
 					},
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           splunkImage,
+					},
 				},
 				// TODO: Ensure the license file is actually called "enterprise.lic" when creating the config map
 				LicenseURL: "/mnt/licenses/enterprise.lic",
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           splunkImage,
-				},
 			},
 		},
 	}
@@ -243,10 +249,13 @@ func newClusterManager(name, ns, licenseManagerName, ansibleConfig, splunkImage 
 
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Volumes: []corev1.Volume{},
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           splunkImage,
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Volumes: []corev1.Volume{},
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           splunkImage,
+					},
+					Defaults: ansibleConfig,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -254,7 +263,6 @@ func newClusterManager(name, ns, licenseManagerName, ansibleConfig, splunkImage 
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterRef,
 				},
-				Defaults: ansibleConfig,
 			},
 		},
 	}
@@ -279,10 +287,13 @@ func newClusterMaster(name, ns, licenseManagerName, ansibleConfig, splunkImage s
 
 		Spec: enterpriseApiV3.ClusterMasterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Volumes: []corev1.Volume{},
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           splunkImage,
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Volumes: []corev1.Volume{},
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           splunkImage,
+					},
+					Defaults: ansibleConfig,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -290,7 +301,6 @@ func newClusterMaster(name, ns, licenseManagerName, ansibleConfig, splunkImage s
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterRef,
 				},
-				Defaults: ansibleConfig,
 			},
 		},
 	}
@@ -316,10 +326,13 @@ func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName, ansibleConf
 		Spec: enterpriseApi.ClusterManagerSpec{
 			SmartStore: smartstorespec,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Volumes: []corev1.Volume{},
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           splunkImage,
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Volumes: []corev1.Volume{},
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           splunkImage,
+					},
+					Defaults: ansibleConfig,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -327,7 +340,6 @@ func newClusterManagerWithGivenIndexes(name, ns, licenseManagerName, ansibleConf
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterRef,
 				},
-				Defaults: ansibleConfig,
 			},
 		},
 	}
@@ -353,10 +365,13 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName, ansibleConfi
 		Spec: enterpriseApiV3.ClusterMasterSpec{
 			SmartStore: smartstorespec,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Volumes: []corev1.Volume{},
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           splunkImage,
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Volumes: []corev1.Volume{},
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           splunkImage,
+					},
+					Defaults: ansibleConfig,
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -364,7 +379,6 @@ func newClusterMasterWithGivenIndexes(name, ns, licenseManagerName, ansibleConfi
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterRef,
 				},
-				Defaults: ansibleConfig,
 			},
 		},
 	}
@@ -390,11 +404,14 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 
 		Spec: enterpriseApi.IndexerClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				ServiceAccount: serviceAccountName,
-				Volumes:        []corev1.Volume{},
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           splunkImage,
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ServiceAccount: serviceAccountName,
+					Volumes:        []corev1.Volume{},
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           splunkImage,
+					},
+					Defaults: ansibleConfig,
 				},
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: clusterManagerRef,
@@ -408,7 +425,6 @@ func newIndexerCluster(name, ns, licenseManagerName string, replicas int, cluste
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterRef,
 				},
-				Defaults: ansibleConfig,
 			},
 			Replicas:         int32(replicas),
 			QueueRef:         &queue,
@@ -433,11 +449,13 @@ func newIngestorCluster(name, ns string, replicas int, splunkImage string, queue
 
 		Spec: enterpriseApi.IngestorClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				ServiceAccount: serviceAccountName,
-				Volumes:        []corev1.Volume{},
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           splunkImage,
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ServiceAccount: serviceAccountName,
+					Volumes:        []corev1.Volume{},
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           splunkImage,
+					},
 				},
 			},
 			Replicas:         int32(replicas),
@@ -492,10 +510,13 @@ func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName, ansib
 
 		Spec: enterpriseApi.SearchHeadClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Volumes: []corev1.Volume{},
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           splunkImage,
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Volumes: []corev1.Volume{},
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           splunkImage,
+					},
+					Defaults: ansibleConfig,
 				},
 				ClusterManagerRef: corev1.ObjectReference{
 					Name: clusterManagerRef,
@@ -509,7 +530,6 @@ func newSearchHeadCluster(name, ns, clusterManagerRef, licenseManagerName, ansib
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterRef,
 				},
-				Defaults: ansibleConfig,
 			},
 		},
 	}
@@ -704,9 +724,12 @@ func newStandaloneWithLM(name, ns, licenseManagerName, splunkImage string) *ente
 
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           splunkImage,
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           splunkImage,
+					},
+					Volumes: []corev1.Volume{},
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -714,7 +737,6 @@ func newStandaloneWithLM(name, ns, licenseManagerName, splunkImage string) *ente
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterRef,
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 	}
@@ -774,9 +796,12 @@ func newMonitoringConsoleSpec(name, ns, LicenseManagerRef, splunkImage string) *
 
 		Spec: enterpriseApi.MonitoringConsoleSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           splunkImage,
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           splunkImage,
+					},
+					Volumes: []corev1.Volume{},
 				},
 				LicenseManagerRef: corev1.ObjectReference{
 					Name: licenseManagerRef,
@@ -784,7 +809,6 @@ func newMonitoringConsoleSpec(name, ns, LicenseManagerRef, splunkImage string) *
 				LicenseMasterRef: corev1.ObjectReference{
 					Name: licenseMasterRef,
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 	}

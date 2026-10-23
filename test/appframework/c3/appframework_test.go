@@ -2740,11 +2740,13 @@ var _ = Describe("c3appfw test", func() {
 			// Create spec with clusterMasterRef for Standalone
 			spec := enterpriseApi.StandaloneSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes: []corev1.Volume{},
 					ClusterMasterRef: corev1.ObjectReference{
 						Name: deployment.GetName(),
 					},
@@ -2865,11 +2867,13 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Cluster Master")
 			cmSpec := enterpriseApiV3.ClusterMasterSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes: []corev1.Volume{},
 				},
 				AppFrameworkConfig: appFrameworkSpecIdxc,
 			}
@@ -2886,11 +2890,13 @@ var _ = Describe("c3appfw test", func() {
 			testcaseEnvInst.Log.Info("Deploy Search Head Cluster")
 			shSpec := enterpriseApi.SearchHeadClusterSpec{
 				CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-					Spec: enterpriseApi.Spec{
-						ImagePullPolicy: "Always",
-						Image:           testcaseEnvInst.GetSplunkImage(),
+					CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+						Spec: enterpriseApi.Spec{
+							ImagePullPolicy: "Always",
+							Image:           testcaseEnvInst.GetSplunkImage(),
+						},
+						Volumes: []corev1.Volume{},
 					},
-					Volumes: []corev1.Volume{},
 					ClusterMasterRef: corev1.ObjectReference{
 						Name: deployment.GetName(),
 					},

@@ -24,8 +24,10 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
+	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
@@ -122,7 +124,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-kvservice", cr.Name)
-	if _, err = k8sops.ApplySplunkConfig(ctx, c, cr, cr.Spec.CommonSplunkSpec, splcommon.SplunkKVService); err != nil {
+	if _, err = k8sops.ApplyWorkloadConfig(ctx, c, cr, cr.Spec.CommonWorkloadSpec, splcommon.SplunkKVService); err != nil {
 		publisher.Warning(ctx, splcommon.EventReasonApplySplunkConfigFailed, "KVService configuration failed")
 		return result, fmt.Errorf("apply KVService configuration: %w", err)
 	}
@@ -134,6 +136,11 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	if err != nil {
 		return result, fmt.Errorf("configure KVService Deployment: %w", err)
 	}
+	certMounts, err := certs.ReconcileCerts(ctx, c, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(splcommon.SplunkKVService, cr.Name, cr.Namespace, cr.Spec.Replicas)))
+	if err != nil {
+		return result, fmt.Errorf("reconcile KVService certificates: %w", err)
+	}
+	certs.InjectCertMounts(&deployment.Spec.Template, certMounts)
 	phase, err := k8sops.ApplyDeployment(ctx, c, deployment)
 	if err != nil {
 		publisher.Warning(ctx, splcommon.EventReasonDeploymentFailed, "KVService Deployment reconciliation failed")
