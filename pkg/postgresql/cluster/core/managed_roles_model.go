@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -81,9 +82,7 @@ func (m *managedRolesModel) Reconcile(ctx context.Context) error {
 	}
 	currentOwners := map[string]platformv1alpha1.RoleOwnerReference{}
 	if m.cluster.Status.ManagedRolesStatus != nil {
-		for role, owner := range m.cluster.Status.ManagedRolesStatus.RoleOwners {
-			currentOwners[role] = owner
-		}
+		maps.Copy(currentOwners, m.cluster.Status.ManagedRolesStatus.RoleOwners)
 	}
 	currentRoles := currentManagedRolesFromCNPG(m.contracts.CNPGCluster)
 	decision := computeDesiredRoles(databases, currentOwners, currentRoles, reconciledAbsentRoles(m.contracts.CNPGCluster, currentRoles))

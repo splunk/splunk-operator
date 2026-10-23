@@ -110,9 +110,7 @@ func fakeClientWithPostgreSQLParameterApply(t *testing.T, scheme *runtime.Scheme
 						delete(nextParams, param)
 					}
 				}
-				for param, value := range desiredParams {
-					nextParams[param] = value
-				}
+				maps.Copy(nextParams, desiredParams)
 
 				nextOwnedParams := make(map[string]struct{}, len(desiredParams))
 				for param := range desiredParams {
