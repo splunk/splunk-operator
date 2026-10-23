@@ -17,6 +17,7 @@ limitations under the License.
 package core
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -152,10 +153,7 @@ func (s *secretModel) computeHealth(reconcileErr error) (componentHealth, error)
 		}
 	}
 
-	refKey := s.cluster.Status.Resources.SuperUserSecretRef.Key
-	if refKey == "" {
-		refKey = secretKeyPassword
-	}
+	refKey := cmp.Or(s.cluster.Status.Resources.SuperUserSecretRef.Key, secretKeyPassword)
 	if _, ok := secret.Data[refKey]; !ok {
 		return newFailedHealth(secretsReady, reasonSuperUserSecretFailed, fmt.Sprintf(msgFmtSecretMissingKey, refKey)),
 			fmt.Errorf("secret missing key %s", refKey)
