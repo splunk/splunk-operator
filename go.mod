@@ -14,7 +14,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/kms v1.61.6
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.5
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.6
-	github.com/cert-manager/cert-manager v1.21.2
+	github.com/cert-manager/cert-manager v1.21.3
 	github.com/cloudnative-pg/cloudnative-pg v1.30.1
 	github.com/cloudnative-pg/machinery v0.6.1
 	github.com/distribution/reference v0.6.0
