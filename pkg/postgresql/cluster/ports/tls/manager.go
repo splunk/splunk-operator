@@ -20,6 +20,7 @@ package tls
 import (
 	"context"
 	"errors"
+	"maps"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -59,9 +60,7 @@ func (i Identity) Labels() map[string]string {
 		ClusterUIDLabel:                string(i.ClusterUID),
 		PurposeLabel:                   ServerTLSPurpose,
 	}
-	for key, value := range i.AdditionalLabels {
-		labels[key] = value
-	}
+	maps.Copy(labels, i.AdditionalLabels)
 	return labels
 }
 

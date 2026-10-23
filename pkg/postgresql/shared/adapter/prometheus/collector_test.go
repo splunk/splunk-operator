@@ -19,6 +19,7 @@ package prometheus
 import (
 	"context"
 	"errors"
+	"maps"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -92,9 +93,7 @@ func (r *fleetRecorder) snapshot() (map[string]float64, map[string]float64, map[
 
 func cloneMetricValues(values map[string]float64) map[string]float64 {
 	cloned := make(map[string]float64, len(values))
-	for key, value := range values {
-		cloned[key] = value
-	}
+	maps.Copy(cloned, values)
 	return cloned
 }
 
