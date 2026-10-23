@@ -272,9 +272,6 @@ type CommonWorkloadSpec struct {
 	// +optional
 	Volumes []corev1.Volume `json:"volumes,omitempty"`
 
-	// Inline map of default.yml overrides used to initialize the environment
-	Defaults string `json:"defaults"`
-
 	// ServiceAccount is the service account used by the pods deployed by the CRD.
 	// If not specified uses the default serviceAccount for the namespace as per
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#use-the-default-service-account-to-access-the-api-server
@@ -323,6 +320,9 @@ type CommonSplunkSpec struct {
 	// Storage configuration for /opt/splunk/var volume
 	// +optional
 	VarVolumeStorageConfig StorageClassSpec `json:"varVolumeStorageConfig,omitempty"`
+
+	// Inline map of default.yml overrides used to initialize the environment
+	Defaults string `json:"defaults"`
 
 	// Full path or URL for one or more default.yml files, separated by commas
 	DefaultsURL string `json:"defaultsUrl"`

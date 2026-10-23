@@ -26,7 +26,6 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -106,9 +105,6 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 		if err = k8sops.DeleteKVServiceCR(ctx, c, cr); err != nil {
 			return result, fmt.Errorf("clean up shared KVService: %w", err)
 		}
-		if _, err = splutil.RemoveSecretOwnerRef(ctx, c, splcommon.GetNamespaceScopedSecretName(cr.Namespace), cr); err != nil && !apierrors.IsNotFound(err) {
-			return result, fmt.Errorf("remove KVService secret owner reference: %w", err)
-		}
 		terminating, deleteErr := k8sops.CheckForDeletion(ctx, cr, c)
 		if !terminating {
 			result.RequeueAfter = 0
@@ -124,10 +120,6 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-kvservice", cr.Name)
-	if err = k8sops.ApplyKVServiceConfig(ctx, c, cr); err != nil {
-		publisher.Warning(ctx, splcommon.EventReasonApplySplunkConfigFailed, "KVService configuration failed")
-		return result, fmt.Errorf("apply KVService configuration: %w", err)
-	}
 	if err = k8sops.ApplyService(ctx, c, resources.GetKVServiceService(cr, &cr.Spec)); err != nil {
 		publisher.Warning(ctx, splcommon.EventReasonApplyServiceFailed, "KVService Service reconciliation failed")
 		return result, fmt.Errorf("apply KVService Service: %w", err)

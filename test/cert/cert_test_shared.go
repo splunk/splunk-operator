@@ -195,11 +195,11 @@ func RunC3CertTest(ctx context.Context, deployment *testenv.Deployment, testcase
 	cmPodFQDN := splunkServiceFQDN(fmt.Sprintf("splunk-%s-cluster-manager-0.splunk-%s-cluster-manager-headless", name, name), ns)
 	cmSpec := enterpriseApi.ClusterManagerSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+			Defaults: "splunk:\n  idxc:\n    replication_factor: 1\n    search_factor: 1\n",
 			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
 				Spec: enterpriseApi.Spec{ImagePullPolicy: "Always", Image: splunkImage},
 				// RF/SF set to 1 so a single-replica IndexerCluster (below) isn't
 				// forcibly scaled up by verifyRFPeers to match the default RF of 3.
-				Defaults: "splunk:\n  idxc:\n    replication_factor: 1\n    search_factor: 1\n",
 
 				Certs: serverAutogenCertSpec(cmSecret, issuerName, []string{cmServiceFQDN, cmPodFQDN}),
 			},

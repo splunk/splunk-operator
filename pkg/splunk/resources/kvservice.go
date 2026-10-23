@@ -133,6 +133,9 @@ func NewKVServiceDeployment(cr *enterpriseApi.KVService) *appsv1.Deployment {
 	configureKVServicePortsAndVolumes(&deployment.Spec.Template, spec)
 	configureKVServiceSecurity(&deployment.Spec.Template)
 	deployment.Spec.Template.Spec.Containers[0].Resources = spec.Resources
+	if len(spec.ExtraEnv) > 0 {
+		deployment.Spec.Template.Spec.Containers[0].Env = RemoveDuplicateEnvVars(spec.ExtraEnv)
+	}
 	ConfigureKVServiceHTTPProbes(&deployment.Spec.Template, spec)
 	return deployment
 }
