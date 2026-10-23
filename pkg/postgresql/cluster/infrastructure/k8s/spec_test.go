@@ -17,7 +17,6 @@ limitations under the License.
 package k8s
 
 import (
-	"context"
 	"testing"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -31,7 +30,7 @@ import (
 )
 
 func TestClusterSpecificationGetSpecificationWithAnnotationsReturnsCopies(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	k8sClient, key := newSpecificationTestClient(t, &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pg1",
@@ -61,7 +60,7 @@ func TestClusterSpecificationGetSpecificationWithAnnotationsReturnsCopies(t *tes
 }
 
 func TestClusterSpecificationSetAnnotationsPersistsAnnotations(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	k8sClient, key := newSpecificationTestClient(t, &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pg1",

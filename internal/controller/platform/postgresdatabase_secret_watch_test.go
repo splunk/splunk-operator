@@ -11,7 +11,6 @@ You may obtain a copy of the License at
 package controller
 
 import (
-	"context"
 	"slices"
 	"testing"
 
@@ -156,7 +155,7 @@ func TestEnqueuePostgresDatabasesForExternalSecret(t *testing.T) {
 	r := &PostgresDatabaseReconciler{Client: fakeClient}
 
 	t.Run("shared admin secret enqueues every referencing PD in-namespace", func(t *testing.T) {
-		reqs := r.enqueuePostgresDatabasesForExternalSecret(context.Background(),
+		reqs := r.enqueuePostgresDatabasesForExternalSecret(t.Context(),
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: admSecret, Namespace: ns}})
 		require.Len(t, reqs, 2)
 		got := []string{reqs[0].Name, reqs[1].Name}
@@ -165,20 +164,20 @@ func TestEnqueuePostgresDatabasesForExternalSecret(t *testing.T) {
 	})
 
 	t.Run("rw-only secret enqueues only the matching PD", func(t *testing.T) {
-		reqs := r.enqueuePostgresDatabasesForExternalSecret(context.Background(),
+		reqs := r.enqueuePostgresDatabasesForExternalSecret(t.Context(),
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "rw-two", Namespace: ns}})
 		require.Len(t, reqs, 1)
 		assert.Equal(t, "pd-two", reqs[0].Name)
 	})
 
 	t.Run("namespace isolation: same name in a different namespace does not enqueue", func(t *testing.T) {
-		reqs := r.enqueuePostgresDatabasesForExternalSecret(context.Background(),
+		reqs := r.enqueuePostgresDatabasesForExternalSecret(t.Context(),
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: admSecret, Namespace: "yet-another-ns"}})
 		assert.Empty(t, reqs)
 	})
 
 	t.Run("unrelated secret does not enqueue any database", func(t *testing.T) {
-		reqs := r.enqueuePostgresDatabasesForExternalSecret(context.Background(),
+		reqs := r.enqueuePostgresDatabasesForExternalSecret(t.Context(),
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: ns}})
 		assert.Empty(t, reqs)
 	})
@@ -196,7 +195,7 @@ func TestEnqueuePostgresDatabasesForExternalSecret(t *testing.T) {
 				}},
 			},
 		}
-		reqs := r.enqueuePostgresDatabasesForExternalSecret(context.Background(), owned)
+		reqs := r.enqueuePostgresDatabasesForExternalSecret(t.Context(), owned)
 		assert.Empty(t, reqs, "mapper must skip Secrets with a controller owner")
 	})
 
@@ -213,7 +212,7 @@ func TestEnqueuePostgresDatabasesForExternalSecret(t *testing.T) {
 				}},
 			},
 		}
-		reqs := r.enqueuePostgresDatabasesForExternalSecret(context.Background(), esoOwned)
+		reqs := r.enqueuePostgresDatabasesForExternalSecret(t.Context(), esoOwned)
 		require.Len(t, reqs, 2, "ESO-owned external secret must enqueue every referencing PD")
 		got := []string{reqs[0].Name, reqs[1].Name}
 		slices.Sort(got)
@@ -221,7 +220,7 @@ func TestEnqueuePostgresDatabasesForExternalSecret(t *testing.T) {
 	})
 
 	t.Run("non-Secret object yields nil", func(t *testing.T) {
-		reqs := r.enqueuePostgresDatabasesForExternalSecret(context.Background(), &corev1.ConfigMap{})
+		reqs := r.enqueuePostgresDatabasesForExternalSecret(t.Context(), &corev1.ConfigMap{})
 		assert.Nil(t, reqs)
 	})
 }

@@ -210,7 +210,7 @@ func TestServerTLSModelStopsPipelineOnTerminalError(t *testing.T) {
 	t.Parallel()
 	cluster := &platformv1alpha1.PostgresCluster{}
 	model := newServerTLSModel(nil, noopEventEmitter{}, nil, cluster, nil, nil, &reconcileContracts{})
-	health, err := model.Observe(context.Background(), errors.New("invalid TLS configuration"))
+	health, err := model.Observe(t.Context(), errors.New("invalid TLS configuration"))
 	assert.Equal(t, certificatesReady, health.Condition)
 	assert.Equal(t, reasonCertificateConfigError, health.Reason)
 	assert.Error(t, err)
@@ -234,17 +234,17 @@ func TestServerTLSModelEmitsEventsOnlyForCertificateConditionTransitions(t *test
 	}
 	model := newServerTLSModel(nil, events, updateStatus, cluster, class, nil, &reconcileContracts{})
 
-	_, err := model.Observe(context.Background(), nil)
+	_, err := model.Observe(t.Context(), nil)
 	require.NoError(t, err)
 	assert.Len(t, events.normals, 1)
-	_, err = model.Observe(context.Background(), nil)
+	_, err = model.Observe(t.Context(), nil)
 	require.NoError(t, err)
 	assert.Len(t, events.normals, 1)
 
-	_, err = model.Observe(context.Background(), tlsport.ErrCertificatePending)
+	_, err = model.Observe(t.Context(), tlsport.ErrCertificatePending)
 	require.NoError(t, err)
 	assert.Len(t, events.warnings, 1)
-	_, err = model.Observe(context.Background(), tlsport.ErrCertificatePending)
+	_, err = model.Observe(t.Context(), tlsport.ErrCertificatePending)
 	require.NoError(t, err)
 	assert.Len(t, events.warnings, 1)
 }

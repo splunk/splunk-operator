@@ -16,7 +16,6 @@ limitations under the License.
 package core
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -259,7 +258,7 @@ func TestPoolerExists(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
-			got, err := poolerExistsForEnvironment(context.Background(), c, cluster, &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace}}, "rw", testEnvironmentNamer)
+			got, err := poolerExistsForEnvironment(t.Context(), c, cluster, &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace}}, "rw", testEnvironmentNamer)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, got)
 		})
@@ -298,17 +297,17 @@ func TestDeleteConnectionPoolers(t *testing.T) {
 	t.Run("deletes both poolers when they exist", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(rwPooler.DeepCopy(), roPooler.DeepCopy()).Build()
 
-		err := deleteConnectionPoolers(context.Background(), c, cluster, testEnvironmentNamer)
+		err := deleteConnectionPoolers(t.Context(), c, cluster, testEnvironmentNamer)
 
 		require.NoError(t, err)
-		assert.True(t, apierrors.IsNotFound(c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, &cnpgv1.Pooler{})))
-		assert.True(t, apierrors.IsNotFound(c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, &cnpgv1.Pooler{})))
+		assert.True(t, apierrors.IsNotFound(c.Get(t.Context(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, &cnpgv1.Pooler{})))
+		assert.True(t, apierrors.IsNotFound(c.Get(t.Context(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, &cnpgv1.Pooler{})))
 	})
 
 	t.Run("no-op when no poolers exist", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		err := deleteConnectionPoolers(context.Background(), c, cluster, testEnvironmentNamer)
+		err := deleteConnectionPoolers(t.Context(), c, cluster, testEnvironmentNamer)
 
 		require.NoError(t, err)
 	})
@@ -371,11 +370,11 @@ func TestCreateConnectionPooler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
 
-			err := createAndUpdateConnectionPooler(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpg, "rw", false, testEnvironmentNamer)
+			err := createAndUpdateConnectionPooler(t.Context(), c, scheme, cluster.DeepCopy(), cfg, cnpg, "rw", false, testEnvironmentNamer)
 
 			require.NoError(t, err)
 			fetched := &cnpgv1.Pooler{}
-			require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, fetched))
+			require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, fetched))
 			require.NotNil(t, fetched.Spec.Instances)
 			assert.Equal(t, tt.expectInstances, *fetched.Spec.Instances)
 		})
@@ -428,18 +427,18 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 	t.Run("creates both rw and ro poolers", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, false, testEnvironmentNamer)
+		err := createOrUpdateConnectionPoolers(t.Context(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, false, testEnvironmentNamer)
 
 		require.NoError(t, err)
 
 		rw := &cnpgv1.Pooler{}
-		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, rw))
+		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, rw))
 		assert.Equal(t, expectedPoolerSpec("rw"), rw.Spec)
 		require.Len(t, rw.OwnerReferences, 1)
 		assert.Equal(t, "cluster-uid", string(rw.OwnerReferences[0].UID))
 
 		ro := &cnpgv1.Pooler{}
-		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, ro))
+		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, ro))
 		assert.Equal(t, expectedPoolerSpec("ro"), ro.Spec)
 		require.Len(t, ro.OwnerReferences, 1)
 		assert.Equal(t, "cluster-uid", string(ro.OwnerReferences[0].UID))
@@ -458,14 +457,14 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing...).Build()
 
-		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, false, testEnvironmentNamer)
+		err := createOrUpdateConnectionPoolers(t.Context(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, false, testEnvironmentNamer)
 
 		require.NoError(t, err)
 		rw := &cnpgv1.Pooler{}
-		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, rw))
+		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, rw))
 		assert.Equal(t, expectedPoolerSpec("rw"), rw.Spec)
 		ro := &cnpgv1.Pooler{}
-		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, ro))
+		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, ro))
 		assert.Equal(t, expectedPoolerSpec("ro"), ro.Spec)
 	})
 
@@ -487,16 +486,16 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing...).Build()
 
-		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, false, testEnvironmentNamer)
+		err := createOrUpdateConnectionPoolers(t.Context(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, false, testEnvironmentNamer)
 
 		require.NoError(t, err)
 		rw := &cnpgv1.Pooler{}
-		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, rw))
+		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, rw))
 		require.NotNil(t, rw.Spec.Template)
 		assert.Empty(t, rw.Spec.Template.ObjectMeta.Annotations)
 
 		ro := &cnpgv1.Pooler{}
-		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, ro))
+		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, ro))
 		require.NotNil(t, ro.Spec.Template)
 		assert.Empty(t, ro.Spec.Template.ObjectMeta.Annotations)
 	})
@@ -504,19 +503,19 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 	t.Run("creates both rw and ro poolers with scrape annotations when metrics are enabled", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		err := createOrUpdateConnectionPoolers(context.Background(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, true, testEnvironmentNamer)
+		err := createOrUpdateConnectionPoolers(t.Context(), c, scheme, cluster.DeepCopy(), cfg, cnpgCluster, true, testEnvironmentNamer)
 
 		require.NoError(t, err)
 
 		rw := &cnpgv1.Pooler{}
-		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, rw))
+		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "my-cluster-pooler-rw", Namespace: "default"}, rw))
 		require.NotNil(t, rw.Spec.Template)
 		assert.Equal(t, "true", rw.Spec.Template.ObjectMeta.Annotations[prometheusScrapeAnnotation])
 		assert.Equal(t, metricsPath, rw.Spec.Template.ObjectMeta.Annotations[prometheusPathAnnotation])
 		assert.Equal(t, poolerMetricsPortString, rw.Spec.Template.ObjectMeta.Annotations[prometheusPortAnnotation])
 
 		ro := &cnpgv1.Pooler{}
-		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, ro))
+		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "my-cluster-pooler-ro", Namespace: "default"}, ro))
 		require.NotNil(t, ro.Spec.Template)
 		assert.Equal(t, "true", ro.Spec.Template.ObjectMeta.Annotations[prometheusScrapeAnnotation])
 		assert.Equal(t, metricsPath, ro.Spec.Template.ObjectMeta.Annotations[prometheusPathAnnotation])
@@ -720,7 +719,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 
 		// Act
 		reconcileErr := model.CheckContracts()
-		health, err := model.Observe(context.Background(), reconcileErr)
+		health, err := model.Observe(t.Context(), reconcileErr)
 
 		// Assert
 		require.NoError(t, err)
@@ -749,8 +748,8 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 		)
 
 		// Act
-		reconcileErr := model.Reconcile(context.Background())
-		health, err := model.Observe(context.Background(), reconcileErr)
+		reconcileErr := model.Reconcile(t.Context())
+		health, err := model.Observe(t.Context(), reconcileErr)
 
 		// Assert
 		require.NoError(t, err)
@@ -783,8 +782,8 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 		model := newPoolerModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, poolerEnabledConfig(), contracts)
 
 		// Act
-		reconcileErr := model.Reconcile(context.Background())
-		health, err := model.Observe(context.Background(), reconcileErr)
+		reconcileErr := model.Reconcile(t.Context())
+		health, err := model.Observe(t.Context(), reconcileErr)
 
 		// Assert
 		require.Error(t, err)
@@ -816,8 +815,8 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 		model := newPoolerModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, poolerEnabledConfig(), contracts)
 
 		// Act
-		reconcileErr := model.Reconcile(context.Background())
-		health, err := model.Observe(context.Background(), reconcileErr)
+		reconcileErr := model.Reconcile(t.Context())
+		health, err := model.Observe(t.Context(), reconcileErr)
 
 		// Assert
 		require.Error(t, err)
@@ -839,8 +838,8 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 		)
 
 		// Act
-		reconcileErr := model.Reconcile(context.Background())
-		health, err := model.Observe(context.Background(), reconcileErr)
+		reconcileErr := model.Reconcile(t.Context())
+		health, err := model.Observe(t.Context(), reconcileErr)
 
 		// Assert
 		require.NoError(t, err)
@@ -879,7 +878,7 @@ func TestPoolerConvergeEmitsReadyEventOnTransition(t *testing.T) {
 	)
 
 	// Act: first Observe — condition is False, event must fire.
-	_, err := model.Observe(context.Background(), nil)
+	_, err := model.Observe(t.Context(), nil)
 
 	// Assert
 	require.NoError(t, err)
@@ -889,7 +888,7 @@ func TestPoolerConvergeEmitsReadyEventOnTransition(t *testing.T) {
 	// Act: second Observe with condition already True — no re-emission.
 	cluster.Status.Conditions = []metav1.Condition{{Type: string(poolerReady), Status: metav1.ConditionTrue}}
 	events.normals = nil
-	_, err = model.Observe(context.Background(), nil)
+	_, err = model.Observe(t.Context(), nil)
 
 	// Assert
 	require.NoError(t, err)
@@ -929,8 +928,8 @@ func TestPoolerModelConvergeWaitsForBackendTLSState(t *testing.T) {
 		scheme, noopEventEmitter{}, nil, cluster, clusterClass, poolerEnabledConfig(), contracts,
 	)
 
-	reconcileErr := model.Reconcile(context.Background())
-	health, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	health, err := model.Observe(t.Context(), reconcileErr)
 	require.NoError(t, err)
 	assert.Equal(t, pgcconstants.Provisioning, health.State)
 	assert.Equal(t, reasonPoolerTLSLeafPending, health.Reason)
@@ -965,8 +964,8 @@ func TestPoolerModelConvergeWaitsForTLSLeafMaterial(t *testing.T) {
 		scheme, noopEventEmitter{}, nil, cluster, clusterClass, poolerEnabledConfig(), contracts,
 	)
 
-	reconcileErr := model.Reconcile(context.Background())
-	health, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	health, err := model.Observe(t.Context(), reconcileErr)
 	require.NoError(t, err)
 	assert.Equal(t, pgcconstants.Provisioning, health.State)
 	assert.Equal(t, reasonPoolerTLSLeafPending, health.Reason)
@@ -1007,8 +1006,8 @@ func TestPoolerModelConvergeTLSLeafInvalidCertEmitsFailed(t *testing.T) {
 		scheme, events, nil, cluster, clusterClass, poolerEnabledConfig(), contracts,
 	)
 
-	reconcileErr := model.Reconcile(context.Background())
-	health, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	require.Error(t, err, "structural TLS-leaf failure must propagate so controller-runtime requeues with backoff")
 	assert.True(t, errors.Is(err, errServerTLSLeafInvalid), "returned error must still wrap the sentinel for upstream callers")
@@ -1048,8 +1047,8 @@ func TestPoolerModelActuateDisabledIsCleanWhenCNPGAbsent(t *testing.T) {
 		scheme, events, nil, cluster, clusterClass, &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{}}, contracts,
 	)
 
-	reconcileErr := model.Reconcile(context.Background())
-	health, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	health, err := model.Observe(t.Context(), reconcileErr)
 	require.NoError(t, err, "disabled-branch + nil CNPG must not produce an error")
 	assert.NotEqual(t, pgcconstants.Failed, health.State, "disabled-branch + nil CNPG must not produce a Failed health condition")
 	assert.Empty(t, events.warnings, "no warning events should be emitted on the happy bootstrap-race path")
@@ -1091,10 +1090,10 @@ func TestPoolerModelActuateDisabledDeletesManagedEnvironmentPoolers(t *testing.T
 		&MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{}}, contracts,
 	)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 	for _, environmentName := range []string{cluster.Name, green.Name} {
 		for _, poolerType := range []string{readWriteEndpoint, readOnlyEndpoint} {
-			err := model.client.Get(context.Background(), client.ObjectKey{
+			err := model.client.Get(t.Context(), client.ObjectKey{
 				Name:      poolerResourceName(environmentName, poolerType),
 				Namespace: cluster.Namespace,
 			}, &cnpgv1.Pooler{})

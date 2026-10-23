@@ -147,7 +147,7 @@ func TestCreateBackupReturnsMissingWhenNotDone(t *testing.T) {
 	backend := &fakeBackupBackend{getFound: true, getResult: backuptypes.BackupResult{Done: false}}
 	adapter, _ := newBackupTestAdapter(t, backuptypes.BackupMethodVolumeSnapshot, "", backend)
 
-	info, err := adapter.CreateBackup(context.Background(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
+	info, err := adapter.CreateBackup(t.Context(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
 	require.ErrorIs(t, err, mvutypes.ErrBackupStatusMissing)
 	assert.Nil(t, info)
 }
@@ -156,7 +156,7 @@ func TestCreateBackupReturnsMissingWhenNotFound(t *testing.T) {
 	backend := &fakeBackupBackend{getFound: false}
 	adapter, _ := newBackupTestAdapter(t, backuptypes.BackupMethodVolumeSnapshot, "", backend)
 
-	info, err := adapter.CreateBackup(context.Background(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
+	info, err := adapter.CreateBackup(t.Context(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
 	require.ErrorIs(t, err, mvutypes.ErrBackupStatusMissing)
 	assert.Nil(t, info)
 }
@@ -168,7 +168,7 @@ func TestCreateBackupWrapsBackupFailedError(t *testing.T) {
 	}
 	adapter, _ := newBackupTestAdapter(t, backuptypes.BackupMethodVolumeSnapshot, "", backend)
 
-	info, err := adapter.CreateBackup(context.Background(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
+	info, err := adapter.CreateBackup(t.Context(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
 	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
 	assert.Contains(t, err.Error(), "disk full")
 	assert.Nil(t, info)
@@ -178,7 +178,7 @@ func TestCreateBackupReturnsDoneWithVolumeSnapshotStatus(t *testing.T) {
 	backend := &fakeBackupBackend{getFound: true, getResult: backuptypes.BackupResult{Done: true}}
 	adapter, _ := newBackupTestAdapter(t, backuptypes.BackupMethodVolumeSnapshot, "", backend)
 
-	info, err := adapter.CreateBackup(context.Background(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
+	info, err := adapter.CreateBackup(t.Context(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
 	require.NoError(t, err)
 	require.NotNil(t, info)
 	require.NotNil(t, info.BackupStatus)
@@ -189,7 +189,7 @@ func TestCreateBackupReturnsDoneWithoutVolumeSnapshotStatusForPluginMethod(t *te
 	backend := &fakeBackupBackend{getFound: true, getResult: backuptypes.BackupResult{Done: true}}
 	adapter, _ := newBackupTestAdapter(t, backuptypes.BackupMethodPlugin, "barman-cloud.cloudnative-pg.io", backend)
 
-	info, err := adapter.CreateBackup(context.Background(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
+	info, err := adapter.CreateBackup(t.Context(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
 	require.NoError(t, err)
 	require.NotNil(t, info)
 	require.NotNil(t, info.BackupStatus)
@@ -202,7 +202,7 @@ func TestCreateBackupPassesMethodAndPluginToBackend(t *testing.T) {
 	backend := &fakeBackupBackend{foundAfterCreate: true, getFound: true, getResult: backuptypes.BackupResult{Done: true}}
 	adapter, _ := newBackupTestAdapter(t, backuptypes.BackupMethodPlugin, "barman-cloud.cloudnative-pg.io", backend)
 
-	_, err := adapter.CreateBackup(context.Background(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
+	_, err := adapter.CreateBackup(t.Context(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
 	require.NoError(t, err)
 	assert.Equal(t, backuptypes.BackupMethodPlugin, backend.capturedReq.Method)
 	assert.Equal(t, "barman-cloud.cloudnative-pg.io", backend.capturedReq.PluginName)
@@ -212,7 +212,7 @@ func TestCreateBackupProducesDeterministicName(t *testing.T) {
 	backend := &fakeBackupBackend{foundAfterCreate: true, getFound: true, getResult: backuptypes.BackupResult{Done: true}}
 	adapter, _ := newBackupTestAdapter(t, backuptypes.BackupMethodVolumeSnapshot, "", backend)
 
-	info, err := adapter.CreateBackup(context.Background(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
+	info, err := adapter.CreateBackup(t.Context(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
 	require.NoError(t, err)
 	// Name is "{owner.Name}-{generated suffix}" — deterministic across reconciles.
 	expectedName := "pg-demo-" + mvutypes.PreUpgradeBackupName(testBackupIntent())
@@ -225,10 +225,10 @@ func TestCreateBackupPreAndPostNamesAreDifferent(t *testing.T) {
 	adapter, _ := newBackupTestAdapter(t, backuptypes.BackupMethodVolumeSnapshot, "", backend)
 	intent := testBackupIntent()
 
-	infoA, err := adapter.CreateBackup(context.Background(), intent, mvutypes.PreUpgradeBackupName)
+	infoA, err := adapter.CreateBackup(t.Context(), intent, mvutypes.PreUpgradeBackupName)
 	require.NoError(t, err)
 
-	infoB, err := adapter.CreateBackup(context.Background(), intent, mvutypes.PostUpgradeBackupName)
+	infoB, err := adapter.CreateBackup(t.Context(), intent, mvutypes.PostUpgradeBackupName)
 	require.NoError(t, err)
 
 	assert.NotEqual(t, infoA.BackupName, infoB.BackupName, "pre- and post-upgrade backup names must differ")
@@ -247,7 +247,7 @@ func TestCreateBackupPropagatesOwnerFetchError(t *testing.T) {
 		method:  backuptypes.BackupMethodVolumeSnapshot,
 	}
 
-	_, err := adapter.CreateBackup(context.Background(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
+	_, err := adapter.CreateBackup(t.Context(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fetching PostgresCluster")
 }
@@ -257,7 +257,7 @@ func TestCreateBackupPropagatesBackupNowError(t *testing.T) {
 	backend := &fakeBackupBackend{backupNowErr: backupNowErr}
 	adapter, _ := newBackupTestAdapter(t, backuptypes.BackupMethodVolumeSnapshot, "", backend)
 
-	_, err := adapter.CreateBackup(context.Background(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
+	_, err := adapter.CreateBackup(t.Context(), testBackupIntent(), mvutypes.PreUpgradeBackupName)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "backend unavailable")
 }

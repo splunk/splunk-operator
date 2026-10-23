@@ -17,7 +17,6 @@ limitations under the License.
 package webhook_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -129,7 +128,7 @@ func TestValidatePostgresClusterCreate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			errs := webhook.ValidatePostgresClusterCreate(context.Background(), tt.obj, nil)
+			errs := webhook.ValidatePostgresClusterCreate(t.Context(), tt.obj, nil)
 			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 			if tt.wantErrField != "" && len(errs) > 0 {
 				assert.Equal(t, tt.wantErrField, errs[0].Field, "unexpected error field")
@@ -179,7 +178,7 @@ func TestValidatePostgresClusterUpdate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			errs := webhook.ValidatePostgresClusterUpdate(context.Background(), tt.obj, tt.oldObj, nil)
+			errs := webhook.ValidatePostgresClusterUpdate(t.Context(), tt.obj, tt.oldObj, nil)
 			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 		})
 	}
@@ -420,7 +419,7 @@ func TestValidatePostgresClusterCreateFeatureGateDisabled(t *testing.T) {
 		Spec: platformApi.PostgresClusterSpec{Class: "dev"},
 	}
 
-	errs := webhook.ValidatePostgresClusterCreate(context.Background(), obj, nil)
+	errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, nil)
 	assert.Len(t, errs, 1)
 	assert.Equal(t, "spec", errs[0].Field)
 	assert.Equal(t, "the PostgresController feature is not enabled; set --feature-gates=PostgresController=true to activate", errs[0].Detail)
@@ -437,7 +436,7 @@ func TestValidatePostgresClusterUpdateFeatureGateDisabled(t *testing.T) {
 	}
 	oldObj := obj.DeepCopy()
 
-	errs := webhook.ValidatePostgresClusterUpdate(context.Background(), obj, oldObj, nil)
+	errs := webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, nil)
 	assert.Len(t, errs, 1)
 	assert.Equal(t, "spec", errs[0].Field)
 	assert.Equal(t, "the PostgresController feature is not enabled; set --feature-gates=PostgresController=true to activate", errs[0].Detail)
@@ -455,7 +454,7 @@ func TestValidatePostgresClusterUpdateDeletedClass(t *testing.T) {
 		}
 		newObj := oldObj.DeepCopy()
 
-		errs := webhook.ValidatePostgresClusterUpdate(context.Background(), newObj, oldObj, reader)
+		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), newObj, oldObj, reader)
 		assert.Empty(t, errs)
 	})
 
@@ -467,7 +466,7 @@ func TestValidatePostgresClusterUpdateDeletedClass(t *testing.T) {
 			Spec: platformApi.PostgresClusterSpec{Class: "new-class"},
 		}
 
-		errs := webhook.ValidatePostgresClusterUpdate(context.Background(), newObj, oldObj, reader)
+		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), newObj, oldObj, reader)
 		require.NotEmpty(t, errs)
 		assert.Equal(t, "spec.class", errs[0].Field)
 		assert.Contains(t, errs[0].Detail, "referenced PostgresClusterClass not found")
@@ -487,7 +486,7 @@ func TestValidatePostgresClusterUpdateDeletedClass(t *testing.T) {
 			},
 		}
 
-		errs := webhook.ValidatePostgresClusterUpdate(context.Background(), newObj, oldObj, reader)
+		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), newObj, oldObj, reader)
 		require.NotEmpty(t, errs)
 		assert.Equal(t, "spec.class", errs[0].Field)
 		assert.Contains(t, errs[0].Detail, "referenced PostgresClusterClass not found")
@@ -555,7 +554,7 @@ func TestValidatePostgresClusterPostgresImage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			errs := webhook.ValidatePostgresClusterCreate(context.Background(), clusterWithImage(tt.image), newFakeReader(validClass).Build())
+			errs := webhook.ValidatePostgresClusterCreate(t.Context(), clusterWithImage(tt.image), newFakeReader(validClass).Build())
 
 			if !tt.wantErr {
 				assert.Empty(t, errs)
@@ -662,7 +661,7 @@ func TestValidatePostgresClusterExternalSecret(t *testing.T) {
 			}
 			reader := newFakeReader(objs...).Build()
 
-			errs := webhook.ValidatePostgresClusterCreate(context.Background(), clusterWithRef(), reader)
+			errs := webhook.ValidatePostgresClusterCreate(t.Context(), clusterWithRef(), reader)
 
 			if !tt.wantErr {
 				assert.Empty(t, errs)
@@ -712,21 +711,21 @@ func TestValidatePostgresClusterCustomMetrics(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: ns},
 			Spec:       platformApi.PostgresClusterSpec{Class: "dev"},
 		}
-		errs := webhook.ValidatePostgresClusterCreate(context.Background(), obj, reader)
+		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
 		assert.Empty(t, errs)
 	})
 
 	t.Run("existing source ConfigMap - admitted", func(t *testing.T) {
 		reader := newFakeReader(validClass, sourceCM).Build()
 		obj := clusterWith(corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml"})
-		errs := webhook.ValidatePostgresClusterCreate(context.Background(), obj, reader)
+		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
 		assert.Empty(t, errs)
 	})
 
 	t.Run("missing source ConfigMap - rejected", func(t *testing.T) {
 		reader := newFakeReader(validClass).Build()
 		obj := clusterWith(corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "absent"}, Key: "queries.yaml"})
-		errs := webhook.ValidatePostgresClusterCreate(context.Background(), obj, reader)
+		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
 		require.Len(t, errs, 1)
 		assert.Equal(t, "spec.monitoring.customQueriesConfigMap[0].name", errs[0].Field)
 		assert.Contains(t, errs[0].Detail, "does not exist")
@@ -739,7 +738,7 @@ func TestValidatePostgresClusterCustomMetrics(t *testing.T) {
 		now := metav1.Now()
 		obj.DeletionTimestamp = &now
 
-		errs := webhook.ValidatePostgresClusterUpdate(context.Background(), obj, oldObj, reader)
+		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, reader)
 
 		assert.Empty(t, errs)
 	})
@@ -751,7 +750,7 @@ func TestValidatePostgresClusterCustomMetrics(t *testing.T) {
 			corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml"},
 			corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: new(false)},
 		)
-		errs := webhook.ValidatePostgresClusterCreate(context.Background(), obj, reader)
+		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
 
 		require.Len(t, errs, 2)
 		assert.Equal(t, "spec.monitoring.customQueriesConfigMap[0].optional", errs[0].Field)
@@ -768,7 +767,7 @@ func TestValidatePostgresClusterCustomMetrics(t *testing.T) {
 			Optional:             new(true),
 		})
 
-		errs := webhook.ValidatePostgresClusterCreate(context.Background(), obj, nil)
+		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, nil)
 
 		require.Len(t, errs, 1)
 		assert.Equal(t, "spec.monitoring.customQueriesConfigMap[0].optional", errs[0].Field)
@@ -1712,7 +1711,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			}
 			reader := builder.Build()
 
-			errs := webhook.ValidatePostgresClusterCreate(context.Background(), tt.obj, reader)
+			errs := webhook.ValidatePostgresClusterCreate(t.Context(), tt.obj, reader)
 			require.Len(t, errs, tt.wantErrCount, "unexpected error count: %v", errs)
 			for i, field := range tt.wantErrFields {
 				assert.Equal(t, field, errs[i].Field, "unexpected error field at index %d", i)

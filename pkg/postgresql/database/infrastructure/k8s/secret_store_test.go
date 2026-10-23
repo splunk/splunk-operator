@@ -17,7 +17,6 @@ Unless required by applicable law or agreed to in writing, software
 package k8s
 
 import (
-	"context"
 	"testing"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -159,6 +158,6 @@ func TestSecretStoreAdoptRejectsStaleRead(t *testing.T) {
 
 func TestSecretStoreReadPreservesNotFound(t *testing.T) {
 	scheme := secretStoreScheme(t)
-	_, err := NewSecretStore(fake.NewClientBuilder().WithScheme(scheme).Build(), scheme, secretStoreOwner()).Read(context.Background(), "dbs", "missing")
+	_, err := NewSecretStore(fake.NewClientBuilder().WithScheme(scheme).Build(), scheme, secretStoreOwner()).Read(t.Context(), "dbs", "missing")
 	assert.True(t, apierrors.IsNotFound(err))
 }
