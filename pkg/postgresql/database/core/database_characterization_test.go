@@ -151,7 +151,7 @@ func TestCharacterization_SteadyStateReadyReconcileWriteCount(t *testing.T) {
 
 	// Settle first; this test pins only the steady-state pass below.
 	settled := &platformv1alpha1.PostgresDatabase{}
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		require.NoError(t, c.Get(ctx, requestName, settled))
 		if settled.Status.Phase != nil && *settled.Status.Phase == string(readyDBPhase) {
 			break

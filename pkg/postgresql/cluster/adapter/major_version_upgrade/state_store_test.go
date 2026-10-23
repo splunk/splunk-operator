@@ -1005,7 +1005,7 @@ func TestValidateBlueGreenProgressKeepsSourcePreparationReceiptWithBaseline(t *t
 func TestCompactBlueGreenHistoryRetainsTenCleanedSummariesAndArtifacts(t *testing.T) {
 	strategy := mvutypes.MajorUpgradeFlowBlueGreen
 	entries := make([]platformv1alpha1.PostgresMajorUpgradeStatus, 0, 12)
-	for i := 0; i < 11; i++ {
+	for i := range 11 {
 		attemptID := fmt.Sprintf("cleaned-%d", i)
 		entries = append(entries, platformv1alpha1.PostgresMajorUpgradeStatus{
 			Strategy: &strategy,

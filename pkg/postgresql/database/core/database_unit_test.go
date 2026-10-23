@@ -4945,7 +4945,7 @@ func TestEvaluateRoleGateFailedIsDeterministicAcrossDatabases(t *testing.T) {
 			"payments_rw":     "permission denied",
 		},
 	}
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		decision := evaluateRoleGate(multiDB, status)
 		assert.Equal(t, roleGateFailed, decision.State)
 		assert.Equal(t, "payments_admin", decision.Role)
@@ -4961,7 +4961,7 @@ func TestEvaluateRoleGatePendingIsDeterministicAcrossDatabases(t *testing.T) {
 		}},
 	}
 	// No roles owned yet: the first-declared role must be reported every time.
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		decision := evaluateRoleGate(multiDB, &platformv1alpha1.ManagedRolesStatus{})
 		assert.Equal(t, roleGatePending, decision.State)
 		assert.Equal(t, "payments_admin", decision.Role)
