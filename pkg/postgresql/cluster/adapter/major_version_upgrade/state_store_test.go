@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -445,7 +446,7 @@ func TestRemoveConditionDoesNotMutateOriginalSlice(t *testing.T) {
 		{Type: mvutypes.ConditionMajorUpgradeTerminalFailure, Status: metav1.ConditionTrue, Reason: "x", Message: "x"},
 		{Type: mvutypes.ConditionMajorUpgradeProgressing, Status: metav1.ConditionTrue, Reason: "y", Message: "y"},
 	}
-	originalCopy := append([]metav1.Condition(nil), original...)
+	originalCopy := slices.Clone(original)
 
 	result := removeCondition(original, mvutypes.ConditionMajorUpgradeTerminalFailure)
 

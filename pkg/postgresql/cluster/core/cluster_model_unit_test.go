@@ -22,6 +22,7 @@ import (
 	"errors"
 	"log/slog"
 	"maps"
+	"slices"
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -2437,7 +2438,7 @@ func TestClusterModelEnsureSANPolicy(t *testing.T) {
 	assert.Contains(t, spec.Certificates.ServerAltDNSNames, "pg1-pooler-rw.default"+poolerSANSuffix)
 	assert.Contains(t, spec.Certificates.ServerAltDNSNames, "pg1-pooler-ro.default"+poolerSANSuffix)
 
-	sansBefore := append([]string(nil), spec.Certificates.ServerAltDNSNames...)
+	sansBefore := slices.Clone(spec.Certificates.ServerAltDNSNames)
 	applyPoolerSANs(&spec, true, "pg1", "default")
 	assert.Equal(t, sansBefore, spec.Certificates.ServerAltDNSNames, "second applyPoolerSANs call must be a no-op")
 }
@@ -2454,7 +2455,7 @@ func TestClusterModelSANPolicyPoolerDisabledRetainsPoolerSANs(t *testing.T) {
 	}
 	spec := cnpgv1.ClusterSpec{
 		Certificates: &cnpgv1.CertificatesConfiguration{
-			ServerAltDNSNames: append([]string(nil), initial...),
+			ServerAltDNSNames: slices.Clone(initial),
 		},
 	}
 	applyPoolerSANs(&spec, false, "pg1", "default")
@@ -2504,7 +2505,7 @@ func TestClusterModelSANPolicyPoolerDisabledIsStrictNoOp(t *testing.T) {
 	unsorted := []string{"zebra.internal", "alpha.internal"}
 	spec := cnpgv1.ClusterSpec{
 		Certificates: &cnpgv1.CertificatesConfiguration{
-			ServerAltDNSNames: append([]string(nil), unsorted...),
+			ServerAltDNSNames: slices.Clone(unsorted),
 		},
 	}
 
