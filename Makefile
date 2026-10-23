@@ -140,6 +140,11 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 fmt: ## Run go fmt against code.
 	go fmt ./...
 
+.PHONY: mod-verify
+mod-verify: ## Verify downloaded modules and check go.mod/go.sum are tidy without rewriting them.
+	go mod tidy -diff
+	go mod verify
+
 scheck: ## Run static check against code
 	go install honnef.co/go/tools/cmd/staticcheck@2022.1
 	staticcheck ./...

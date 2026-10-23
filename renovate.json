@@ -4,6 +4,9 @@
     "config:recommended",
     "mergeConfidence:all-badges"
   ],
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
   "labels": [
     "dependency-update"
   ],
