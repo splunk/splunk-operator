@@ -124,7 +124,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-kvservice", cr.Name)
-	if _, err = k8sops.ApplyWorkloadConfig(ctx, c, cr, cr.Spec.CommonWorkloadSpec, splcommon.SplunkKVService); err != nil {
+	if err = k8sops.ApplyKVServiceConfig(ctx, c, cr); err != nil {
 		publisher.Warning(ctx, splcommon.EventReasonApplySplunkConfigFailed, "KVService configuration failed")
 		return result, fmt.Errorf("apply KVService configuration: %w", err)
 	}

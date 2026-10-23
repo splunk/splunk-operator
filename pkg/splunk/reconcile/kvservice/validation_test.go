@@ -61,13 +61,13 @@ func TestValidateKVServiceSpec(t *testing.T) {
 	}
 	cr.Spec.ImagePullPolicy = "IfNotPresent"
 	for name, spec := range map[string]enterpriseApi.KVServiceSpec{
-		"liveness delay":   {LivenessInitialDelaySeconds: -1},
-		"readiness delay":  {ReadinessInitialDelaySeconds: -1},
+		"liveness delay":   {CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{LivenessInitialDelaySeconds: -1}},
+		"readiness delay":  {CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{ReadinessInitialDelaySeconds: -1}},
 		"liveness timing":  {LivenessProbe: &enterpriseApi.Probe{TimeoutSeconds: -1}},
 		"readiness timing": {ReadinessProbe: &enterpriseApi.Probe{PeriodSeconds: -1}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			spec.CommonWorkloadSpec = cr.Spec.CommonWorkloadSpec
+			spec.Spec = cr.Spec.Spec
 			invalid := &enterpriseApi.KVService{ObjectMeta: cr.ObjectMeta, Spec: spec}
 			if err := validateKVServiceSpec(ctx, c, invalid); err == nil {
 				t.Error("negative probe timing must fail validation")

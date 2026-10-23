@@ -20,6 +20,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/config"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
@@ -50,10 +51,15 @@ func validateKVServiceSpec(ctx context.Context, c splcommon.ControllerClient, cr
 	if err := reconcileutil.ValidateSplunkGeneralTerms(); err != nil {
 		return err
 	}
-	if err := reconcileutil.ValidateWorkloadImagePullSecrets(ctx, c, cr, &spec.CommonWorkloadSpec); err != nil {
-		return err
+	if len(spec.ImagePullSecrets) == 0 {
+		spec.ImagePullSecrets = nil
 	}
-	resources.SetWorkloadVolumeDefaults(&spec.CommonWorkloadSpec)
+	for _, secret := range spec.ImagePullSecrets {
+		if _, err := splutil.GetSecretByName(ctx, c, cr.Namespace, secret.Name); err != nil {
+			logging.FromContext(ctx).ErrorContext(ctx, "couldn't get secret in the imagePullSecrets config", "Secret", secret.Name, "error", err)
+		}
+	}
+	resources.SetKVServiceVolumeDefaults(spec)
 	return reconcileutil.ValidateSpec(&spec.Spec, corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("4Gi")},
 		Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4"), corev1.ResourceMemory: resource.MustParse("16Gi")},

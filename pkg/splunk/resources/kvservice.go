@@ -43,7 +43,12 @@ func GetKVServiceService(cr splcommon.MetaObject, spec *enterpriseApi.KVServiceS
 	var partOfIdentifier string
 
 	service.Spec.Selector = GetSplunkLabels(instanceIdentifier, instanceType, partOfIdentifier)
-	service.Spec.Ports = append(service.Spec.Ports, splcommon.SortServicePorts(GetSplunkServicePorts(instanceType))...)
+	service.Spec.Ports = append(service.Spec.Ports, corev1.ServicePort{
+		Name:       splutil.GetPortName("splunkv", "http"),
+		Port:       splcommon.KVServicePort,
+		TargetPort: intstr.FromInt(splcommon.KVServicePort),
+		Protocol:   corev1.ProtocolTCP,
+	})
 
 	// ensure labels and annotations are not nil
 	if service.ObjectMeta.Labels == nil {
@@ -69,7 +74,11 @@ func NewKVServiceDeployment(cr *enterpriseApi.KVService) *appsv1.Deployment {
 	instanceType := splcommon.SplunkKVService
 	replicas := spec.Replicas
 
-	ports := splcommon.SortContainerPorts(GetSplunkContainerPorts(instanceType))
+	ports := []corev1.ContainerPort{{
+		Name:          splutil.GetPortName("splunkv", "http"),
+		ContainerPort: splcommon.KVServicePort,
+		Protocol:      corev1.ProtocolTCP,
+	}}
 	annotations := splcommon.GetIstioAnnotations(ports)
 	selectLabels := GetSplunkLabels(cr.GetName(), instanceType, "")
 	affinity := splcommon.AppendPodAntiAffinity(&spec.Affinity, cr.GetName(), instanceType.ToString())
@@ -121,6 +130,9 @@ func NewKVServiceDeployment(cr *enterpriseApi.KVService) *appsv1.Deployment {
 		deployment.Spec.Template.Annotations[k] = v
 	}
 	deployment.SetOwnerReferences([]metav1.OwnerReference{splcommon.AsOwner(cr, true)})
+	configureKVServicePortsAndVolumes(&deployment.Spec.Template, spec)
+	configureKVServiceSecurity(&deployment.Spec.Template)
+	deployment.Spec.Template.Spec.Containers[0].Resources = spec.Resources
 	ConfigureKVServiceHTTPProbes(&deployment.Spec.Template, spec)
 	return deployment
 }
@@ -171,4 +183,93 @@ func ConfigureKVServiceHTTPProbes(template *corev1.PodTemplateSpec, spec *enterp
 		}
 	}
 
+}
+
+// configureKVServiceSecurity applies KVService pod and container security settings.
+func configureKVServiceSecurity(podTemplateSpec *corev1.PodTemplateSpec) {
+	// update security context
+	runAsUser := int64(41812)
+	fsGroup := int64(41812)
+	runAsNonRoot := true
+	fsGroupChangePolicy := corev1.FSGroupChangeOnRootMismatch
+	podTemplateSpec.Spec.SecurityContext = &corev1.PodSecurityContext{
+		RunAsUser:           &runAsUser,
+		FSGroup:             &fsGroup,
+		RunAsNonRoot:        &runAsNonRoot,
+		FSGroupChangePolicy: &fsGroupChangePolicy,
+	}
+
+	privileged := false
+	for idx := range podTemplateSpec.Spec.Containers {
+		podTemplateSpec.Spec.Containers[idx].SecurityContext = &corev1.SecurityContext{
+			RunAsUser:                &runAsUser,
+			RunAsNonRoot:             &runAsNonRoot,
+			AllowPrivilegeEscalation: &[]bool{false}[0],
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{
+					"ALL",
+				},
+				Add: []corev1.Capability{
+					"NET_BIND_SERVICE",
+				},
+			},
+			Privileged: &privileged,
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			},
+		}
+	}
+}
+
+// configureKVServicePortsAndVolumes adds user-defined ports and volume mounts.
+func configureKVServicePortsAndVolumes(podTemplateSpec *corev1.PodTemplateSpec, spec *enterpriseApi.KVServiceSpec) {
+	// Add the ports from the KVService Service template.
+	if spec.ServiceTemplate.Spec.Ports != nil {
+		for idx := range podTemplateSpec.Spec.Containers {
+			for _, p := range spec.ServiceTemplate.Spec.Ports {
+
+				podTemplateSpec.Spec.Containers[idx].Ports = append(podTemplateSpec.Spec.Containers[idx].Ports, corev1.ContainerPort{
+					Name:          p.Name,
+					ContainerPort: int32(p.TargetPort.IntValue()),
+					Protocol:      p.Protocol,
+				})
+			}
+		}
+	}
+
+	// Mount user-provided volumes under /mnt/<volume-name>.
+	if spec.Volumes != nil {
+		podTemplateSpec.Spec.Volumes = append(podTemplateSpec.Spec.Volumes, spec.Volumes...)
+		for idx := range podTemplateSpec.Spec.Containers {
+			for v := range spec.Volumes {
+				podTemplateSpec.Spec.Containers[idx].VolumeMounts = append(podTemplateSpec.Spec.Containers[idx].VolumeMounts, corev1.VolumeMount{
+					Name:      spec.Volumes[v].Name,
+					MountPath: "/mnt/" + spec.Volumes[v].Name,
+				})
+			}
+		}
+	}
+
+}
+
+// SetKVServiceVolumeDefaults sets default modes for KVService Secret and ConfigMap volumes.
+func SetKVServiceVolumeDefaults(spec *enterpriseApi.KVServiceSpec) {
+	if spec.Volumes == nil {
+		spec.Volumes = []corev1.Volume{}
+	}
+	for _, v := range spec.Volumes {
+		if v.Secret != nil {
+			if v.Secret.DefaultMode == nil {
+				perm := corev1.SecretVolumeSourceDefaultMode
+				v.Secret.DefaultMode = &perm
+			}
+			continue
+		}
+		if v.ConfigMap != nil {
+			if v.ConfigMap.DefaultMode == nil {
+				perm := corev1.ConfigMapVolumeSourceDefaultMode
+				v.ConfigMap.DefaultMode = &perm
+			}
+		}
+	}
 }

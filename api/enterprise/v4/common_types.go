@@ -291,6 +291,16 @@ type CommonWorkloadSpec struct {
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
+	// ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
+	// Note: If needed, Operator overrides with a higher value
+	// +kubebuilder:validation:Minimum=0
+	ReadinessInitialDelaySeconds int32 `json:"readinessInitialDelaySeconds"`
+
+	// LivenessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) for the Liveness probe
+	// Note: If needed, Operator overrides with a higher value
+	// +kubebuilder:validation:Minimum=0
+	LivenessInitialDelaySeconds int32 `json:"livenessInitialDelaySeconds"`
+
 	// Certs lists TLS certificates to mount into Splunk pods.
 	// Each entry references a Kubernetes Secret containing tls.crt and tls.key.
 	// When role is set, the cert is mounted at the fixed platform path
@@ -345,16 +355,6 @@ type CommonSplunkSpec struct {
 
 	// Mock to differentiate between UTs and actual reconcile
 	Mock bool `json:"Mock"`
-
-	// ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
-	// Note: If needed, Operator overrides with a higher value
-	// +kubebuilder:validation:Minimum=0
-	ReadinessInitialDelaySeconds int32 `json:"readinessInitialDelaySeconds"`
-
-	// LivenessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) for the Liveness probe
-	// Note: If needed, Operator overrides with a higher value
-	// +kubebuilder:validation:Minimum=0
-	LivenessInitialDelaySeconds int32 `json:"livenessInitialDelaySeconds"`
 
 	// LivenessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
 	// +optional

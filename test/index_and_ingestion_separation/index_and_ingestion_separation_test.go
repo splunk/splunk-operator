@@ -123,8 +123,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 				Spec: enterpriseApi.IngestorClusterSpec{
 					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 						// ServiceAccount:               serviceAccountName,
-						LivenessInitialDelaySeconds:  600,
-						ReadinessInitialDelaySeconds: 50,
+
 						StartupProbe: &enterpriseApi.Probe{
 							InitialDelaySeconds: 40,
 							TimeoutSeconds:      30,
@@ -148,6 +147,8 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 								ImagePullPolicy: "Always",
 								Image:           testcaseEnvInst.GetSplunkImage(),
 							},
+							LivenessInitialDelaySeconds:  600,
+							ReadinessInitialDelaySeconds: 50,
 						},
 					},
 					QueueRef:           v1.ObjectReference{Name: q.Name},

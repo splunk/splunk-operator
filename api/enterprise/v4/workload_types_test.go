@@ -34,6 +34,7 @@ func TestCommonWorkloadSpecSerialization(t *testing.T) {
 		"serviceTemplate":{"spec":{"type":"ClusterIP"}}, "podAnnotations":{"custom":"value"},
 		"volumes":[{"name":"postgres-tls","secret":{"secretName":"postgres-tls"}}],
 		"defaults":"configuration", "serviceAccount":"workload-sa",
+		"livenessInitialDelaySeconds":90, "readinessInitialDelaySeconds":75,
 		"extraEnv":[{"name":"DB_PASSWORD","valueFrom":{"secretKeyRef":{"name":"postgres","key":"password"}}}],
 		"imagePullSecrets":[{"name":"registry"}],
 		"certs":[{"secretRef":{"name":"postgres-tls"},"dnsNames":["kv.example.com"]}]
@@ -81,15 +82,17 @@ func TestCommonWorkloadSpecSerialization(t *testing.T) {
 func TestKVServiceSpecExcludesEnterpriseSettings(t *testing.T) {
 	kvservice := reflect.TypeOf(KVServiceSpec{})
 	enterprise := reflect.TypeOf(CommonSplunkSpec{})
-	for _, field := range []string{
-		"EtcVolumeStorageConfig", "VarVolumeStorageConfig", "DefaultsURL", "DefaultsURLApps",
-		"LicenseURL", "LicenseMasterRef", "LicenseManagerRef", "ClusterMasterRef",
-		"ClusterManagerRef", "MonitoringConsoleRef", "Mock",
-		"StartupProbe",
-	} {
-		_, exists := kvservice.FieldByName(field)
-		assert.False(t, exists, "KVService must not expose %s", field)
-		_, exists = enterprise.FieldByName(field)
-		assert.True(t, exists, "Enterprise must retain %s", field)
+	// Check every Enterprise-specific field, including legacy API fields.
+	for i := 0; i < enterprise.NumField(); i++ {
+		field := enterprise.Field(i).Name
+		switch field {
+		case "CommonWorkloadSpec", "LivenessProbe", "ReadinessProbe":
+			// These settings are supported by both workload types.
+			continue
+		}
+		t.Run(field, func(t *testing.T) {
+			_, exists := kvservice.FieldByName(field)
+			assert.False(t, exists, "KVService must not expose %s", field)
+		})
 	}
 }
