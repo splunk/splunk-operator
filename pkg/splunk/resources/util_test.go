@@ -120,10 +120,12 @@ func TestGetSplunkDefaults(t *testing.T) {
 func TestSetVolumeDefaults(t *testing.T) {
 	mode := int32(644)
 	spec := &enterpriseApi.CommonSplunkSpec{
-		Volumes: []corev1.Volume{
-			{Name: "secret", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret"}}},
-			{Name: "configured-secret", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret", DefaultMode: &mode}}},
-			{Name: "configmap", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{}}},
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+			Volumes: []corev1.Volume{
+				{Name: "secret", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret"}}},
+				{Name: "configured-secret", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "secret", DefaultMode: &mode}}},
+				{Name: "configmap", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{}}},
+			},
 		},
 	}
 

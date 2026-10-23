@@ -125,6 +125,14 @@ func GetCurrentCRWithStatusUpdate(ctx context.Context, c splcommon.ControllerCli
 			cr.Status.DeepCopyInto(&latest.(*enterpriseApi.ClusterManager).Status)
 			return latest, nil
 		}
+	case *enterpriseApi.KVService:
+		latestCR := &enterpriseApi.KVService{}
+		if latest, err := copyStatus(latestCR); err != nil {
+			return nil, err
+		} else {
+			cr.Status.DeepCopyInto(&latest.(*enterpriseApi.KVService).Status)
+			return latest, nil
+		}
 	case *enterpriseApi.MonitoringConsole:
 		latestCR := &enterpriseApi.MonitoringConsole{}
 		setStatusMessage(cr, crError)

@@ -100,6 +100,18 @@ metadata:
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
+          "kind": "KVService",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "splunk-operator"
+            },
+            "name": "kvservice-sample"
+          },
+          "spec": {}
+        },
+        {
+          "apiVersion": "enterprise.splunk.com/v4",
           "kind": "LicenseManager",
           "metadata": {
             "finalizers": [
@@ -362,6 +374,11 @@ spec:
       kind: IngestorCluster
       name: ingestorclusters.enterprise.splunk.com
       version: v4
+    - description: KVService is the Schema for the kvservices API
+      displayName: KV Service
+      kind: KVService
+      name: kvservices.enterprise.splunk.com
+      version: v4
     - description: LicenseManager is the Schema for a Splunk Enterprise license manager.
       displayName: License Manager
       kind: LicenseManager
@@ -456,6 +473,13 @@ spec:
     spec:
       clusterPermissions:
       - rules:
+        - apiGroups:
+          - events.k8s.io
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
         - apiGroups:
           - ""
           resources:
@@ -692,6 +716,44 @@ spec:
           - subjectaccessreviews
           verbs:
           - create
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - kvservices
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - kvservices/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - enterprise.splunk.com
+          resources:
+          - kvservices/status
+          verbs:
+          - get
+          - patch
+          - update
         serviceAccountName: splunk-operator-controller-manager
       deployments:
       - label:

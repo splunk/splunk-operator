@@ -92,18 +92,20 @@ type MasterManagerLMTestConfig struct {
 // license config map volume and license URL.
 func NewLicenseCommonSplunkSpec(testcaseEnvInst *TestCaseEnv) enterpriseApi.CommonSplunkSpec {
 	return enterpriseApi.CommonSplunkSpec{
-		Volumes: []corev1.Volume{{
-			Name: "licenses",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: testcaseEnvInst.GetLMConfigMap(),
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+			Volumes: []corev1.Volume{{
+				Name: "licenses",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: testcaseEnvInst.GetLMConfigMap(),
+						},
 					},
 				},
-			},
-		}},
+			}},
+			Spec: enterpriseApi.Spec{ImagePullPolicy: "Always", Image: testcaseEnvInst.GetSplunkImage()},
+		},
 		LicenseURL: "/mnt/licenses/enterprise.lic",
-		Spec:       enterpriseApi.Spec{ImagePullPolicy: "Always", Image: testcaseEnvInst.GetSplunkImage()},
 	}
 }
 

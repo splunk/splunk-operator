@@ -23,13 +23,15 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/tools/record"
 )
 
 // K8EventPublisher structure used to publish k8s event
 type K8EventPublisher struct {
-	recorder record.EventRecorder
-	instance runtime.Object
+	recorder       record.EventRecorder
+	eventsRecorder events.EventRecorder
+	instance       runtime.Object
 }
 
 // newK8EventPublisher creates a new k8s event publisher (variable to allow mocking in tests)
@@ -47,6 +49,12 @@ func NewK8EventPublisherWithRecorder(recorder record.EventRecorder, instance run
 	return newK8EventPublisher(recorder, instance)
 }
 
+// NewK8EventPublisherWithEventsRecorder publishes reconciliation events through events.k8s.io/v1.
+// The legacy constructor remains available for controllers using the core events API.
+func NewK8EventPublisherWithEventsRecorder(recorder events.EventRecorder, instance runtime.Object) *K8EventPublisher {
+	return &K8EventPublisher{eventsRecorder: recorder, instance: instance}
+}
+
 // publishEvent adds events to k8s using event recorder
 func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, message string) {
 	if k == nil {
@@ -54,7 +62,7 @@ func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, 
 	}
 
 	// in the case of testing, recorder is not passed
-	if k.recorder == nil {
+	if k.recorder == nil && k.eventsRecorder == nil {
 		return
 	}
 
@@ -62,6 +70,10 @@ func (k *K8EventPublisher) publishEvent(ctx context.Context, eventType, reason, 
 	logger.InfoContext(ctx, "publishing event", "eventType", eventType, "reason", reason, "message", message)
 
 	// Use the EventRecorder to emit the event
+	if k.eventsRecorder != nil {
+		k.eventsRecorder.Eventf(k.instance, nil, eventType, reason, "Reconcile", "%s", message)
+		return
+	}
 	k.recorder.Event(k.instance, eventType, reason, message)
 }
 

@@ -208,8 +208,10 @@ func TestApplyIngestorCluster(t *testing.T) {
 		Spec: enterpriseApi.IngestorClusterSpec{
 			Replicas: 3,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Mock:           true,
-				ServiceAccount: "sa",
+				Mock: true,
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ServiceAccount: "sa",
+				},
 			},
 			QueueRef: corev1.ObjectReference{
 				Name:      queue.Name,
@@ -463,13 +465,15 @@ func TestGetIngestorStatefulSet_ConfigMapVolAnnotation(t *testing.T) {
 				Name: "objectstorage",
 			},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Volumes: []corev1.Volume{
-					{
-						Name: "my-defaults",
-						VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "my-defaults-cm",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Volumes: []corev1.Volume{
+						{
+							Name: "my-defaults",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "my-defaults-cm",
+									},
 								},
 							},
 						},
@@ -719,7 +723,9 @@ func TestEnsureIngestorCredentialsSecret_IRSAProducesNoStaticCreds(t *testing.T)
 		Spec: enterpriseApi.IngestorClusterSpec{
 			Replicas: 1,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				ServiceAccount: "irsa-sa",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ServiceAccount: "irsa-sa",
+				},
 			},
 			QueueRef:         corev1.ObjectReference{Name: irsaQueue.Name, Namespace: irsaQueue.Namespace},
 			ObjectStorageRef: corev1.ObjectReference{Name: objStorage.Name, Namespace: objStorage.Namespace},
@@ -927,8 +933,10 @@ func TestIngScaledUpScaledDownEvents(t *testing.T) {
 		Spec: enterpriseApi.IngestorClusterSpec{
 			Replicas: 1,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Mock:           true,
-				ServiceAccount: "sa",
+				Mock: true,
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ServiceAccount: "sa",
+				},
 			},
 			QueueRef:         corev1.ObjectReference{Name: queue.Name, Namespace: queue.Namespace},
 			ObjectStorageRef: corev1.ObjectReference{Name: objStorage.Name, Namespace: objStorage.Namespace},

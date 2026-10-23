@@ -45,6 +45,9 @@ const (
 	// SplunkObjectStorage is the object storage instance
 	SplunkObjectStorage InstanceType = "object-storage"
 
+	// SplunkKVService is the kvservice instance
+	SplunkKVService InstanceType = "kvservice"
+
 	// SplunkDeployer is an instance that distributes baseline configurations and apps to search head cluster members
 	SplunkDeployer InstanceType = "deployer"
 
@@ -87,6 +90,8 @@ func (instanceType InstanceType) ToRole() string {
 		role = "splunk_monitor"
 	case SplunkIngestor:
 		role = "splunk_ingestor"
+	case SplunkKVService:
+		role = "splunk_kvservice"
 	}
 	return role
 }
@@ -115,6 +120,8 @@ func (instanceType InstanceType) ToKind() string {
 		kind = "monitoring-console"
 	case SplunkIngestor:
 		kind = "ingestor"
+	case SplunkKVService:
+		kind = "kvservice"
 	}
 	return kind
 }
@@ -134,6 +141,8 @@ func KindToInstanceString(kind string) string {
 		return SplunkQueue.ToString()
 	case "ObjectStorage":
 		return SplunkObjectStorage.ToString()
+	case "KVService":
+		return SplunkKVService.ToString()
 	case "LicenseManager":
 		return SplunkLicenseManager.ToString()
 	case "LicenseMaster":

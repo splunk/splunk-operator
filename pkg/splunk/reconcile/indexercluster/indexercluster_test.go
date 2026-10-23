@@ -1830,10 +1830,12 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 				MonitoringConsoleRef: corev1.ObjectReference{
 					Name: "mcName",
 				},
@@ -2010,10 +2012,12 @@ func TestIndexerClusterWithReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.IndexerClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes:           []corev1.Volume{},
 				ClusterManagerRef: clusterObjRef,
 			},
 		},
@@ -3312,7 +3316,9 @@ func TestEnsureIndexerCredentialsSecret_IRSAProducesNoStaticCreds(t *testing.T) 
 		Spec: enterpriseApi.IndexerClusterSpec{
 			Replicas: 1,
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				ServiceAccount: "irsa-sa",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ServiceAccount: "irsa-sa",
+				},
 			},
 			QueueRef:         &corev1.ObjectReference{Name: irsaQueue.Name},
 			ObjectStorageRef: &corev1.ObjectReference{Name: objStorage.Name},

@@ -77,7 +77,8 @@ func TestCertSpecFieldAccepted(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			spec := enterpriseApi.CommonSplunkSpec{Certs: tt.certs}
+			spec := enterpriseApi.CommonSplunkSpec{
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Certs: tt.certs}}
 			// Verify each CertSpec is properly stored and retrievable
 			if len(spec.Certs) != len(tt.certs) {
 				t.Errorf("expected %d certs, got %d", len(tt.certs), len(spec.Certs))
@@ -177,7 +178,8 @@ func TestValidateCommonSplunkSpec_CertsGate(t *testing.T) {
 			config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): true})
 		})
 
-		spec := &enterpriseApi.CommonSplunkSpec{Certs: certSpecs}
+		spec := &enterpriseApi.CommonSplunkSpec{
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Certs: certSpecs}}
 		errs := validateCommonSplunkSpec(spec, field.NewPath("spec"))
 
 		found := false
@@ -194,7 +196,8 @@ func TestValidateCommonSplunkSpec_CertsGate(t *testing.T) {
 	t.Run("gate enabled accepts certs", func(t *testing.T) {
 		config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): true})
 
-		spec := &enterpriseApi.CommonSplunkSpec{Certs: certSpecs}
+		spec := &enterpriseApi.CommonSplunkSpec{
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Certs: certSpecs}}
 		errs := validateCommonSplunkSpec(spec, field.NewPath("spec"))
 
 		for _, e := range errs {
