@@ -139,7 +139,7 @@ func foreignObjectStore(cluster *platformv1alpha1.PostgresCluster) *unstructured
 		UID:        "foreign-uid",
 		Controller: new(true),
 	}})
-	obj.Object["spec"] = map[string]interface{}{"configuration": map[string]interface{}{"destinationPath": "s3://foreign"}}
+	obj.Object["spec"] = map[string]any{"configuration": map[string]any{"destinationPath": "s3://foreign"}}
 	return obj
 }
 

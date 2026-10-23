@@ -44,7 +44,7 @@ func init() {
 	config.EnableFeatureGate(config.PostgresController, config.ValidationWebhook)
 }
 
-func mustMarshal(t *testing.T, obj interface{}) []byte {
+func mustMarshal(t *testing.T, obj any) []byte {
 	t.Helper()
 	data, err := json.Marshal(obj)
 	if err != nil {
