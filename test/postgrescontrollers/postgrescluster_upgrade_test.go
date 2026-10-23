@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -82,13 +82,13 @@ var _ = Describe("postgrescontrollers, integration, postgres-upgrade", Label("ti
 				ObjectMeta: metav1.ObjectMeta{Name: "major-upgrade", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
-					PostgresVersion:       ptr.To(pgUpgradeSourceVersion),
+					ClusterDeletionPolicy: new("Delete"),
+					PostgresVersion:       new(pgUpgradeSourceVersion),
 					// allow is inert until spec.postgresVersion actually changes, so
 					// setting it up front keeps the upgrade request below a single patch.
 					PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-						Allow:    ptr.To(true),
-						Strategy: ptr.To(mvutypes.MajorUpgradeFlowPgUpgrade),
+						Allow:    new(true),
+						Strategy: new(mvutypes.MajorUpgradeFlowPgUpgrade),
 					},
 				},
 			}
@@ -136,7 +136,7 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 			By("requesting an upgrade to the target major version")
 			Expect(kubeClient.Get(ctx, clusterKey, pgCluster)).To(Succeed())
 			patch := client.MergeFrom(pgCluster.DeepCopy())
-			pgCluster.Spec.PostgresVersion = ptr.To(pgUpgradeTargetVersion)
+			pgCluster.Spec.PostgresVersion = new(pgUpgradeTargetVersion)
 			Expect(kubeClient.Patch(ctx, pgCluster, patch)).To(Succeed())
 
 			// Individual phases are transient and can be missed between polls, so
@@ -253,11 +253,11 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-no-backup", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
-					PostgresVersion:       ptr.To(pgUpgradeSourceVersion),
+					ClusterDeletionPolicy: new("Delete"),
+					PostgresVersion:       new(pgUpgradeSourceVersion),
 					PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-						Allow:    ptr.To(true),
-						Strategy: ptr.To(mvutypes.MajorUpgradeFlowPgUpgrade),
+						Allow:    new(true),
+						Strategy: new(mvutypes.MajorUpgradeFlowPgUpgrade),
 					},
 				},
 			}
@@ -275,7 +275,7 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 
 			By("requesting an upgrade to the target major version")
 			patch := client.MergeFrom(pgCluster.DeepCopy())
-			pgCluster.Spec.PostgresVersion = ptr.To(pgUpgradeTargetVersion)
+			pgCluster.Spec.PostgresVersion = new(pgUpgradeTargetVersion)
 			Expect(kubeClient.Patch(ctx, pgCluster, patch)).To(Succeed())
 
 			By("asserting the upgrade terminally fails with an actionable BackupProviderMissing reason")
@@ -315,8 +315,8 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-not-allowed", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
-					PostgresVersion:       ptr.To(pgUpgradeSourceVersion),
+					ClusterDeletionPolicy: new("Delete"),
+					PostgresVersion:       new(pgUpgradeSourceVersion),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())
@@ -333,7 +333,7 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 
 			By("changing the major version without setting postgresMajorUpgradeConfig.allow")
 			patch := client.MergeFrom(pgCluster.DeepCopy())
-			pgCluster.Spec.PostgresVersion = ptr.To(pgUpgradeTargetVersion)
+			pgCluster.Spec.PostgresVersion = new(pgUpgradeTargetVersion)
 			Expect(kubeClient.Patch(ctx, pgCluster, patch)).To(Succeed())
 
 			By("asserting the cluster reports the change is held pending explicit opt-in")
@@ -379,23 +379,23 @@ func createPGClassWithSnapshotBackup(ctx SpecContext, kubeClient client.Client, 
 		Spec: platformv1alpha1.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformv1alpha1.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(1)),
-				PostgresVersion: ptr.To(pgVersion),
+				Instances:       new(int32(1)),
+				PostgresVersion: new(pgVersion),
 				Backup: &platformv1alpha1.BackupConfig{
-					Enabled:  ptr.To(true),
-					Schedule: ptr.To("0 2 * * *"),
+					Enabled:  new(true),
+					Schedule: new("0 2 * * *"),
 				},
 			},
 			CNPG: &platformv1alpha1.CNPGConfig{
 				Backup: &platformv1alpha1.CNPGBackupConfig{
 					// Single-instance cluster, so there is no standby to prefer.
-					Target: ptr.To("primary"),
+					Target: new("primary"),
 					VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{
-						ClassName: ptr.To(pgVolumeSnapshotClass),
-						Online:    ptr.To(true),
+						ClassName: new(pgVolumeSnapshotClass),
+						Online:    new(true),
 						// Garbage collect snapshots with the CNPG Cluster so the
 						// upgrade baselines do not outlive the test namespace.
-						SnapshotOwnerReference: ptr.To("cluster"),
+						SnapshotOwnerReference: new("cluster"),
 					},
 				},
 			},

@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -81,8 +81,8 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &platformApi.PostgresClusterClassConfig{
-						PostgresVersion: ptr.To("18"),
-						PostgresImage:   ptr.To("registry.example.com/team/postgresql:18.1"),
+						PostgresVersion: new("18"),
+						PostgresImage:   new("registry.example.com/team/postgresql:18.1"),
 					},
 				},
 			},
@@ -94,8 +94,8 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &platformApi.PostgresClusterClassConfig{
-						PostgresVersion: ptr.To("18"),
-						PostgresImage:   ptr.To("registry.example.com/team/postgresql:18.1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+						PostgresVersion: new("18"),
+						PostgresImage:   new("registry.example.com/team/postgresql:18.1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
 					},
 				},
 			},
@@ -107,8 +107,8 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &platformApi.PostgresClusterClassConfig{
-						PostgresVersion: ptr.To("18"),
-						PostgresImage:   ptr.To("registry.example.com/team/postgresql:latest"),
+						PostgresVersion: new("18"),
+						PostgresImage:   new("registry.example.com/team/postgresql:latest"),
 					},
 				},
 			},
@@ -121,8 +121,8 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &platformApi.PostgresClusterClassConfig{
-						PostgresVersion: ptr.To("18"),
-						PostgresImage:   ptr.To("registry.example.com/team/postgresql:17.5"),
+						PostgresVersion: new("18"),
+						PostgresImage:   new("registry.example.com/team/postgresql:17.5"),
 					},
 				},
 			},

@@ -23,7 +23,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -57,8 +57,8 @@ var _ = Describe("postgrescontrollers, integration, postgres-pooler", Label("tie
 				ObjectMeta: metav1.ObjectMeta{Name: "pooler-cluster", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
-					Instances:             ptr.To(int32(2)),
+					ClusterDeletionPolicy: new("Delete"),
+					Instances:             new(int32(2)),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())
@@ -76,9 +76,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-pooler", Label("tie
 			By("enabling connection pooler (RW + RO)")
 			patch := client.MergeFrom(pgCluster.DeepCopy())
 			pgCluster.Spec.ConnectionPooler = &platformv1alpha1.ConnectionPoolerEnableConfig{
-				Enabled:   ptr.To(true),
-				ReadWrite: ptr.To(true),
-				ReadOnly:  ptr.To(true),
+				Enabled:   new(true),
+				ReadWrite: new(true),
+				ReadOnly:  new(true),
 			}
 			Expect(kubeClient.Patch(ctx, pgCluster, patch)).To(Succeed())
 
@@ -107,7 +107,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-pooler", Label("tie
 			Expect(kubeClient.Get(ctx, clusterKey, pgCluster)).To(Succeed())
 			patch = client.MergeFrom(pgCluster.DeepCopy())
 			pgCluster.Spec.ConnectionPooler = &platformv1alpha1.ConnectionPoolerEnableConfig{
-				Enabled: ptr.To(false),
+				Enabled: new(false),
 			}
 			Expect(kubeClient.Patch(ctx, pgCluster, patch)).To(Succeed())
 
@@ -145,7 +145,7 @@ func createPGClassWithPooler(ctx SpecContext, kubeClient client.Client, ns strin
 		Spec: platformv1alpha1.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformv1alpha1.PostgresClusterClassConfig{
-				Instances: ptr.To(int32(2)),
+				Instances: new(int32(2)),
 			},
 			CNPG: &platformv1alpha1.CNPGConfig{
 				ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{},

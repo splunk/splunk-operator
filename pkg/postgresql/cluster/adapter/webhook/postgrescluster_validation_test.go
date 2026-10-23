@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
 
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
@@ -196,7 +195,7 @@ func TestValidatePostgresClusterMajorUpgradeConfig(t *testing.T) {
 		return &platformApi.PostgresCluster{Spec: platformApi.PostgresClusterSpec{
 			Class: "dev",
 			PostgresMajorUpgradeConfig: &platformApi.PostgresMajorUpgradeConfig{
-				Strategy:  ptr.To(strategy),
+				Strategy:  new(strategy),
 				BlueGreen: blueGreen,
 			},
 		}}
@@ -220,8 +219,8 @@ func TestValidatePostgresClusterMajorUpgradeConfig(t *testing.T) {
 			obj: &platformApi.PostgresCluster{Spec: platformApi.PostgresClusterSpec{
 				Class: "dev",
 				PostgresMajorUpgradeConfig: &platformApi.PostgresMajorUpgradeConfig{
-					Allow:    ptr.To(true),
-					Strategy: ptr.To("blueGreen"),
+					Allow:    new(true),
+					Strategy: new("blueGreen"),
 				},
 			}},
 			wantField: "spec.postgresMajorUpgradeConfig.allow",
@@ -298,14 +297,14 @@ func TestValidatePostgresClusterUpdateFreezesActiveBlueGreenAttempt(t *testing.T
 		{
 			name: "rejects strategy change",
 			mutate: func(obj *platformApi.PostgresCluster) {
-				obj.Spec.PostgresMajorUpgradeConfig.Strategy = ptr.To(mvutypes.MajorUpgradeFlowPgUpgrade)
+				obj.Spec.PostgresMajorUpgradeConfig.Strategy = new(mvutypes.MajorUpgradeFlowPgUpgrade)
 			},
 			wantField: "spec",
 		},
 		{
 			name: "allows clearing allow",
 			mutate: func(obj *platformApi.PostgresCluster) {
-				obj.Spec.PostgresMajorUpgradeConfig.Allow = ptr.To(false)
+				obj.Spec.PostgresMajorUpgradeConfig.Allow = new(false)
 			},
 		},
 		{
@@ -324,7 +323,7 @@ func TestValidatePostgresClusterUpdateFreezesActiveBlueGreenAttempt(t *testing.T
 		{
 			name: "allows explicit switchover gate",
 			mutate: func(obj *platformApi.PostgresCluster) {
-				obj.Spec.PostgresMajorUpgradeConfig.BlueGreen.Switchover = ptr.To(true)
+				obj.Spec.PostgresMajorUpgradeConfig.BlueGreen.Switchover = new(true)
 			},
 		},
 	}
@@ -371,7 +370,7 @@ func TestValidatePostgresClusterUpdateSkipsActiveBlueGreenFreezeForMetadataAndDe
 
 	t.Run("cluster configuration", func(t *testing.T) {
 		obj := oldObj.DeepCopy()
-		obj.Spec.PostgresVersion = ptr.To("18")
+		obj.Spec.PostgresVersion = new("18")
 		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, nil)
 		require.NotEmpty(t, errs)
 		assert.Contains(t, errs.ToAggregate().Error(), "spec")
@@ -404,8 +403,8 @@ func TestValidatePostgresClusterUpdateAllowsRecoveryFromUnavailableBlueGreenRunt
 		},
 	}
 	obj := oldObj.DeepCopy()
-	obj.Spec.PostgresMajorUpgradeConfig.Allow = ptr.To(false)
-	obj.Spec.PostgresMajorUpgradeConfig.Strategy = ptr.To(mvutypes.MajorUpgradeFlowPgUpgrade)
+	obj.Spec.PostgresMajorUpgradeConfig.Allow = new(false)
+	obj.Spec.PostgresMajorUpgradeConfig.Strategy = new(mvutypes.MajorUpgradeFlowPgUpgrade)
 
 	errs := webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, nil)
 	assert.Empty(t, errs)
@@ -451,7 +450,7 @@ func TestValidatePostgresClusterUpdateDeletedClass(t *testing.T) {
 		oldObj := &platformApi.PostgresCluster{
 			Spec: platformApi.PostgresClusterSpec{
 				Class:           "deleted-class",
-				PostgresVersion: ptr.To("16"),
+				PostgresVersion: new("16"),
 			},
 		}
 		newObj := oldObj.DeepCopy()
@@ -478,13 +477,13 @@ func TestValidatePostgresClusterUpdateDeletedClass(t *testing.T) {
 		oldObj := &platformApi.PostgresCluster{
 			Spec: platformApi.PostgresClusterSpec{
 				Class:           "deleted-class",
-				PostgresVersion: ptr.To("17"),
+				PostgresVersion: new("17"),
 			},
 		}
 		newObj := &platformApi.PostgresCluster{
 			Spec: platformApi.PostgresClusterSpec{
 				Class:           "deleted-class",
-				PostgresVersion: ptr.To("15"),
+				PostgresVersion: new("15"),
 			},
 		}
 
@@ -503,9 +502,9 @@ func TestValidatePostgresClusterPostgresImage(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(3)),
-				Storage:         ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion: ptr.To("17"),
+				Instances:       new(int32(3)),
+				Storage:         new(resource.MustParse("50Gi")),
+				PostgresVersion: new("17"),
 			},
 		},
 	}
@@ -515,7 +514,7 @@ func TestValidatePostgresClusterPostgresImage(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: ns},
 			Spec: platformApi.PostgresClusterSpec{
 				Class:         "dev",
-				PostgresImage: ptr.To(image),
+				PostgresImage: new(image),
 			},
 		}
 	}
@@ -582,10 +581,10 @@ func TestValidatePostgresClusterExternalSecret(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:        ptr.To(int32(3)),
-				Storage:          ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion:  ptr.To("17"),
-				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{Enabled: ptr.To(false)},
+				Instances:        new(int32(3)),
+				Storage:          new(resource.MustParse("50Gi")),
+				PostgresVersion:  new("17"),
+				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{Enabled: new(false)},
 			},
 		},
 	}
@@ -684,10 +683,10 @@ func TestValidatePostgresClusterCustomMetrics(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:        ptr.To(int32(3)),
-				Storage:          ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion:  ptr.To("17"),
-				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{Enabled: ptr.To(false)},
+				Instances:        new(int32(3)),
+				Storage:          new(resource.MustParse("50Gi")),
+				PostgresVersion:  new("17"),
+				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{Enabled: new(false)},
 			},
 		},
 	}
@@ -748,9 +747,9 @@ func TestValidatePostgresClusterCustomMetrics(t *testing.T) {
 	t.Run("every explicit optional field is rejected", func(t *testing.T) {
 		reader := newFakeReader(validClass, sourceCM).Build()
 		obj := clusterWith(
-			corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: ptr.To(true)},
+			corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: new(true)},
 			corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml"},
-			corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: ptr.To(false)},
+			corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: new(false)},
 		)
 		errs := webhook.ValidatePostgresClusterCreate(context.Background(), obj, reader)
 
@@ -766,7 +765,7 @@ func TestValidatePostgresClusterCustomMetrics(t *testing.T) {
 		obj := clusterWith(corev1.ConfigMapKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"},
 			Key:                  "queries.yaml",
-			Optional:             ptr.To(true),
+			Optional:             new(true),
 		})
 
 		errs := webhook.ValidatePostgresClusterCreate(context.Background(), obj, nil)
@@ -808,7 +807,7 @@ func TestValidatePostgresClusterCustomMetrics(t *testing.T) {
 		ref := corev1.ConfigMapKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{Name: "removed"},
 			Key:                  "queries.yaml",
-			Optional:             ptr.To(false),
+			Optional:             new(false),
 		}
 		oldObj := clusterWith(ref)
 		obj := oldObj.DeepCopy()
@@ -826,9 +825,9 @@ func TestValidatePostgresClusterStorageUpdate(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(3)),
-				Storage:         ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion: ptr.To("17"),
+				Instances:       new(int32(3)),
+				Storage:         new(resource.MustParse("50Gi")),
+				PostgresVersion: new("17"),
 			},
 		},
 	}
@@ -843,22 +842,22 @@ func TestValidatePostgresClusterStorageUpdate(t *testing.T) {
 	}{
 		{
 			name:         "reject inherited class storage decrease",
-			newStorage:   ptr.To(resource.MustParse("10Gi")),
+			newStorage:   new(resource.MustParse("10Gi")),
 			wantErrCount: 1,
 			wantErrMsg:   "storage size cannot be decreased (from: 50Gi, to: 10Gi)",
 		},
 		{
 			name:       "allow inherited class storage increase",
-			newStorage: ptr.To(resource.MustParse("100Gi")),
+			newStorage: new(resource.MustParse("100Gi")),
 		},
 		{
 			name:       "allow equal storage with different quantity spelling",
-			oldStorage: ptr.To(resource.MustParse("50Gi")),
-			newStorage: ptr.To(resource.MustParse("51200Mi")),
+			oldStorage: new(resource.MustParse("50Gi")),
+			newStorage: new(resource.MustParse("51200Mi")),
 		},
 		{
 			name:         "reject explicit storage removal when class default is smaller",
-			oldStorage:   ptr.To(resource.MustParse("100Gi")),
+			oldStorage:   new(resource.MustParse("100Gi")),
 			wantErrCount: 1,
 			wantErrMsg:   "storage size cannot be decreased (from: 100Gi, to: 50Gi)",
 		},
@@ -895,12 +894,12 @@ func TestValidatePostgresClusterScaling(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(3)),
-				Storage:         ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion: ptr.To("17"),
+				Instances:       new(int32(3)),
+				Storage:         new(resource.MustParse("50Gi")),
+				PostgresVersion: new("17"),
 			},
 			CNPG: &platformApi.CNPGConfig{
-				PrimaryUpdateMethod: ptr.To("switchover"),
+				PrimaryUpdateMethod: new("switchover"),
 			},
 		},
 	}
@@ -909,12 +908,12 @@ func TestValidatePostgresClusterScaling(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(1)),
-				Storage:         ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion: ptr.To("17"),
+				Instances:       new(int32(1)),
+				Storage:         new(resource.MustParse("50Gi")),
+				PostgresVersion: new("17"),
 			},
 			CNPG: &platformApi.CNPGConfig{
-				PrimaryUpdateMethod: ptr.To("restart"),
+				PrimaryUpdateMethod: new("restart"),
 			},
 		},
 	}
@@ -926,7 +925,7 @@ func TestValidatePostgresClusterScaling(t *testing.T) {
 		c := &platformApi.PostgresCluster{
 			Spec: platformApi.PostgresClusterSpec{
 				Class:     className,
-				Instances: ptr.To(instances),
+				Instances: new(instances),
 			},
 		}
 		if phase != nil {
@@ -969,11 +968,11 @@ func TestValidatePostgresClusterScaling(t *testing.T) {
 			Spec: platformApi.PostgresClusterClassSpec{
 				Provisioner: "postgresql.cnpg.io",
 				Config: &platformApi.PostgresClusterClassConfig{
-					Instances:       ptr.To(int32(1)),
-					Storage:         ptr.To(resource.MustParse("50Gi")),
-					PostgresVersion: ptr.To("17"),
+					Instances:       new(int32(1)),
+					Storage:         new(resource.MustParse("50Gi")),
+					PostgresVersion: new("17"),
 				},
-				CNPG: &platformApi.CNPGConfig{PrimaryUpdateMethod: ptr.To("switchover")},
+				CNPG: &platformApi.CNPGConfig{PrimaryUpdateMethod: new("switchover")},
 			},
 		}
 		r := newFakeReader(oneClass).Build()
@@ -1016,8 +1015,8 @@ func TestValidatePostgresClusterScaling(t *testing.T) {
 	t.Run("update: mid-flight retarget 3->4 while Provisioning allowed (level-based reconciliation)", func(t *testing.T) {
 		provisioningPhase := "Provisioning"
 		oldObj := makeCluster("restart-class", 3, &provisioningPhase)
-		oldObj.Status.Instances = ptr.To(int32(2))
-		oldObj.Status.ReadyInstances = ptr.To(int32(2))
+		oldObj.Status.Instances = new(int32(2))
+		oldObj.Status.ReadyInstances = new(int32(2))
 		newObj := makeCluster("restart-class", 4, &provisioningPhase)
 		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), newObj, oldObj, reader)
 		assert.Empty(t, errs)
@@ -1034,12 +1033,12 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(1)),
-				Storage:         ptr.To(resource.MustParse("10Gi")),
-				PostgresVersion: ptr.To("17"),
+				Instances:       new(int32(1)),
+				Storage:         new(resource.MustParse("10Gi")),
+				PostgresVersion: new("17"),
 			},
 			CNPG: &platformApi.CNPGConfig{
-				PrimaryUpdateMethod: ptr.To("restart"),
+				PrimaryUpdateMethod: new("restart"),
 				ConnectionPooler:    &platformApi.ConnectionPoolerConfig{},
 			},
 		},
@@ -1049,12 +1048,12 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(2)),
-				Storage:         ptr.To(resource.MustParse("10Gi")),
-				PostgresVersion: ptr.To("17"),
+				Instances:       new(int32(2)),
+				Storage:         new(resource.MustParse("10Gi")),
+				PostgresVersion: new("17"),
 			},
 			CNPG: &platformApi.CNPGConfig{
-				PrimaryUpdateMethod: ptr.To("switchover"),
+				PrimaryUpdateMethod: new("switchover"),
 				ConnectionPooler:    &platformApi.ConnectionPoolerConfig{},
 			},
 		},
@@ -1066,8 +1065,8 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 			Spec: platformApi.PostgresClusterSpec{
 				Class: "single",
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-					Enabled:  ptr.To(true),
-					ReadOnly: ptr.To(true),
+					Enabled:  new(true),
+					ReadOnly: new(true),
 				},
 			},
 		}
@@ -1088,8 +1087,8 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 			Spec: platformApi.PostgresClusterSpec{
 				Class: "single",
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-					Enabled:  ptr.To(true),
-					ReadOnly: ptr.To(false),
+					Enabled:  new(true),
+					ReadOnly: new(false),
 				},
 			},
 		}
@@ -1104,8 +1103,8 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 			Spec: platformApi.PostgresClusterSpec{
 				Class: "ha",
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-					Enabled:  ptr.To(true),
-					ReadOnly: ptr.To(true),
+					Enabled:  new(true),
+					ReadOnly: new(true),
 				},
 			},
 		}
@@ -1120,7 +1119,7 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 			Spec: platformApi.PostgresClusterSpec{
 				Class: "single",
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-					Enabled: ptr.To(false),
+					Enabled: new(false),
 				},
 			},
 		}
@@ -1136,14 +1135,14 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 			Spec: platformApi.PostgresClusterSpec{
 				Class: "single",
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-					Enabled:  ptr.To(true),
-					ReadOnly: ptr.To(false),
+					Enabled:  new(true),
+					ReadOnly: new(false),
 				},
 			},
 		}
 		oldObj.Status.Phase = &readyPhase
 		newObj := oldObj.DeepCopy()
-		newObj.Spec.ConnectionPooler.ReadOnly = ptr.To(true)
+		newObj.Spec.ConnectionPooler.ReadOnly = new(true)
 		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), newObj, oldObj, reader)
 		require.NotEmpty(t, errs)
 		var found bool
@@ -1163,7 +1162,7 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 			Spec: platformApi.PostgresClusterSpec{
 				Class: "single",
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-					Enabled: ptr.To(true),
+					Enabled: new(true),
 				},
 			},
 		}
@@ -1202,11 +1201,11 @@ func TestValidateAgainstClass(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(3)),
-				Storage:         ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion: ptr.To("17"),
+				Instances:       new(int32(3)),
+				Storage:         new(resource.MustParse("50Gi")),
+				PostgresVersion: new("17"),
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-					Enabled: ptr.To(false),
+					Enabled: new(false),
 				},
 			},
 		},
@@ -1217,9 +1216,9 @@ func TestValidateAgainstClass(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(3)),
-				Storage:         ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion: ptr.To("17.2"),
+				Instances:       new(int32(3)),
+				Storage:         new(resource.MustParse("50Gi")),
+				PostgresVersion: new("17.2"),
 			},
 		},
 	}
@@ -1229,11 +1228,11 @@ func TestValidateAgainstClass(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(3)),
-				Storage:         ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion: ptr.To("17"),
+				Instances:       new(int32(3)),
+				Storage:         new(resource.MustParse("50Gi")),
+				PostgresVersion: new("17"),
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-					Enabled: ptr.To(true),
+					Enabled: new(true),
 				},
 			},
 			CNPG: &platformApi.CNPGConfig{
@@ -1247,12 +1246,12 @@ func TestValidateAgainstClass(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(3)),
-				Storage:         ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion: ptr.To("17"),
+				Instances:       new(int32(3)),
+				Storage:         new(resource.MustParse("50Gi")),
+				PostgresVersion: new("17"),
 				Backup: &platformApi.BackupConfig{
-					Enabled:  ptr.To(true),
-					Schedule: ptr.To("0 2 * * *"),
+					Enabled:  new(true),
+					Schedule: new("0 2 * * *"),
 				},
 			},
 			CNPG: &platformApi.CNPGConfig{
@@ -1296,7 +1295,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptr.To("17"),
+					PostgresVersion: new("17"),
 				},
 			},
 			wantErrCount: 0,
@@ -1307,7 +1306,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptr.To("18"),
+					PostgresVersion: new("18"),
 				},
 			},
 			wantErrCount: 0,
@@ -1318,7 +1317,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptr.To("16"),
+					PostgresVersion: new("16"),
 				},
 			},
 			wantErrCount:  1,
@@ -1332,7 +1331,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptr.To("17.2"),
+					PostgresVersion: new("17.2"),
 				},
 			},
 			wantErrCount: 0,
@@ -1343,7 +1342,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptr.To("17.0"),
+					PostgresVersion: new("17.0"),
 				},
 			},
 			wantErrCount: 0,
@@ -1354,7 +1353,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod-pinned",
-					PostgresVersion: ptr.To("17.2"),
+					PostgresVersion: new("17.2"),
 				},
 			},
 			wantErrCount: 0,
@@ -1365,7 +1364,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod-pinned",
-					PostgresVersion: ptr.To("17.5"),
+					PostgresVersion: new("17.5"),
 				},
 			},
 			wantErrCount: 0,
@@ -1376,7 +1375,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod-pinned",
-					PostgresVersion: ptr.To("17.1"),
+					PostgresVersion: new("17.1"),
 				},
 			},
 			wantErrCount:  1,
@@ -1390,7 +1389,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod-pinned",
-					PostgresVersion: ptr.To("16.9"),
+					PostgresVersion: new("16.9"),
 				},
 			},
 			wantErrCount:  1,
@@ -1404,7 +1403,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod-pinned",
-					PostgresVersion: ptr.To("18"),
+					PostgresVersion: new("18"),
 				},
 			},
 			wantErrCount: 0,
@@ -1416,7 +1415,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "prod",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-						Enabled: ptr.To(true),
+						Enabled: new(true),
 					},
 				},
 			},
@@ -1432,7 +1431,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "prod",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-						Enabled: ptr.To(false),
+						Enabled: new(false),
 					},
 				},
 			},
@@ -1445,7 +1444,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "pooler-class",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-						Enabled: ptr.To(true),
+						Enabled: new(true),
 					},
 				},
 			},
@@ -1466,11 +1465,11 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &platformApi.PostgresClusterClassConfig{
-						Instances:       ptr.To(int32(3)),
-						Storage:         ptr.To(resource.MustParse("50Gi")),
-						PostgresVersion: ptr.To("17"),
+						Instances:       new(int32(3)),
+						Storage:         new(resource.MustParse("50Gi")),
+						PostgresVersion: new("17"),
 						ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-							Enabled: ptr.To(true),
+							Enabled: new(true),
 						},
 					},
 				},
@@ -1493,12 +1492,12 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "bare-pooler",
-					Instances:       ptr.To(int32(1)),
-					PostgresVersion: ptr.To("17"),
-					Storage:         ptr.To(resource.MustParse("10Gi")),
+					Instances:       new(int32(1)),
+					PostgresVersion: new("17"),
+					Storage:         new(resource.MustParse("10Gi")),
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-						Enabled:  ptr.To(true),
-						ReadOnly: ptr.To(false),
+						Enabled:  new(true),
+						ReadOnly: new(false),
 					},
 				},
 			},
@@ -1513,8 +1512,8 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "prod",
 					Backup: &platformApi.BackupConfig{
-						Enabled:  ptr.To(true),
-						Schedule: ptr.To("0 2 * * *"),
+						Enabled:  new(true),
+						Schedule: new("0 2 * * *"),
 					},
 				},
 			},
@@ -1530,7 +1529,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "prod",
 					Backup: &platformApi.BackupConfig{
-						Enabled: ptr.To(false),
+						Enabled: new(false),
 					},
 				},
 			},
@@ -1553,7 +1552,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "prod",
 					Backup: &platformApi.BackupConfig{
-						Enabled: ptr.To(true),
+						Enabled: new(true),
 					},
 				},
 			},
@@ -1568,9 +1567,9 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &platformApi.PostgresClusterClassConfig{
-						Instances:       ptr.To(int32(3)),
-						Storage:         ptr.To(resource.MustParse("50Gi")),
-						PostgresVersion: ptr.To("17"),
+						Instances:       new(int32(3)),
+						Storage:         new(resource.MustParse("50Gi")),
+						PostgresVersion: new("17"),
 					},
 					CNPG: &platformApi.CNPGConfig{
 						Backup: &platformApi.CNPGBackupConfig{
@@ -1583,7 +1582,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "backup-no-schedule",
 					Backup: &platformApi.BackupConfig{
-						Enabled: ptr.To(true),
+						Enabled: new(true),
 					},
 				},
 			},
@@ -1598,11 +1597,11 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &platformApi.PostgresClusterClassConfig{
-						Instances:       ptr.To(int32(3)),
-						Storage:         ptr.To(resource.MustParse("50Gi")),
-						PostgresVersion: ptr.To("17"),
+						Instances:       new(int32(3)),
+						Storage:         new(resource.MustParse("50Gi")),
+						PostgresVersion: new("17"),
 						Backup: &platformApi.BackupConfig{
-							Enabled: ptr.To(true),
+							Enabled: new(true),
 						},
 					},
 					CNPG: &platformApi.CNPGConfig{
@@ -1616,7 +1615,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "backup-no-schedule-class",
 					Backup: &platformApi.BackupConfig{
-						Schedule: ptr.To("0 3 * * *"),
+						Schedule: new("0 3 * * *"),
 					},
 				},
 			},
@@ -1629,11 +1628,11 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &platformApi.PostgresClusterClassConfig{
-						Instances:       ptr.To(int32(3)),
-						Storage:         ptr.To(resource.MustParse("50Gi")),
-						PostgresVersion: ptr.To("17"),
+						Instances:       new(int32(3)),
+						Storage:         new(resource.MustParse("50Gi")),
+						PostgresVersion: new("17"),
 						Backup: &platformApi.BackupConfig{
-							Enabled: ptr.To(true),
+							Enabled: new(true),
 						},
 					},
 				},
@@ -1642,7 +1641,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "backup-no-cnpg",
 					Backup: &platformApi.BackupConfig{
-						Schedule: ptr.To("0 2 * * *"),
+						Schedule: new("0 2 * * *"),
 					},
 				},
 			},
@@ -1672,8 +1671,8 @@ func TestValidateAgainstClass(t *testing.T) {
 				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &platformApi.PostgresClusterClassConfig{
-						Instances:       ptr.To(int32(3)),
-						PostgresVersion: ptr.To("17"),
+						Instances:       new(int32(3)),
+						PostgresVersion: new("17"),
 					},
 				},
 			},
@@ -1696,9 +1695,9 @@ func TestValidateAgainstClass(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "minimal",
-					Instances:       ptr.To(int32(1)),
-					PostgresVersion: ptr.To("17"),
-					Storage:         ptr.To(resource.MustParse("10Gi")),
+					Instances:       new(int32(1)),
+					PostgresVersion: new("17"),
+					Storage:         new(resource.MustParse("10Gi")),
 				},
 			},
 			wantErrCount: 0,

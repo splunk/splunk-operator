@@ -38,7 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/ptr"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -63,12 +63,12 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 		Spec: platformv1alpha1.PostgresClusterClassSpec{
-			Config: &platformv1alpha1.PostgresClusterClassConfig{ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
+			Config: &platformv1alpha1.PostgresClusterClassConfig{ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(true)}},
 		},
 	}
 
@@ -147,7 +147,7 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 					},
 				}
 				poolerSpec := mergedConfig.Spec.DeepCopy()
-				poolerSpec.ConnectionPooler = &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}
+				poolerSpec.ConnectionPooler = &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(true)}
 				poolerCfg := &MergedConfig{
 					Spec: poolerSpec,
 					CNPG: &platformv1alpha1.CNPGConfig{
@@ -269,12 +269,12 @@ func TestReconcileFailureEmitsWarningFromObserveNotReconcile(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 		Spec: platformv1alpha1.PostgresClusterClassSpec{
-			Config: &platformv1alpha1.PostgresClusterClassConfig{ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
+			Config: &platformv1alpha1.PostgresClusterClassConfig{ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(true)}},
 		},
 	}
 
@@ -407,7 +407,7 @@ func TestClusterModelStorageResizeInProgress(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 
 	cases := []struct {
@@ -1034,13 +1034,13 @@ func TestHandleFinalizerRetainStripsBarmanPlugin(t *testing.T) {
 				Kind:       "PostgresCluster",
 				Name:       "pg1",
 				UID:        "owner-uid",
-				Controller: ptr.To(true),
+				Controller: new(true),
 			}},
 		},
 		Spec: cnpgv1.ClusterSpec{
 			Plugins: []cnpgv1.PluginConfiguration{
 				{Name: "keep-me.plugin.io"},
-				{Name: barmanCloudPluginName, IsWALArchiver: ptr.To(true)},
+				{Name: barmanCloudPluginName, IsWALArchiver: new(true)},
 			},
 		},
 	}
@@ -1078,7 +1078,7 @@ func TestHandleFinalizerDeletesConventionalPoolersOnce(t *testing.T) {
 			ProvisionerRef: &corev1.ObjectReference{Name: "primary-green", Namespace: "default"},
 		},
 	}
-	ownerRef := metav1.OwnerReference{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster", Name: cluster.Name, UID: cluster.UID, Controller: ptr.To(true)}
+	ownerRef := metav1.OwnerReference{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster", Name: cluster.Name, UID: cluster.UID, Controller: new(true)}
 	cnpgCluster := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
 	poolers := []client.Object{
 		&cnpgv1.Pooler{ObjectMeta: metav1.ObjectMeta{Name: "primary-pooler-rw", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}},
@@ -1129,7 +1129,7 @@ func TestHandleFinalizerCleansScheduledBackupsForEveryManagedEnvironment(t *test
 		Kind:       "PostgresCluster",
 		Name:       cluster.Name,
 		UID:        cluster.UID,
-		Controller: ptr.To(true),
+		Controller: new(true),
 	}
 	conventional := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
 	green := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
@@ -1188,7 +1188,7 @@ func TestHandleFinalizerLeavesUnvalidatedCNPGClusters(t *testing.T) {
 					Kind:       "PostgresCluster",
 					Name:       "primary",
 					UID:        tt.ownerUID,
-					Controller: ptr.To(true),
+					Controller: new(true),
 				}},
 			}}
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, green).Build()
@@ -1208,8 +1208,8 @@ func TestManagedCNPGClustersSkipsForeignAndStaleReferences(t *testing.T) {
 	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "default", UID: "owner-uid"},
 	}
-	ownerRef := metav1.OwnerReference{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster", Name: cluster.Name, UID: cluster.UID, Controller: ptr.To(true)}
-	foreignRef := metav1.OwnerReference{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster", Name: "other", UID: "other-uid", Controller: ptr.To(true)}
+	ownerRef := metav1.OwnerReference{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster", Name: cluster.Name, UID: cluster.UID, Controller: new(true)}
+	foreignRef := metav1.OwnerReference{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster", Name: "other", UID: "other-uid", Controller: new(true)}
 	conventional := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
 	stale := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: cluster.Namespace, UID: "stale-uid", OwnerReferences: []metav1.OwnerReference{ownerRef}}}
 	foreign := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-blue", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{foreignRef}}}
@@ -1249,7 +1249,7 @@ func TestHandleFinalizerRetainsConventionalAndCurrentEnvironments(t *testing.T) 
 		Kind:       "PostgresCluster",
 		Name:       cluster.Name,
 		UID:        cluster.UID,
-		Controller: ptr.To(true),
+		Controller: new(true),
 	}
 	conventional := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
 	current := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
@@ -1288,7 +1288,7 @@ func TestHandleFinalizerDeletesConventionalAndCurrentEnvironments(t *testing.T) 
 		Kind:       "PostgresCluster",
 		Name:       cluster.Name,
 		UID:        cluster.UID,
-		Controller: ptr.To(true),
+		Controller: new(true),
 	}
 	conventional := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
 	current := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
@@ -1484,14 +1484,14 @@ func TestValidateCrossResource_VersionFloor(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "cls"},
 			Spec: platformv1alpha1.PostgresClusterClassSpec{
 				Provisioner: "postgresql.cnpg.io",
-				Config:      &platformv1alpha1.PostgresClusterClassConfig{PostgresVersion: ptr.To(floor)},
+				Config:      &platformv1alpha1.PostgresClusterClassConfig{PostgresVersion: new(floor)},
 			},
 		}
 	}
 	makeCluster := func(version string) *platformv1alpha1.PostgresCluster {
 		return &platformv1alpha1.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "pg"},
-			Spec:       platformv1alpha1.PostgresClusterSpec{PostgresVersion: ptr.To(version)},
+			Spec:       platformv1alpha1.PostgresClusterSpec{PostgresVersion: new(version)},
 		}
 	}
 

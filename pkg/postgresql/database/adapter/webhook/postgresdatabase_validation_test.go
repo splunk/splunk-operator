@@ -23,7 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -425,9 +425,9 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 	t.Run("every explicit optional field is rejected", func(t *testing.T) {
 		obj := dbWith(&platformApi.DatabaseMonitoring{
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{
-				{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: ptr.To(true)},
+				{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: new(true)},
 				{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml"},
-				{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: ptr.To(false)},
+				{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: new(false)},
 			},
 		})
 		errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), obj, buildReader(sourceCM))
@@ -445,7 +445,7 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{
 				LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"},
 				Key:                  "queries.yaml",
-				Optional:             ptr.To(true),
+				Optional:             new(true),
 			}},
 		})
 
@@ -494,7 +494,7 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 		ref := corev1.ConfigMapKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{Name: "removed"},
 			Key:                  "queries.yaml",
-			Optional:             ptr.To(false),
+			Optional:             new(false),
 		}
 		oldObj := dbWith(&platformApi.DatabaseMonitoring{CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{ref}})
 		obj := oldObj.DeepCopy()

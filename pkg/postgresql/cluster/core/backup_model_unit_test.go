@@ -34,7 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -94,20 +94,20 @@ func newTestMergedConfig(backupEnabled bool, schedule string) *MergedConfig {
 			Resources:        &corev1.ResourceRequirements{},
 		},
 		CNPG: &platformv1alpha1.CNPGConfig{
-			PrimaryUpdateMethod: ptr.To("restart"),
+			PrimaryUpdateMethod: new("restart"),
 			Backup: &platformv1alpha1.CNPGBackupConfig{
 				VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{
-					ClassName: ptr.To("csi-snapclass"),
-					Online:    ptr.To(true),
+					ClassName: new("csi-snapclass"),
+					Online:    new(true),
 				},
-				Target: ptr.To("prefer-standby"),
+				Target: new("prefer-standby"),
 			},
 		},
 	}
 	if backupEnabled {
 		cfg.Spec.Backup = &platformv1alpha1.BackupConfig{
-			Enabled:  ptr.To(true),
-			Schedule: ptr.To(schedule),
+			Enabled:  new(true),
+			Schedule: new(schedule),
 		}
 	}
 	return cfg
@@ -321,7 +321,7 @@ func TestBackupModel_Reconcile_Enabled(t *testing.T) {
 		// Arrange
 		cluster := newTestCluster("c1", "ns1")
 		cfg := newTestMergedConfig(true, "0 2 * * *")
-		cfg.CNPG.Backup.Target = ptr.To("primary")
+		cfg.CNPG.Backup.Target = new("primary")
 		backend := &spyBackupBackend{}
 		model := newTestBackupModelWithBackend(backend, noopBackupEmitter{}, noopHealthUpdater, cluster, cfg, cnpg)
 
@@ -591,8 +591,8 @@ func TestGetMergedConfig_BackupMerge(t *testing.T) {
 					PostgresVersion: &classVersion,
 					Storage:         &classStorage,
 					Backup: &platformv1alpha1.BackupConfig{
-						Enabled:  ptr.To(true),
-						Schedule: ptr.To("0 2 * * *"),
+						Enabled:  new(true),
+						Schedule: new("0 2 * * *"),
 					},
 				},
 			},
@@ -619,15 +619,15 @@ func TestGetMergedConfig_BackupMerge(t *testing.T) {
 					PostgresVersion: &classVersion,
 					Storage:         &classStorage,
 					Backup: &platformv1alpha1.BackupConfig{
-						Enabled:  ptr.To(true),
-						Schedule: ptr.To("0 2 * * *"),
+						Enabled:  new(true),
+						Schedule: new("0 2 * * *"),
 					},
 				},
 			},
 		}
 		cluster := &platformv1alpha1.PostgresCluster{
 			Spec: platformv1alpha1.PostgresClusterSpec{
-				Backup: &platformv1alpha1.BackupConfig{Schedule: ptr.To("30 3 * * *")},
+				Backup: &platformv1alpha1.BackupConfig{Schedule: new("30 3 * * *")},
 			},
 		}
 
@@ -651,15 +651,15 @@ func TestGetMergedConfig_BackupMerge(t *testing.T) {
 					PostgresVersion: &classVersion,
 					Storage:         &classStorage,
 					Backup: &platformv1alpha1.BackupConfig{
-						Enabled:  ptr.To(true),
-						Schedule: ptr.To("0 2 * * *"),
+						Enabled:  new(true),
+						Schedule: new("0 2 * * *"),
 					},
 				},
 			},
 		}
 		cluster := &platformv1alpha1.PostgresCluster{
 			Spec: platformv1alpha1.PostgresClusterSpec{
-				Backup: &platformv1alpha1.BackupConfig{Enabled: ptr.To(false)},
+				Backup: &platformv1alpha1.BackupConfig{Enabled: new(false)},
 			},
 		}
 
@@ -687,7 +687,7 @@ func TestGetMergedConfig_BackupMerge(t *testing.T) {
 		}
 		cluster := &platformv1alpha1.PostgresCluster{
 			Spec: platformv1alpha1.PostgresClusterSpec{
-				Backup: &platformv1alpha1.BackupConfig{Enabled: ptr.To(true)},
+				Backup: &platformv1alpha1.BackupConfig{Enabled: new(true)},
 			},
 		}
 
@@ -748,7 +748,7 @@ func TestNormalizeCNPGClusterSpec_Backup(t *testing.T) {
 					ClassName:              "csi-snapclass",
 					WalClassName:           "csi-wal-snapclass",
 					SnapshotOwnerReference: cnpgv1.SnapshotOwnerReference("cluster"),
-					Online:                 ptr.To(true),
+					Online:                 new(true),
 					Labels:                 map[string]string{"env": "prod"},
 					Annotations:            map[string]string{"backup.io/tier": "gold"},
 				},
@@ -764,7 +764,7 @@ func TestNormalizeCNPGClusterSpec_Backup(t *testing.T) {
 		assert.Equal(t, "csi-snapclass", normalized.Backup.VolumeSnapshotClass)
 		assert.Equal(t, "csi-wal-snapclass", normalized.Backup.WalClassName)
 		assert.Equal(t, "cluster", normalized.Backup.SnapshotOwnerReference)
-		assert.Equal(t, ptr.To(true), normalized.Backup.Online)
+		assert.Equal(t, new(true), normalized.Backup.Online)
 		assert.Equal(t, map[string]string{"env": "prod"}, normalized.Backup.Labels)
 		assert.Equal(t, map[string]string{"backup.io/tier": "gold"}, normalized.Backup.Annotations)
 	})
@@ -795,12 +795,12 @@ func TestBuildCNPGBackupConfiguration(t *testing.T) {
 		cfg := &MergedConfig{
 			CNPG: &platformv1alpha1.CNPGConfig{
 				Backup: &platformv1alpha1.CNPGBackupConfig{
-					Target: ptr.To("prefer-standby"),
+					Target: new("prefer-standby"),
 					VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{
-						ClassName:              ptr.To("csi-snap"),
-						WalClassName:           ptr.To("csi-wal"),
-						SnapshotOwnerReference: ptr.To("cluster"),
-						Online:                 ptr.To(true),
+						ClassName:              new("csi-snap"),
+						WalClassName:           new("csi-wal"),
+						SnapshotOwnerReference: new("cluster"),
+						Online:                 new(true),
 						Labels:                 map[string]string{"team": "platform"},
 						Annotations:            map[string]string{"cost-center": "infra"},
 					},
@@ -818,7 +818,7 @@ func TestBuildCNPGBackupConfiguration(t *testing.T) {
 		assert.Equal(t, "csi-snap", result.VolumeSnapshot.ClassName)
 		assert.Equal(t, "csi-wal", result.VolumeSnapshot.WalClassName)
 		assert.Equal(t, cnpgv1.SnapshotOwnerReference("cluster"), result.VolumeSnapshot.SnapshotOwnerReference)
-		assert.Equal(t, ptr.To(true), result.VolumeSnapshot.Online)
+		assert.Equal(t, new(true), result.VolumeSnapshot.Online)
 		assert.Equal(t, map[string]string{"team": "platform"}, result.VolumeSnapshot.Labels)
 		assert.Equal(t, map[string]string{"cost-center": "infra"}, result.VolumeSnapshot.Annotations)
 	})
@@ -828,7 +828,7 @@ func TestBuildCNPGBackupConfiguration(t *testing.T) {
 		cfg := &MergedConfig{
 			CNPG: &platformv1alpha1.CNPGConfig{
 				Backup: &platformv1alpha1.CNPGBackupConfig{
-					VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{ClassName: ptr.To("snap")},
+					VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{ClassName: new("snap")},
 				},
 			},
 		}
@@ -1026,7 +1026,7 @@ func TestEffectiveBackupProvider(t *testing.T) {
 			name: "disabled",
 			cfg: func() *MergedConfig {
 				cfg := newTestMergedConfig(true, "0 2 * * *")
-				cfg.Spec.Backup.Enabled = ptr.To(false)
+				cfg.Spec.Backup.Enabled = new(false)
 				return cfg
 			}(),
 			wantOK: false,
@@ -1215,7 +1215,7 @@ func TestBackupModel_Reconcile_DeletesPriorEnvironmentNamesWhenDisabled(t *testi
 
 func TestBuildCNPGClusterSpec_BarmanDisabledOmitsPlugin(t *testing.T) {
 	cfg := newTestMergedConfigBarman("0 2 * * *")
-	cfg.Spec.Backup.Enabled = ptr.To(false)
+	cfg.Spec.Backup.Enabled = new(false)
 
 	spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "secret", false)
 
@@ -1267,7 +1267,7 @@ func TestBuildCNPGClusterSpec_PreservesForeignPlugins(t *testing.T) {
 
 	t.Run("drops stale barman plugin when backups disabled", func(t *testing.T) {
 		cfg := newTestMergedConfigBarman("0 2 * * *")
-		cfg.Spec.Backup.Enabled = ptr.To(false)
+		cfg.Spec.Backup.Enabled = new(false)
 		live := cnpgv1.ClusterSpec{
 			Plugins: []cnpgv1.PluginConfiguration{
 				{Name: "some-other.plugin.io"},

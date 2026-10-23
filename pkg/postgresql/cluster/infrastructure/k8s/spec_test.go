@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -41,7 +41,7 @@ func TestClusterSpecificationGetSpecificationWithAnnotationsReturnsCopies(t *tes
 			},
 		},
 		Spec: platformv1alpha1.PostgresClusterSpec{
-			PostgresVersion: ptr.To("18"),
+			PostgresVersion: new("18"),
 		},
 	})
 

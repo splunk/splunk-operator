@@ -59,7 +59,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/ptr"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -148,17 +148,17 @@ func (r *stubDBRepo) AssignRequiredPermissionsToRole(_ context.Context, dbName s
 
 // boolPtr is a helper to get a pointer to a bool value, used for testing conditions with pointer fields.
 func boolPtr(v bool) *bool {
-	return ptr.To(v)
+	return new(v)
 }
 
 // strPtr is a helper to get a pointer to a string value, used for testing pointer string fields.
 func strPtr(s string) *string {
-	return ptr.To(s)
+	return new(s)
 }
 
 // int64Ptr is a helper to get a pointer to an int64 value, used for testing pointer integer fields.
 func int64Ptr(v int64) *int64 {
-	return ptr.To(v)
+	return new(v)
 }
 
 func databaseNames(defs []platformv1alpha1.DatabaseDefinition) []string {
@@ -1960,7 +1960,7 @@ func TestPersistDatabaseBootstrapCompletionMarksOnlyNewEntries(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs", Generation: 3},
 		Spec: platformv1alpha1.PostgresDatabaseSpec{Databases: []platformv1alpha1.DatabaseDefinition{
 			{Name: "established"},
-			{Name: "newdb", AllowConnections: ptr.To(false)},
+			{Name: "newdb", AllowConnections: new(false)},
 		}},
 		Status: platformv1alpha1.PostgresDatabaseStatus{
 			Phase: &phase,
@@ -2114,7 +2114,7 @@ func TestOrphanResourceHelpers(t *testing.T) {
 				Name:      "primary-payments",
 				Namespace: "dbs",
 				OwnerReferences: []metav1.OwnerReference{
-					{UID: postgresDB.UID, Name: postgresDB.Name, Controller: ptr.To(true)},
+					{UID: postgresDB.UID, Name: postgresDB.Name, Controller: new(true)},
 					{UID: types.UID("other"), Name: "other"},
 				},
 			},
@@ -2135,7 +2135,7 @@ func TestOrphanResourceHelpers(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            "primary-green-payments",
 				Namespace:       "dbs",
-				OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: ptr.To(true)}},
+				OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: new(true)}},
 			},
 		}
 		c := testClient(t, scheme, db)
@@ -2156,12 +2156,12 @@ func TestOrphanResourceHelpers(t *testing.T) {
 		blue := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
 			Name:            "primary-blue-payments",
 			Namespace:       "dbs",
-			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: ptr.To(true)}},
+			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: new(true)}},
 		}}
 		green := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
 			Name:            "primary-green-payments",
 			Namespace:       "dbs",
-			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: ptr.To(true)}},
+			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: new(true)}},
 		}}
 		c := testClient(t, scheme, blue, green)
 
@@ -2179,7 +2179,7 @@ func TestOrphanResourceHelpers(t *testing.T) {
 			Name:      "primary-green-payments",
 			Namespace: "dbs",
 			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: "other", UID: "other-uid", Controller: ptr.To(true),
+				APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: "other", UID: "other-uid", Controller: new(true),
 			}},
 		}}
 		c := testClient(t, scheme, foreign)
@@ -2277,7 +2277,7 @@ func TestDeleteResourceHelpers(t *testing.T) {
 	t.Run("deleteCNPGDatabases removes existing object", func(t *testing.T) {
 		db := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
 			Name: "primary-payments", Namespace: "dbs",
-			OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: ptr.To(true)}},
+			OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: new(true)}},
 		}}
 		c := testClient(t, scheme, db)
 		require.NoError(t, deleteCNPGDatabases(context.Background(), c, postgresDB, databases))
@@ -2286,7 +2286,7 @@ func TestDeleteResourceHelpers(t *testing.T) {
 	t.Run("deleteCNPGDatabases uses the active environment name", func(t *testing.T) {
 		db := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
 			Name: "primary-green-payments", Namespace: "dbs",
-			OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: ptr.To(true)}},
+			OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: new(true)}},
 		}}
 		c := testClient(t, scheme, db)
 		require.NoError(t, deleteCNPGDatabases(context.Background(), c, postgresDB, databases, "green"))
@@ -2302,11 +2302,11 @@ func TestDeleteResourceHelpers(t *testing.T) {
 		}}
 		blue := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
 			Name: "primary-blue-payments", Namespace: "dbs",
-			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: ptr.To(true)}},
+			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: new(true)}},
 		}}
 		green := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
 			Name: "primary-green-payments", Namespace: "dbs",
-			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: ptr.To(true)}},
+			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: new(true)}},
 		}}
 		c := testClient(t, scheme, blue, green)
 
@@ -2322,7 +2322,7 @@ func TestDeleteResourceHelpers(t *testing.T) {
 			Name:      "primary-green-payments",
 			Namespace: "dbs",
 			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: "other", UID: "other-uid", Controller: ptr.To(true),
+				APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: "other", UID: "other-uid", Controller: new(true),
 			}},
 		}}
 		c := testClient(t, scheme, foreign)
@@ -4609,14 +4609,14 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:                          "terminal privileges error transitions to Failed",
 			generation:                    7,
-			databases:                     []platformv1alpha1.DatabaseDefinition{{Name: "payments", AllowConnections: ptr.To(false)}},
+			databases:                     []platformv1alpha1.DatabaseDefinition{{Name: "payments", AllowConnections: new(false)}},
 			statusPhase:                   strPtr(string(readyDBPhase)),
 			newDBRepo:                     failingTerminalRepoFunc("password authentication failed"),
 			wantFailureState:              true,
 			wantPhase:                     failedDBPhase,
 			wantConditionReason:           reasonPrivilegesTerminalFailure,
 			wantDatabasesReadyStatus:      metav1.ConditionFalse,
-			wantProviderAllowsConnections: ptr.To(false),
+			wantProviderAllowsConnections: new(false),
 			wantConditionMessageContains: []string{
 				"Manual intervention required",
 				"spec change",

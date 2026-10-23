@@ -30,7 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -46,8 +46,8 @@ func TestBuildDatabaseSpecMapsEveryOption(t *testing.T) {
 			ICULocale: "en-US", ICURules: "&V << w", CollationVersion: "153.120",
 		},
 		Mutable: dbtypes.DatabaseMutableOptions{
-			IsTemplate: ptr.To(false), AllowConnections: ptr.To(true),
-			ConnectionLimit: ptr.To(int32(0)), Tablespace: "fastspace",
+			IsTemplate: new(false), AllowConnections: new(true),
+			ConnectionLimit: new(int32(0)), Tablespace: "fastspace",
 		},
 	}
 
@@ -102,7 +102,7 @@ func TestBuildDatabaseSpecMapsBuiltinLocaleAndOmittedMutableValues(t *testing.T)
 func TestBuildDatabaseSpecRejectsDesiredClosedDatabaseWithManagedExtensions(t *testing.T) {
 	_, err := buildDatabaseSpec("cnpg-primary", dbtypes.DesiredDatabase{
 		Name: "payments", Extensions: []string{"pg_trgm"},
-		Mutable: dbtypes.DatabaseMutableOptions{AllowConnections: ptr.To(false)},
+		Mutable: dbtypes.DatabaseMutableOptions{AllowConnections: new(false)},
 	}, cnpgv1.Database{})
 
 	require.ErrorIs(t, err, errClosedDatabaseWithManagedExtensions)
@@ -111,17 +111,17 @@ func TestBuildDatabaseSpecRejectsDesiredClosedDatabaseWithManagedExtensions(t *t
 func TestBuildDatabaseSpecStagesExtensionRemovalBeforeClose(t *testing.T) {
 	desired := dbtypes.DesiredDatabase{
 		Name:    "payments",
-		Mutable: dbtypes.DatabaseMutableOptions{AllowConnections: ptr.To(false)},
+		Mutable: dbtypes.DatabaseMutableOptions{AllowConnections: new(false)},
 	}
 	database := cnpgv1.Database{
 		ObjectMeta: metav1.ObjectMeta{Generation: 1},
 		Spec: cnpgv1.DatabaseSpec{
-			AllowConnections: ptr.To(true),
+			AllowConnections: new(true),
 			Extensions: []cnpgv1.ExtensionSpec{{
 				DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsurePresent},
 			}},
 		},
-		Status: cnpgv1.DatabaseStatus{Applied: ptr.To(true), ObservedGeneration: 1},
+		Status: cnpgv1.DatabaseStatus{Applied: new(true), ObservedGeneration: 1},
 	}
 	wantAbsent := []cnpgv1.ExtensionSpec{{
 		DatabaseObjectSpec: cnpgv1.DatabaseObjectSpec{Name: "pg_trgm", Ensure: cnpgv1.EnsureAbsent},
@@ -170,7 +170,7 @@ func TestDatabaseProvisionerAppliesAndObservesExactGeneration(t *testing.T) {
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments", Namespace: "dbs"}, database))
 	require.Len(t, database.OwnerReferences, 1)
 	assert.Equal(t, types.UID("owner-uid"), database.OwnerReferences[0].UID)
-	database.Status.Applied = ptr.To(true)
+	database.Status.Applied = new(true)
 	database.Status.ObservedGeneration = applied.Expected[0].Generation
 	require.NoError(t, c.Status().Update(t.Context(), database))
 
@@ -189,7 +189,7 @@ func TestDatabaseProvisionerObservationPreservesStaleGeneration(t *testing.T) {
 	require.NoError(t, cnpgv1.AddToScheme(scheme))
 	database := &cnpgv1.Database{
 		ObjectMeta: metav1.ObjectMeta{Name: "primary-payments", Namespace: "dbs", Generation: 2},
-		Status:     cnpgv1.DatabaseStatus{Applied: ptr.To(true), ObservedGeneration: 1},
+		Status:     cnpgv1.DatabaseStatus{Applied: new(true), ObservedGeneration: 1},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&cnpgv1.Database{}).WithObjects(database).Build()
 	provisioner := NewDatabaseProvisioner(c, scheme)
@@ -247,7 +247,7 @@ func TestDatabaseProvisionerAdoptsAndVerifiesSchemaImportedGreenDatabase(t *test
 			Name:       "payments",
 			ClusterRef: corev1.LocalObjectReference{Name: "primary-green"},
 		},
-		Status: cnpgv1.DatabaseStatus{Applied: ptr.To(true), ObservedGeneration: 1},
+		Status: cnpgv1.DatabaseStatus{Applied: new(true), ObservedGeneration: 1},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&cnpgv1.Database{}).WithObjects(database).Build()
 	provisioner := NewDatabaseProvisioner(c, scheme)
@@ -270,7 +270,7 @@ func TestDatabaseProvisionerAdoptsAndVerifiesSchemaImportedGreenDatabase(t *test
 	require.Len(t, database.OwnerReferences, 1)
 	assert.Equal(t, types.UID("owner-uid"), database.OwnerReferences[0].UID)
 
-	database.Status.Applied = ptr.To(true)
+	database.Status.Applied = new(true)
 	database.Status.ObservedGeneration = result.Expected[0].Generation
 	require.NoError(t, c.Status().Update(t.Context(), database))
 	observation, err := provisioner.Observe(t.Context(), target, result.Expected)

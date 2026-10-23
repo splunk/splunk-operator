@@ -23,18 +23,17 @@ import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 func TestFrozenBlueGreenClusterSpecExcludesGates(t *testing.T) {
 	timeout := &metav1.Duration{Duration: time.Minute}
 	spec := platformv1alpha1.PostgresClusterSpec{
 		PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-			Allow: ptr.To(true),
+			Allow: new(true),
 			BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeConfig{
-				Switchover:        ptr.To(true),
-				Cleanup:           ptr.To(true),
-				Cancel:            ptr.To(true),
+				Switchover:        new(true),
+				Cleanup:           new(true),
+				Cancel:            new(true),
 				SwitchoverTimeout: timeout,
 			},
 		},

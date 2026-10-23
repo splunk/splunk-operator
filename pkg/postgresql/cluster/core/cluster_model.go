@@ -256,9 +256,9 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 		Name:       p.cnpgCluster.Name,
 		UID:        p.cnpgCluster.UID,
 	}
-	p.cluster.Status.Instances = ptr.To(int32(p.cnpgCluster.Status.Instances))
-	p.cluster.Status.ReadyInstances = ptr.To(int32(p.cnpgCluster.Status.ReadyInstances))
-	p.cluster.Status.CurrentPrimary = ptr.To(p.cnpgCluster.Status.CurrentPrimary)
+	p.cluster.Status.Instances = new(int32(p.cnpgCluster.Status.Instances))
+	p.cluster.Status.ReadyInstances = new(int32(p.cnpgCluster.Status.ReadyInstances))
+	p.cluster.Status.CurrentPrimary = new(p.cnpgCluster.Status.CurrentPrimary)
 	if info := p.cnpgCluster.Status.PGDataImageInfo; info != nil && info.MajorVersion > 0 {
 		p.cluster.Status.CurrentPgVersion = fmt.Sprintf("%d", info.MajorVersion)
 	}
@@ -864,7 +864,7 @@ func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, cluste
 		PgHBA:      specCfg.Spec.PgHBA,
 	}
 	live.SuperuserSecret = &cnpgv1.LocalObjectReference{Name: secretName}
-	live.EnableSuperuserAccess = ptr.To(true)
+	live.EnableSuperuserAccess = new(true)
 	live.Bootstrap = buildBootstrapConfiguration(specCfg, secretName)
 	live.StorageConfiguration = cnpgv1.StorageConfiguration{
 		Size: specCfg.Spec.Storage.String(),
@@ -935,8 +935,8 @@ func buildCNPGPlugins(cfg *MergedConfig, clusterName string) []cnpgv1.PluginConf
 	return []cnpgv1.PluginConfiguration{
 		{
 			Name:          barmanCloudPluginName,
-			Enabled:       ptr.To(true),
-			IsWALArchiver: ptr.To(true),
+			Enabled:       new(true),
+			IsWALArchiver: new(true),
 			Parameters: map[string]string{
 				"barmanObjectName": objectStoreName(clusterName),
 			},
@@ -1014,14 +1014,14 @@ func buildBootstrapRecovery(b *platformv1alpha1.BootstrapFrom) *cnpgv1.Bootstrap
 			Storage: corev1.TypedLocalObjectReference{
 				Name:     b.VolumeSnapshot.Storage,
 				Kind:     "VolumeSnapshot",
-				APIGroup: ptr.To("snapshot.storage.k8s.io"),
+				APIGroup: new("snapshot.storage.k8s.io"),
 			},
 		}
 		if b.VolumeSnapshot.WalStorage != nil {
 			recovery.VolumeSnapshots.WalStorage = &corev1.TypedLocalObjectReference{
 				Name:     *b.VolumeSnapshot.WalStorage,
 				Kind:     "VolumeSnapshot",
-				APIGroup: ptr.To("snapshot.storage.k8s.io"),
+				APIGroup: new("snapshot.storage.k8s.io"),
 			}
 		}
 	}
@@ -1244,7 +1244,7 @@ func NormalizeBlueGreenSourceCNPGSpec(spec cnpgv1.ClusterSpec) BlueGreenSourceCN
 		normalized.ReplicationSlots.HighAvailability = &cnpgv1.ReplicationSlotsHAConfiguration{}
 	}
 	if normalized.ReplicationSlots.HighAvailability.Enabled == nil {
-		normalized.ReplicationSlots.HighAvailability.Enabled = ptr.To(true)
+		normalized.ReplicationSlots.HighAvailability.Enabled = new(true)
 	}
 	if normalized.ReplicationSlots.HighAvailability.SlotPrefix == "" {
 		normalized.ReplicationSlots.HighAvailability.SlotPrefix = cnpgv1.DefaultReplicationSlotsHASlotPrefix
@@ -1253,7 +1253,7 @@ func NormalizeBlueGreenSourceCNPGSpec(spec cnpgv1.ClusterSpec) BlueGreenSourceCN
 		normalized.ReplicationSlots.UpdateInterval = cnpgv1.DefaultReplicationSlotsUpdateInterval
 	}
 	if replicas := normalized.ReplicationSlots.SynchronizeReplicas; replicas != nil && replicas.Enabled == nil {
-		replicas.Enabled = ptr.To(true)
+		replicas.Enabled = new(true)
 	}
 	return normalized
 }

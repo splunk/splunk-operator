@@ -29,7 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -64,7 +64,7 @@ func ownedByCluster(cluster *platformv1alpha1.PostgresCluster) []metav1.OwnerRef
 		Kind:       "PostgresCluster",
 		Name:       cluster.Name,
 		UID:        cluster.UID,
-		Controller: ptr.To(true),
+		Controller: new(true),
 	}}
 }
 

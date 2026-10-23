@@ -20,7 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -148,7 +148,7 @@ func TestEnqueueClustersForExternalSecret(t *testing.T) {
 					APIVersion: platformv1alpha1.GroupVersion.String(),
 					Kind:       "PostgresCluster",
 					Name:       clusterRef,
-					Controller: ptr.To(true),
+					Controller: new(true),
 					UID:        "uid-owned",
 				}},
 			},
@@ -165,7 +165,7 @@ func TestEnqueueClustersForExternalSecret(t *testing.T) {
 					APIVersion: "external-secrets.io/v1",
 					Kind:       "ExternalSecret",
 					Name:       "ext-eso",
-					Controller: ptr.To(true),
+					Controller: new(true),
 					UID:        "uid-eso",
 				}},
 			},

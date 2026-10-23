@@ -30,7 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -594,11 +594,11 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(3)),
-				Storage:         ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion: ptr.To("17"),
+				Instances:       new(int32(3)),
+				Storage:         new(resource.MustParse("50Gi")),
+				PostgresVersion: new("17"),
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-					Enabled: ptr.To(false),
+					Enabled: new(false),
 				},
 			},
 		},
@@ -643,7 +643,7 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptr.To("16"),
+					PostgresVersion: new("16"),
 				},
 			},
 			wantAllowed: false,
@@ -657,7 +657,7 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "prod",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-						Enabled: ptr.To(true),
+						Enabled: new(true),
 					},
 				},
 			},
@@ -671,7 +671,7 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptr.To("18"),
+					PostgresVersion: new("18"),
 				},
 			},
 			wantAllowed: true,
@@ -698,11 +698,11 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(3)),
-				Storage:         ptr.To(resource.MustParse("50Gi")),
-				PostgresVersion: ptr.To("17"),
+				Instances:       new(int32(3)),
+				Storage:         new(resource.MustParse("50Gi")),
+				PostgresVersion: new("17"),
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-					Enabled: ptr.To(false),
+					Enabled: new(false),
 				},
 			},
 		},
@@ -720,7 +720,7 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 		Spec: platformApi.PostgresClusterSpec{
 			Class:           "prod",
-			PostgresVersion: ptr.To("17"),
+			PostgresVersion: new("17"),
 		},
 	}
 
@@ -737,7 +737,7 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptr.To("18"),
+					PostgresVersion: new("18"),
 				},
 			},
 			wantAllowed: true,
@@ -749,7 +749,7 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptr.To("16"),
+					PostgresVersion: new("16"),
 				},
 			},
 			wantAllowed: false,
@@ -763,7 +763,7 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "prod",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-						Enabled: ptr.To(true),
+						Enabled: new(true),
 					},
 				},
 			},
@@ -777,7 +777,7 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 				Spec: platformApi.PostgresClusterSpec{
 					Class:           "prod",
-					PostgresVersion: ptr.To("17"),
+					PostgresVersion: new("17"),
 				},
 			},
 			wantAllowed: true,
@@ -806,12 +806,12 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(1)),
-				Storage:         ptr.To(resource.MustParse("10Gi")),
-				PostgresVersion: ptr.To("17"),
+				Instances:       new(int32(1)),
+				Storage:         new(resource.MustParse("10Gi")),
+				PostgresVersion: new("17"),
 			},
 			CNPG: &platformApi.CNPGConfig{
-				PrimaryUpdateMethod: ptr.To("restart"),
+				PrimaryUpdateMethod: new("restart"),
 				ConnectionPooler:    &platformApi.ConnectionPoolerConfig{},
 			},
 		},
@@ -821,12 +821,12 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 		Spec: platformApi.PostgresClusterClassSpec{
 			Provisioner: "postgresql.cnpg.io",
 			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       ptr.To(int32(2)),
-				Storage:         ptr.To(resource.MustParse("10Gi")),
-				PostgresVersion: ptr.To("17"),
+				Instances:       new(int32(2)),
+				Storage:         new(resource.MustParse("10Gi")),
+				PostgresVersion: new("17"),
 			},
 			CNPG: &platformApi.CNPGConfig{
-				PrimaryUpdateMethod: ptr.To("switchover"),
+				PrimaryUpdateMethod: new("switchover"),
 				ConnectionPooler:    &platformApi.ConnectionPoolerConfig{},
 			},
 		},
@@ -855,8 +855,8 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "single",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-						Enabled:  ptr.To(true),
-						ReadOnly: ptr.To(true),
+						Enabled:  new(true),
+						ReadOnly: new(true),
 					},
 				},
 			},
@@ -872,8 +872,8 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "single",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-						Enabled:  ptr.To(true),
-						ReadOnly: ptr.To(false),
+						Enabled:  new(true),
+						ReadOnly: new(false),
 					},
 				},
 			},
@@ -888,8 +888,8 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "ha",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-						Enabled:  ptr.To(true),
-						ReadOnly: ptr.To(true),
+						Enabled:  new(true),
+						ReadOnly: new(true),
 					},
 				},
 			},
@@ -904,8 +904,8 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "single",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-						Enabled:  ptr.To(true),
-						ReadOnly: ptr.To(false),
+						Enabled:  new(true),
+						ReadOnly: new(false),
 					},
 				},
 			},
@@ -915,8 +915,8 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 				Spec: platformApi.PostgresClusterSpec{
 					Class: "single",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
-						Enabled:  ptr.To(true),
-						ReadOnly: ptr.To(true),
+						Enabled:  new(true),
+						ReadOnly: new(true),
 					},
 				},
 			},
@@ -944,9 +944,9 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 func TestBootstrapFromPITRAdmissionIntegration(t *testing.T) {
 	baseConfig := func() *platformApi.PostgresClusterClassConfig {
 		return &platformApi.PostgresClusterClassConfig{
-			Instances:       ptr.To(int32(1)),
-			Storage:         ptr.To(resource.MustParse("10Gi")),
-			PostgresVersion: ptr.To("17"),
+			Instances:       new(int32(1)),
+			Storage:         new(resource.MustParse("10Gi")),
+			PostgresVersion: new("17"),
 		}
 	}
 

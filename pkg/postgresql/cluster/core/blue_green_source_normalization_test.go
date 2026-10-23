@@ -31,7 +31,7 @@ func TestNormalizeBlueGreenSourceCNPGSpecUsesCNPGDefaults(t *testing.T) {
 func TestNormalizeBlueGreenSourceCNPGSpecCapturesAndCopiesLiveSettings(t *testing.T) {
 	storageClass := "fast"
 	spec := cnpgv1.ClusterSpec{
-		EnableSuperuserAccess: ptr.To(true),
+		EnableSuperuserAccess: new(true),
 		SuperuserSecret:       &cnpgv1.LocalObjectReference{Name: "source-superuser"},
 		StorageConfiguration:  cnpgv1.StorageConfiguration{StorageClass: &storageClass},
 		ReplicationSlots: &cnpgv1.ReplicationSlotsConfiguration{
