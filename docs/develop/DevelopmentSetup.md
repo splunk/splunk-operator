@@ -65,6 +65,7 @@ running controller tests.
 | Target | Description |
 |--------|-------------|
 | `make fmt` | Format Go source files |
+| `make mod-verify` | Verify downloaded modules and check `go.mod` and `go.sum` are tidy without modifying them |
 | `make setup` | Verify Go, download modules, and install local development tools |
 | `make verify-go-version` | Check the active Go version against `.env`, `go.mod`, and Docker builders |
 | `make vet` | Run `go vet` on the codebase |
