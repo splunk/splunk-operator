@@ -33,7 +33,7 @@ func TestCommonWorkloadSpecSerialization(t *testing.T) {
 		"topologySpreadConstraints":[{"maxSkew":1,"topologyKey":"zone","whenUnsatisfiable":"ScheduleAnyway"}],
 		"serviceTemplate":{"spec":{"type":"ClusterIP"}}, "podAnnotations":{"custom":"value"},
 		"volumes":[{"name":"postgres-tls","secret":{"secretName":"postgres-tls"}}],
-		"defaults":"configuration", "serviceAccount":"workload-sa",
+		"serviceAccount":"workload-sa",
 		"livenessInitialDelaySeconds":90, "readinessInitialDelaySeconds":75,
 		"extraEnv":[{"name":"DB_PASSWORD","valueFrom":{"secretKeyRef":{"name":"postgres","key":"password"}}}],
 		"imagePullSecrets":[{"name":"registry"}],
@@ -95,4 +95,16 @@ func TestKVServiceSpecExcludesEnterpriseSettings(t *testing.T) {
 			assert.False(t, exists, "KVService must not expose %s", field)
 		})
 	}
+}
+
+func TestEnterpriseInlineDefaultsRemainSupported(t *testing.T) {
+	const manifest = `{"defaults":"splunk:\n  hec:\n    enable: false\n"}`
+	var spec CommonSplunkSpec
+	require.NoError(t, json.Unmarshal([]byte(manifest), &spec))
+	assert.Equal(t, "splunk:\n  hec:\n    enable: false\n", spec.Defaults)
+	encoded, err := json.Marshal(spec)
+	require.NoError(t, err)
+	var actual map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &actual))
+	assert.Equal(t, spec.Defaults, actual["defaults"])
 }

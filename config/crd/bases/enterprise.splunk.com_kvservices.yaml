@@ -1089,10 +1089,6 @@ spec:
                   rule: self.filter(c, has(c.role) && c.role == 'server').size() <=
                     1 && self.filter(c, has(c.role) && c.role == 'input').size() <=
                     1
-              defaults:
-                description: Inline map of default.yml overrides used to initialize
-                  the environment
-                type: string
               disableResourceDefaults:
                 default: false
                 description: DisableResourceDefaults prevents the operator from filling

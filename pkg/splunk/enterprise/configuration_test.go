@@ -319,7 +319,8 @@ func TestGetSplunkDefaults(t *testing.T) {
 		},
 		Spec: enterpriseApi.IndexerClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Defaults: "defaults_string"}},
+				Defaults:           "defaults_string",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{}},
 		},
 	}
 

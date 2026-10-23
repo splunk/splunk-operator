@@ -39,7 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestKVServiceDefaultsReadinessAndConfigurationFailure(t *testing.T) {
+func TestKVServiceReadinessAndConfigurationFailure(t *testing.T) {
 	// Existing unit-test fixture value; this test only uses a fake Kubernetes client.
 	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.Background()
@@ -54,7 +54,6 @@ func TestKVServiceDefaultsReadinessAndConfigurationFailure(t *testing.T) {
 		TypeMeta:   metav1.TypeMeta{APIVersion: enterpriseApi.GroupVersion.String(), Kind: "KVService"},
 		ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "test", UID: "kvservice-id", Generation: 7},
 	}
-	cr.Spec.Defaults = "splunk:\n  hec:\n    enable: false\n"
 	cr.Spec.PodAnnotations = map[string]string{"sidecar.istio.io/inject": "false"}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&enterpriseApi.KVService{}, &appsv1.Deployment{}).WithObjects(cr).Build()
 	key := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
@@ -66,22 +65,34 @@ func TestKVServiceDefaultsReadinessAndConfigurationFailure(t *testing.T) {
 	if result.RequeueAfter == 0 {
 		t.Error("pending Deployment should be retried")
 	}
-	defaults := &corev1.ConfigMap{}
-	defaultsKey := types.NamespacedName{Namespace: cr.Namespace, Name: splutil.GetSplunkDefaultsName(cr.Name, splcommon.SplunkKVService)}
-	if err := c.Get(ctx, defaultsKey, defaults); err != nil {
-		t.Fatalf("inline defaults ConfigMap was not created: %v", err)
-	}
-	if defaults.Data["default.yml"] != cr.Spec.Defaults {
-		t.Errorf("unexpected defaults: %v", defaults.Data)
-	}
 	deployment := &appsv1.Deployment{}
 	deploymentKey := types.NamespacedName{Namespace: cr.Namespace, Name: splutil.GetSplunkDeploymentName(splcommon.SplunkKVService, cr.Name)}
 	if err := c.Get(ctx, deploymentKey, deployment); err != nil {
 		t.Fatal(err)
 	}
-	if deployment.Spec.Template.Annotations["defaultConfigRev"] == "" {
-		t.Error("defaults content hash missing")
-	}
+	secrets := &corev1.SecretList{}
+	require.NoError(t, c.List(ctx, secrets))
+	assert.Empty(t, secrets.Items, "KVService must not generate Enterprise namespace or versioned secrets")
+	configMaps := &corev1.ConfigMapList{}
+	require.NoError(t, c.List(ctx, configMaps))
+	assert.Empty(t, configMaps.Items, "KVService must not create default.yml or App Framework ConfigMaps")
+	assert.NotContains(t, deployment.Spec.Template.Annotations, "defaultConfigRev")
+	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].Env)
+	// Reconciling an older Deployment must remove the inherited Enterprise setup.
+	deployment.Spec.Template.Spec.Containers[0].Env = append(deployment.Spec.Template.Spec.Containers[0].Env,
+		corev1.EnvVar{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
+		corev1.EnvVar{Name: "SPLUNK_DEFAULTS_URL", Value: "/mnt/splunk-secrets/default.yml"})
+	deployment.Spec.Template.Spec.Volumes = []corev1.Volume{{Name: "legacy-splunk-secret", VolumeSource: corev1.VolumeSource{
+		Secret: &corev1.SecretVolumeSource{SecretName: "legacy-versioned-secret"},
+	}}}
+	deployment.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "legacy-splunk-secret", MountPath: "/mnt/splunk-secrets"}}
+	require.NoError(t, c.Update(ctx, deployment))
+	_, err = Apply(ctx, c, key, recorder)
+	require.NoError(t, err)
+	require.NoError(t, c.Get(ctx, deploymentKey, deployment))
+	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].Env)
+	assert.Empty(t, deployment.Spec.Template.Spec.Volumes)
+	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].VolumeMounts)
 	deployment.Status = appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1}
 	if err := c.Status().Update(ctx, deployment); err != nil {
 		t.Fatal(err)

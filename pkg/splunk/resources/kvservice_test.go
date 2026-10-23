@@ -148,6 +148,9 @@ func TestKVServiceDeploymentVolumesPortsAndSecurity(t *testing.T) {
 		{Name: "db-tls", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "db-tls"}}},
 		{Name: "config", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: "config"}, DefaultMode: &mode}}},
 	}
+	cr.Spec.ExtraEnv = []corev1.EnvVar{{Name: "KVSERVICE_DB_PASSWORD", ValueFrom: &corev1.EnvVarSource{
+		SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "postgres"}, Key: "password"},
+	}}}
 	cr.Spec.Resources.Requests = corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}
 	cr.Spec.ServiceTemplate.Spec.Ports = []corev1.ServicePort{{Name: "metrics", Port: 9090, TargetPort: intstr.FromInt(9091), Protocol: corev1.ProtocolTCP}}
 	SetKVServiceVolumeDefaults(&cr.Spec)
@@ -158,6 +161,7 @@ func TestKVServiceDeploymentVolumesPortsAndSecurity(t *testing.T) {
 	pod := &deployment.Spec.Template.Spec
 	require.Len(t, pod.Containers, 1)
 	container := &pod.Containers[0]
+	assert.Equal(t, cr.Spec.ExtraEnv, container.Env)
 	assert.Equal(t, cr.Spec.Resources, container.Resources)
 	assert.Contains(t, container.Ports, corev1.ContainerPort{Name: "http-splunkv", ContainerPort: splcommon.KVServicePort, Protocol: corev1.ProtocolTCP})
 	assert.Contains(t, container.Ports, corev1.ContainerPort{Name: "metrics", ContainerPort: 9091, Protocol: corev1.ProtocolTCP})
@@ -173,6 +177,8 @@ func TestKVServiceDeploymentVolumesPortsAndSecurity(t *testing.T) {
 	assert.Equal(t, corev1.SeccompProfileTypeRuntimeDefault, container.SecurityContext.SeccompProfile.Type)
 	assert.Contains(t, container.SecurityContext.Capabilities.Drop, corev1.Capability("ALL"))
 	assert.Equal(t, before, cr, "building the Deployment must not mutate the CR")
+	container.Env[0].ValueFrom.SecretKeyRef.Name = "changed"
+	assert.Equal(t, "postgres", cr.Spec.ExtraEnv[0].ValueFrom.SecretKeyRef.Name)
 	pod.Volumes[0].Secret.SecretName = "changed"
 	assert.Equal(t, "db-tls", cr.Spec.Volumes[0].Secret.SecretName)
 }

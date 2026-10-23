@@ -10,7 +10,7 @@ The controller manages a Deployment and an HTTP Service on port 8066.
 
 KVService shares workload settings with the Enterprise CRs through
 `CommonWorkloadSpec`: image and pull policy, resources, scheduling, pod
-annotations, Service customization, volumes, inline defaults, service account,
+annotations, Service customization, volumes, service account,
 environment variables, image pull secrets, certificates, and initial probe
 delays. These fields remain directly under `spec` in YAML. PostgreSQL connection
 settings and credentials can be provided through `spec.extraEnv`, Secret references, and `spec.volumes`.
@@ -20,8 +20,9 @@ part of the KVService API.
 - Resource defaults per pod are requests of 1 CPU and 4Gi memory, with limits of
   4 CPUs and 16Gi memory. Values in `spec.resources` override these defaults;
   `spec.disableResourceDefaults: true` disables resource defaulting.
-- Inline `spec.defaults` is stored in an owned ConfigMap before the Deployment
-  mounts it.
+- Configure KVService and PostgreSQL through `spec.extraEnv`, using Secret
+  references for credentials. Enterprise `default.yml` and Ansible startup
+  settings are not part of the KVService API.
 - `spec.podAnnotations` overrides inherited pod annotations.
 - Liveness and readiness checks use `/service/liveness` and `/service/readiness`
   on port 8066. Both default to a 30-second initial delay, a 1-second timeout,

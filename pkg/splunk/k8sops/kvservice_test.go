@@ -152,8 +152,7 @@ func TestKVServiceConfigurationAndConfigMapRollouts(t *testing.T) {
 		TypeMeta:   metav1.TypeMeta{Kind: "KVService", APIVersion: enterpriseApi.GroupVersion.String()},
 		ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "test", UID: "kvservice-id"},
 	}
-	cr.Spec.Defaults = "splunk:\n  hec:\n    enable: false\n"
-	cr.Spec.ExtraEnv = []corev1.EnvVar{{Name: "SPLUNK_ROLE", Value: "custom-role"}, {Name: "DB_HOST", Value: "postgres"}}
+	cr.Spec.ExtraEnv = []corev1.EnvVar{{Name: "KVSERVICE_DB_HOST", Value: "postgres"}}
 	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "db-config", Namespace: cr.Namespace}, Data: map[string]string{"used": "first", "unused": "ignore"}}
 	cr.Spec.Volumes = []corev1.Volume{
 		{Name: "config", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -164,27 +163,20 @@ func TestKVServiceConfigurationAndConfigMapRollouts(t *testing.T) {
 		}}}}}},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, cm).Build()
-	require.NoError(t, ApplyKVServiceConfig(ctx, c, cr))
 	before := cr.DeepCopy()
 	deployment, err := GetKVServiceDeployment(ctx, c, cr)
 	require.NoError(t, err)
 	assert.Equal(t, before, cr, "resolving configuration must not mutate the CR")
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 1)
 	container := deployment.Spec.Template.Spec.Containers[0]
-	assert.Contains(t, container.Env, corev1.EnvVar{Name: "SPLUNK_DEFAULTS_URL", Value: "/mnt/splunk-defaults/default.yml,/mnt/splunk-secrets/default.yml"})
-	assert.Contains(t, container.Env, corev1.EnvVar{Name: "SPLUNK_ROLE", Value: "custom-role"})
-	assert.Contains(t, container.Env, corev1.EnvVar{Name: "DB_HOST", Value: "postgres"})
-	roleCount := 0
-	for _, env := range container.Env {
-		if env.Name == "SPLUNK_ROLE" {
-			roleCount++
-		}
+	assert.Equal(t, []corev1.EnvVar{
+		{Name: "KVSERVICE_DB_HOST", Value: "postgres"},
+	}, container.Env)
+	for _, mount := range container.VolumeMounts {
+		assert.NotContains(t, mount.MountPath, "/mnt/splunk-", "Enterprise configuration must not be mounted")
 	}
-	assert.Equal(t, 1, roleCount, "user environment overrides must not create duplicate entries")
-	assert.Contains(t, container.VolumeMounts, corev1.VolumeMount{Name: "mnt-splunk-secrets", MountPath: "/mnt/splunk-secrets"})
-	assert.Contains(t, container.VolumeMounts, corev1.VolumeMount{Name: "mnt-splunk-defaults", MountPath: "/mnt/splunk-defaults"})
 	first := deployment.Spec.Template.Annotations
-	assert.NotEmpty(t, first["defaultConfigRev"])
+	assert.NotContains(t, first, "defaultConfigRev")
 	assert.NotEmpty(t, first[splcommon.ConfigMapRevAnnotationPrefix+"config"])
 	projectedKey := ""
 	for key := range first {
