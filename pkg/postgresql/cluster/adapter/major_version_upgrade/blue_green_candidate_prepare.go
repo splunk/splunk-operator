@@ -34,7 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -400,7 +400,7 @@ func (p *BlueGreenCandidatePreparer) reconcileCandidateEndpoints(ctx context.Con
 	}
 	status.CandidateEndpoints = endpoints
 	if status.Green != nil && status.Green.AvailableAt == nil {
-		status.Green.AvailableAt = ptr.To(metav1.Now())
+		status.Green.AvailableAt = new(metav1.Now())
 	}
 	return true, nil
 }
@@ -517,7 +517,7 @@ func normalizeCandidatePoolerSpec(spec cnpgv1.PoolerSpec) cnpgv1.PoolerSpec {
 		copy.Type = cnpgv1.PoolerTypeRW
 	}
 	if copy.Instances == nil {
-		copy.Instances = ptr.To(int32(1))
+		copy.Instances = new(int32(1))
 	}
 	if copy.PgBouncer != nil && copy.PgBouncer.PoolMode == "" {
 		copy.PgBouncer.PoolMode = cnpgv1.PgBouncerPoolModeSession
@@ -566,7 +566,7 @@ func (p *BlueGreenCandidatePreparer) reconcileSubscriptions(ctx context.Context,
 			return false, err
 		}
 		applied := subscription.Status.ObservedGeneration == subscription.Generation && subscription.Status.Applied != nil && *subscription.Status.Applied
-		status.DatabaseReplication[index].SubscriptionHealthy = ptr.To(applied)
+		status.DatabaseReplication[index].SubscriptionHealthy = new(applied)
 		ready = ready && applied
 	}
 	return ready, nil

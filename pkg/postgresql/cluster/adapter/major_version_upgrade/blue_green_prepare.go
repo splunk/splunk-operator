@@ -34,7 +34,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -154,7 +154,7 @@ func (p *BlueGreenPreparer) captureSourceBaseline(ctx context.Context, intent mv
 	if err != nil {
 		return previous, err
 	}
-	status.SourceConfigurationFingerprint = ptr.To(configurationFingerprint)
+	status.SourceConfigurationFingerprint = new(configurationFingerprint)
 	status.DatabaseReplication, err = databaseReplicationStatus(databases, checks)
 	if err != nil {
 		return previous, err
@@ -232,7 +232,7 @@ func databaseReplicationStatus(databases []declaredDatabase, checks []databasePr
 		}
 		result = append(result, platformv1alpha1.BlueGreenDatabaseReplicationStatus{
 			PostgresDatabaseName: database.parent.Name, PostgresDatabaseUID: string(database.parent.UID), DatabaseName: database.name,
-			SourceSchemaFingerprint: ptr.To(check.schemaFingerprint), SourceAccessPolicyFingerprint: ptr.To(check.accessFingerprint),
+			SourceSchemaFingerprint: new(check.schemaFingerprint), SourceAccessPolicyFingerprint: new(check.accessFingerprint),
 		})
 	}
 	return result, nil
@@ -271,7 +271,7 @@ func (p *BlueGreenPreparer) preparationStatus(intent mvutypes.Intent, source *cn
 	if status.Gates.Allow == nil {
 		status.Gates.Allow = &platformv1alpha1.BlueGreenGateConsumptionStatus{
 			Generation: p.generation(),
-			ConsumedAt: ptr.To(metav1.Now()),
+			ConsumedAt: new(metav1.Now()),
 		}
 	}
 	return status

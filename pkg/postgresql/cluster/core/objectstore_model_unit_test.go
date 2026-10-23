@@ -27,7 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -50,7 +50,7 @@ func TestObjectStoreModel_Reconcile_DeletesWhenBackupDisabled(t *testing.T) {
 	scheme := newTestScheme()
 	cluster := newTestCluster("c1", "ns1")
 	cfg := newTestMergedConfigBarman("0 2 * * *")
-	cfg.Spec.Backup.Enabled = ptr.To(false)
+	cfg.Spec.Backup.Enabled = new(false)
 	existing := &unstructured.Unstructured{}
 	existing.SetGroupVersionKind(ObjectStoreGVK)
 	existing.SetName(objectStoreName(cluster.Name))
@@ -76,7 +76,7 @@ func TestObjectStoreModel_Reconcile_DeletesManagedObjectStoresWhenBackupDisabled
 	scheme := newTestScheme()
 	cluster := newTestCluster("c1", "ns1")
 	cfg := newTestMergedConfigBarman("0 2 * * *")
-	cfg.Spec.Backup.Enabled = ptr.To(false)
+	cfg.Spec.Backup.Enabled = new(false)
 
 	var objectStores []client.Object
 	for _, name := range []string{"c1", "c1-green"} {
@@ -138,7 +138,7 @@ func foreignObjectStore(cluster *platformv1alpha1.PostgresCluster) *unstructured
 		Kind:       "Deployment",
 		Name:       "someone-else",
 		UID:        "foreign-uid",
-		Controller: ptr.To(true),
+		Controller: new(true),
 	}})
 	obj.Object["spec"] = map[string]interface{}{"configuration": map[string]interface{}{"destinationPath": "s3://foreign"}}
 	return obj
@@ -148,7 +148,7 @@ func TestObjectStoreModel_Reconcile_DoesNotDeleteForeignObjectStore(t *testing.T
 	scheme := newTestScheme()
 	cluster := newTestCluster("c1", "ns1")
 	cfg := newTestMergedConfigBarman("0 2 * * *")
-	cfg.Spec.Backup.Enabled = ptr.To(false)
+	cfg.Spec.Backup.Enabled = new(false)
 	existing := foreignObjectStore(cluster)
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()

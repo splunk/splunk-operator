@@ -52,7 +52,6 @@ import (
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/ports"
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 /*
@@ -342,11 +341,11 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			Spec: platformv1alpha1.PostgresClusterClassSpec{
 				Provisioner: provisioner,
 				Config: &platformv1alpha1.PostgresClusterClassConfig{
-					Instances:       ptr.To(clusterMemberCount),
-					Storage:         ptr.To(resource.MustParse(storageAmount)),
-					PostgresVersion: ptr.To(postgresVersion),
+					Instances:       new(clusterMemberCount),
+					Storage:         new(resource.MustParse(storageAmount)),
+					PostgresVersion: new(postgresVersion),
 					ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{
-						Enabled: ptr.To(poolerEnabled),
+						Enabled: new(poolerEnabled),
 					},
 				},
 				CNPG: &platformv1alpha1.CNPGConfig{},
@@ -358,11 +357,11 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			Spec: platformv1alpha1.PostgresClusterClassSpec{
 				Provisioner: provisioner,
 				Config: &platformv1alpha1.PostgresClusterClassConfig{
-					Instances:       ptr.To(clusterMemberCount),
-					Storage:         ptr.To(resource.MustParse(storageAmount)),
-					PostgresVersion: ptr.To(postgresVersion),
+					Instances:       new(clusterMemberCount),
+					Storage:         new(resource.MustParse(storageAmount)),
+					PostgresVersion: new(postgresVersion),
 					Monitoring: &platformv1alpha1.PostgresMonitoringClassConfig{
-						PostgreSQLMetrics: &platformv1alpha1.MetricsClassConfig{Enabled: ptr.To(true)},
+						PostgreSQLMetrics: &platformv1alpha1.MetricsClassConfig{Enabled: new(true)},
 					},
 				},
 				CNPG: &platformv1alpha1.CNPGConfig{},
@@ -374,20 +373,20 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			Spec: platformv1alpha1.PostgresClusterClassSpec{
 				Provisioner: provisioner,
 				Config: &platformv1alpha1.PostgresClusterClassConfig{
-					Instances:       ptr.To(clusterMemberCount),
-					Storage:         ptr.To(resource.MustParse(storageAmount)),
-					PostgresVersion: ptr.To(postgresVersion),
+					Instances:       new(clusterMemberCount),
+					Storage:         new(resource.MustParse(storageAmount)),
+					PostgresVersion: new(postgresVersion),
 					ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{
-						Enabled: ptr.To(true),
+						Enabled: new(true),
 					},
 					Monitoring: &platformv1alpha1.PostgresMonitoringClassConfig{
-						ConnectionPoolerMetrics: &platformv1alpha1.MetricsClassConfig{Enabled: ptr.To(true)},
+						ConnectionPoolerMetrics: &platformv1alpha1.MetricsClassConfig{Enabled: new(true)},
 					},
 				},
 				CNPG: &platformv1alpha1.CNPGConfig{
 					ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{
-						Instances: ptr.To(int32(2)),
-						Mode:      ptr.To(platformv1alpha1.ConnectionPoolerModeTransaction),
+						Instances: new(int32(2)),
+						Mode:      new(platformv1alpha1.ConnectionPoolerModeTransaction),
 					},
 				},
 			},
@@ -398,20 +397,20 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			Spec: platformv1alpha1.PostgresClusterClassSpec{
 				Provisioner: provisioner,
 				Config: &platformv1alpha1.PostgresClusterClassConfig{
-					Instances:       ptr.To(clusterMemberCount),
-					Storage:         ptr.To(resource.MustParse(storageAmount)),
-					PostgresVersion: ptr.To(postgresVersion),
+					Instances:       new(clusterMemberCount),
+					Storage:         new(resource.MustParse(storageAmount)),
+					PostgresVersion: new(postgresVersion),
 					Backup: &platformv1alpha1.BackupConfig{
-						Enabled:  ptr.To(true),
-						Schedule: ptr.To("0 2 * * *"),
+						Enabled:  new(true),
+						Schedule: new("0 2 * * *"),
 					},
 				},
 				CNPG: &platformv1alpha1.CNPGConfig{
 					Backup: &platformv1alpha1.CNPGBackupConfig{
-						Target: ptr.To("prefer-standby"),
+						Target: new("prefer-standby"),
 						VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{
-							ClassName: ptr.To("csi-snapclass"),
-							Online:    ptr.To(true),
+							ClassName: new("csi-snapclass"),
+							Online:    new(true),
 						},
 					},
 				},
@@ -427,7 +426,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: namespace},
 			Spec: platformv1alpha1.PostgresClusterSpec{
 				Class:                 className,
-				ClusterDeletionPolicy: ptr.To(deletePolicy),
+				ClusterDeletionPolicy: new(deletePolicy),
 			},
 		}
 		fakeRecorder = record.NewFakeRecorder(100)
@@ -663,16 +662,16 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					Phase:           &completedPhase,
 					Strategy:        &strategy,
 					SourcePgVersion: &sourceVersion,
-					TargetPgVersion: ptr.To(postgresVersion),
+					TargetPgVersion: new(postgresVersion),
 				}}
 				Expect(k8sClient.Status().Update(ctx, pc)).To(Succeed())
 
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
-				pc.Spec.PostgresVersion = ptr.To(targetVersion)
-				pc.Spec.PostgresImage = ptr.To(targetImage)
+				pc.Spec.PostgresVersion = new(targetVersion)
+				pc.Spec.PostgresImage = new(targetImage)
 				pc.Spec.ImagePullSecrets = []v1.LocalObjectReference{{Name: "target-registry-creds"}}
 				pc.Spec.PostgresMajorUpgradeConfig = &platformv1alpha1.PostgresMajorUpgradeConfig{
-					Allow:    ptr.To(true),
+					Allow:    new(true),
 					Strategy: &[]string{mvutypes.MajorUpgradeFlowPgUpgrade}[0],
 				}
 				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
@@ -1016,7 +1015,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 				current := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
-				current.Spec.PostgresVersion = ptr.To(upgradedPostgresVersion)
+				current.Spec.PostgresVersion = new(upgradedPostgresVersion)
 				Expect(k8sClient.Update(ctx, current)).To(Succeed())
 
 				reconcileNTimes(1)
@@ -1133,7 +1132,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				current := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
 				current.Spec.Monitoring = &platformv1alpha1.PostgresClusterMonitoring{
-					PostgreSQLMetrics: ptr.To(false),
+					PostgreSQLMetrics: new(false),
 				}
 				Expect(k8sClient.Update(ctx, current)).To(Succeed())
 				reconcileAfterCNPGHealthyOrPatch()
@@ -1223,7 +1222,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			It("does not create RO pooler when spec.instances=1 and publishes empty pooler RO endpoint", func() {
-				pgCluster.Spec.Instances = ptr.To(int32(1))
+				pgCluster.Spec.Instances = new(int32(1))
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -1272,7 +1271,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			It("deletes RO pooler when scaling 2->1", func() {
-				pgCluster.Spec.Instances = ptr.To(int32(2))
+				pgCluster.Spec.Instances = new(int32(2))
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -1307,7 +1306,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
-				pc.Spec.Instances = ptr.To(int32(1))
+				pc.Spec.Instances = new(int32(1))
 				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
 
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
@@ -1323,10 +1322,10 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			It("respects readOnly=false at instances=2", func() {
-				pgCluster.Spec.Instances = ptr.To(int32(2))
+				pgCluster.Spec.Instances = new(int32(2))
 				pgCluster.Spec.ConnectionPooler = &platformv1alpha1.ConnectionPoolerEnableConfig{
-					Enabled:  ptr.To(true),
-					ReadOnly: ptr.To(false),
+					Enabled:  new(true),
+					ReadOnly: new(false),
 				}
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
@@ -1376,7 +1375,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			It("creates RO pooler when scaling 1->2", func() {
-				pgCluster.Spec.Instances = ptr.To(int32(1))
+				pgCluster.Spec.Instances = new(int32(1))
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -1409,7 +1408,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
-				pc.Spec.Instances = ptr.To(int32(2))
+				pc.Spec.Instances = new(int32(2))
 				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
 
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
@@ -1534,7 +1533,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				// Now disable backup on the cluster.
 				current := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
-				current.Spec.Backup = &platformv1alpha1.BackupConfig{Enabled: ptr.To(false)}
+				current.Spec.Backup = &platformv1alpha1.BackupConfig{Enabled: new(false)}
 				Expect(k8sClient.Update(ctx, current)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -1612,21 +1611,21 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 					Spec: platformv1alpha1.PostgresClusterClassSpec{
 						Provisioner: provisioner,
 						Config: &platformv1alpha1.PostgresClusterClassConfig{
-							Instances:       ptr.To(clusterMemberCount),
-							Storage:         ptr.To(resource.MustParse(storageAmount)),
-							PostgresVersion: ptr.To(postgresVersion),
+							Instances:       new(clusterMemberCount),
+							Storage:         new(resource.MustParse(storageAmount)),
+							PostgresVersion: new(postgresVersion),
 							Backup: &platformv1alpha1.BackupConfig{
-								Enabled:  ptr.To(true),
-								Schedule: ptr.To("0 2 * * *"),
+								Enabled:  new(true),
+								Schedule: new("0 2 * * *"),
 							},
 						},
 						CNPG: &platformv1alpha1.CNPGConfig{
 							Backup: &platformv1alpha1.CNPGBackupConfig{
-								Target: ptr.To("prefer-standby"),
+								Target: new("prefer-standby"),
 								BarmanObjectStore: &platformv1alpha1.CNPGBarmanObjectStoreConfig{
 									DestinationPath: "s3://test-bucket/clusters/",
-									EndpointURL:     ptr.To("https://s3.us-east-1.amazonaws.com"),
-									RetentionPolicy: ptr.To("30d"),
+									EndpointURL:     new("https://s3.us-east-1.amazonaws.com"),
+									RetentionPolicy: new("30d"),
 									S3Credentials: platformv1alpha1.CNPGBarmanS3Credentials{
 										AccessKeyID: v1.SecretKeySelector{
 											LocalObjectReference: v1.LocalObjectReference{Name: "s3-credentials"},
@@ -1637,7 +1636,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 											Key:                  "secretAccessKey",
 										},
 									},
-									WAL: &platformv1alpha1.CNPGBarmanWALConfig{Compression: ptr.To("gzip")},
+									WAL: &platformv1alpha1.CNPGBarmanWALConfig{Compression: new("gzip")},
 								},
 							},
 						},
@@ -1724,7 +1723,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				By("garbage-collecting the ObjectStore when the cluster disables backup")
 				current := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
-				current.Spec.Backup = &platformv1alpha1.BackupConfig{Enabled: ptr.To(false)}
+				current.Spec.Backup = &platformv1alpha1.BackupConfig{Enabled: new(false)}
 				Expect(k8sClient.Update(ctx, current)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -1760,7 +1759,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		// PC-04
 		Context("when clusterDeletionPolicy is set to Retain", func() {
 			It("preserves retained resources and removes owner refs", func() {
-				pgCluster.Spec.ClusterDeletionPolicy = ptr.To(retainPolicy)
+				pgCluster.Spec.ClusterDeletionPolicy = new(retainPolicy)
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -1879,7 +1878,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 		Context("when scaling instances on PostgresCluster", func() {
 			It("propagates scale-out to the underlying CNPG cluster", func() {
-				pgCluster.Spec.Instances = ptr.To(int32(2))
+				pgCluster.Spec.Instances = new(int32(2))
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -1903,7 +1902,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
-				pc.Spec.Instances = ptr.To(int32(3))
+				pc.Spec.Instances = new(int32(3))
 				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
 
 				Eventually(func(g Gomega) {
@@ -1937,7 +1936,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			It("holds phase=Provisioning while CNPG is resizing PVCs", func() {
-				pgCluster.Spec.Instances = ptr.To(int32(1))
+				pgCluster.Spec.Instances = new(int32(1))
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -1998,7 +1997,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			It("publishes empty read-only endpoint values when running with a single instance", func() {
-				pgCluster.Spec.Instances = ptr.To(int32(1))
+				pgCluster.Spec.Instances = new(int32(1))
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -2027,7 +2026,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			It("populates the read-only endpoint when scaling 1->2", func() {
-				pgCluster.Spec.Instances = ptr.To(int32(1))
+				pgCluster.Spec.Instances = new(int32(1))
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
@@ -2054,7 +2053,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(cm.Data["CLUSTER_RO_ENDPOINT"]).To(BeEmpty())
 
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
-				pc.Spec.Instances = ptr.To(int32(2))
+				pc.Spec.Instances = new(int32(2))
 				Expect(k8sClient.Update(ctx, pc)).To(Succeed())
 
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
@@ -2067,7 +2066,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			It("allows clearing spec.instances to fall back to the class default", func() {
-				pgCluster.Spec.Instances = ptr.To(clusterMemberCount)
+				pgCluster.Spec.Instances = new(clusterMemberCount)
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 
 				pc := &platformv1alpha1.PostgresCluster{}
@@ -2849,15 +2848,15 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Spec: platformv1alpha1.PostgresClusterClassSpec{
 					Provisioner: provisioner,
 					Config: &platformv1alpha1.PostgresClusterClassConfig{
-						Instances:       ptr.To(clusterMemberCount),
-						Storage:         ptr.To(resource.MustParse(storageAmount)),
-						PostgresVersion: ptr.To(postgresVersion),
+						Instances:       new(clusterMemberCount),
+						Storage:         new(resource.MustParse(storageAmount)),
+						PostgresVersion: new(postgresVersion),
 					},
 					CNPG: &platformv1alpha1.CNPGConfig{
 						Backup: &platformv1alpha1.CNPGBackupConfig{
 							BarmanObjectStore: &platformv1alpha1.CNPGBarmanObjectStoreConfig{
 								DestinationPath: "s3://test-bucket/clusters/",
-								EndpointURL:     ptr.To("https://s3.us-east-1.amazonaws.com"),
+								EndpointURL:     new("https://s3.us-east-1.amazonaws.com"),
 								S3Credentials: platformv1alpha1.CNPGBarmanS3Credentials{
 									AccessKeyID: v1.SecretKeySelector{
 										LocalObjectReference: v1.LocalObjectReference{Name: "s3-credentials"},

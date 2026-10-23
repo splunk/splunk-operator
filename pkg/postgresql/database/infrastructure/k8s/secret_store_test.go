@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/uuid"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -57,7 +57,7 @@ func TestSecretStoreReadReturnsNonSensitiveFacts(t *testing.T) {
 			Name: "orders-admin", Namespace: "dbs",
 			Labels:          map[string]string{labelCNPGReload: "true"},
 			Annotations:     map[string]string{annotationRetainedFrom: owner.Name},
-			OwnerReferences: []metav1.OwnerReference{{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: owner.Name, UID: owner.UID, Controller: ptr.To(true)}},
+			OwnerReferences: []metav1.OwnerReference{{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: owner.Name, UID: owner.UID, Controller: new(true)}},
 		},
 		Data: map[string][]byte{
 			secretKeyUsername: []byte("orders_admin"),
@@ -85,7 +85,7 @@ func TestSecretStoreReadReportsForeignController(t *testing.T) {
 	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
 		Name: "orders-admin", Namespace: "dbs",
 		OwnerReferences: []metav1.OwnerReference{{
-			APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster", Name: "primary", UID: types.UID("primary-uid"), Controller: ptr.To(true),
+			APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster", Name: "primary", UID: types.UID("primary-uid"), Controller: new(true),
 		}},
 	}}
 
@@ -127,7 +127,7 @@ func TestSecretStoreAdoptPreservesImmutableData(t *testing.T) {
 			Name: "orders-admin", Namespace: "dbs",
 			Annotations: map[string]string{annotationRetainedFrom: owner.Name, "keep": "true"},
 		},
-		Immutable: ptr.To(true),
+		Immutable: new(true),
 		Data:      originalData,
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build()

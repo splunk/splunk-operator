@@ -37,7 +37,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -427,7 +427,7 @@ func TestCandidatePoolerReadyRequiresServingPods(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
 	pooler := &cnpgv1.Pooler{ObjectMeta: metav1.ObjectMeta{Name: "green-pooler-rw", Namespace: "default", UID: "pooler-uid"},
-		Spec:   cnpgv1.PoolerSpec{Instances: ptr.To(int32(2))},
+		Spec:   cnpgv1.PoolerSpec{Instances: new(int32(2))},
 		Status: cnpgv1.PoolerStatus{Phase: cnpgv1.PoolerPhaseActive, Instances: 2}}
 	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: pooler.Name, Namespace: pooler.Namespace,
 		OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pooler, cnpgv1.SchemeGroupVersion.WithKind("Pooler"))}},

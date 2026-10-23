@@ -22,7 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -53,7 +53,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-validation", Label(
 				ObjectMeta: metav1.ObjectMeta{Name: "validate-class", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
+					ClusterDeletionPolicy: new("Delete"),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())
@@ -80,7 +80,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-validation", Label(
 				ObjectMeta: metav1.ObjectMeta{Name: "validate-storage", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
+					ClusterDeletionPolicy: new("Delete"),
 					Storage:               &initialStorage,
 				},
 			}
@@ -113,8 +113,8 @@ var _ = Describe("postgrescontrollers, integration, postgres-validation", Label(
 				ObjectMeta: metav1.ObjectMeta{Name: "validate-pgversion", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
-					PostgresVersion:       ptr.To("18"),
+					ClusterDeletionPolicy: new("Delete"),
+					PostgresVersion:       new("18"),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())
@@ -125,7 +125,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-validation", Label(
 
 			By("attempting to downgrade postgresVersion to a lower major")
 			patch := client.MergeFrom(pgCluster.DeepCopy())
-			pgCluster.Spec.PostgresVersion = ptr.To("17")
+			pgCluster.Spec.PostgresVersion = new("17")
 			err := kubeClient.Patch(ctx, pgCluster, patch)
 			Expect(err).To(HaveOccurred(), "expected apiserver to reject major version downgrade")
 			Expect(err.Error()).To(ContainSubstring("postgresVersion"))
@@ -143,9 +143,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-validation", Label(
 				Spec: platformv1alpha1.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &platformv1alpha1.PostgresClusterClassConfig{
-						Instances: ptr.To(int32(1)),
+						Instances: new(int32(1)),
 						Backup: &platformv1alpha1.BackupConfig{
-							Enabled:  ptr.To(true),
+							Enabled:  new(true),
 							Schedule: &schedule,
 						},
 					},

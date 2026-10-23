@@ -31,7 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -87,9 +87,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-metrics",
 					ObjectMeta: metav1.ObjectMeta{Name: "metrics-cluster", Namespace: namespace},
 					Spec: platformv1alpha1.PostgresClusterSpec{
 						Class:                 pgClass.Name,
-						ClusterDeletionPolicy: ptr.To("Delete"),
+						ClusterDeletionPolicy: new("Delete"),
 						Monitoring: &platformv1alpha1.PostgresClusterMonitoring{
-							PostgreSQLMetrics: ptr.To(true),
+							PostgreSQLMetrics: new(true),
 							CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{
 								{LocalObjectReference: corev1.LocalObjectReference{Name: clusterSourceA.Name}, Key: cnpginfra.MonitoringCMKey},
 								{LocalObjectReference: corev1.LocalObjectReference{Name: clusterSourceB.Name}, Key: cnpginfra.MonitoringCMKey},

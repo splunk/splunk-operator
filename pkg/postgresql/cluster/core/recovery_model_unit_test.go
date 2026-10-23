@@ -26,7 +26,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 // recoveryTestCfg builds a MergedConfig with the given bootstrapFrom and (optionally) a class
@@ -80,7 +79,7 @@ func TestBuildBootstrapRecovery(t *testing.T) {
 		{
 			name: "volume snapshot with separate WAL volume snapshot",
 			bootstrap: &platformv1alpha1.BootstrapFrom{
-				VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "snap-1", WalStorage: ptr.To("wal-snap-1")},
+				VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: "snap-1", WalStorage: new("wal-snap-1")},
 			},
 			wantStorage: "snap-1",
 			wantWalSnap: "wal-snap-1",
@@ -97,7 +96,7 @@ func TestBuildBootstrapRecovery(t *testing.T) {
 			wantStorage: "snap-1",
 			wantSource:  recoveryExternalClusterName,
 			// UTC "Z" is normalized to a numeric offset PostgreSQL's recovery_target_time GUC accepts.
-			wantTarget: ptr.To("2026-05-01 13:30:00+00:00"),
+			wantTarget: new("2026-05-01 13:30:00+00:00"),
 		},
 		{
 			name: "object storage source sets recovery.source, no volumeSnapshots",
@@ -106,7 +105,7 @@ func TestBuildBootstrapRecovery(t *testing.T) {
 				RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z"},
 			},
 			wantSource: recoveryExternalClusterName,
-			wantTarget: ptr.To("2026-05-01 13:30:00+00:00"),
+			wantTarget: new("2026-05-01 13:30:00+00:00"),
 		},
 	}
 
@@ -155,7 +154,7 @@ func TestBuildRecoveryTargetMapsAllFields(t *testing.T) {
 
 	assert.Nil(t, buildRecoveryTarget(nil), "nil target => nil (recover to latest)")
 
-	tt := buildRecoveryTarget(&platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z", Exclusive: ptr.To(true)})
+	tt := buildRecoveryTarget(&platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z", Exclusive: new(true)})
 	require.NotNil(t, tt)
 	assert.Equal(t, "2026-05-01 13:30:00+00:00", tt.TargetTime)
 	require.NotNil(t, tt.Exclusive)
@@ -507,7 +506,7 @@ func TestRestoreSourceStatus(t *testing.T) {
 	// distinguishable in status.
 	excl := restoreSourceStatus(&platformv1alpha1.BootstrapFrom{
 		ObjectStorage:  &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
-		RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z", Exclusive: ptr.To(true)},
+		RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z", Exclusive: new(true)},
 	})
 	require.NotNil(t, excl.RequestedRecoveryTarget)
 	require.NotNil(t, excl.RequestedRecoveryTarget.Exclusive)
@@ -516,7 +515,7 @@ func TestRestoreSourceStatus(t *testing.T) {
 	// exclusive:false is echoed as-is (false, not dropped) so status faithfully mirrors the spec.
 	incl := restoreSourceStatus(&platformv1alpha1.BootstrapFrom{
 		ObjectStorage:  &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
-		RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetLSN, Value: "0/16D68D0", Exclusive: ptr.To(false)},
+		RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetLSN, Value: "0/16D68D0", Exclusive: new(false)},
 	})
 	require.NotNil(t, incl.RequestedRecoveryTarget)
 	assert.Equal(t, platformv1alpha1.RecoveryTargetLSN, incl.RequestedRecoveryTarget.Type)
@@ -672,7 +671,7 @@ func TestNormalizeRecoveryDriftDetection(t *testing.T) {
 
 	cfg := recoveryTestCfg(&platformv1alpha1.BootstrapFrom{
 		ObjectStorage:  &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
-		RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z", Exclusive: ptr.To(true)},
+		RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetTime, Value: "2026-05-01T13:30:00Z", Exclusive: new(true)},
 	}, true)
 	storage := resource.MustParse("1Gi")
 	cfg.Spec.Storage = &storage
@@ -699,6 +698,6 @@ func TestNormalizeRecoveryDriftDetection(t *testing.T) {
 
 	// Recovery target's exclusive flipped out-of-band => drift.
 	tampered3 := *desired.DeepCopy()
-	tampered3.Bootstrap.Recovery.RecoveryTarget.Exclusive = ptr.To(false)
+	tampered3.Bootstrap.Recovery.RecoveryTarget.Exclusive = new(false)
 	assert.True(t, isClusterDrift(desiredNorm, normalizeCNPGClusterSpec(tampered3)), "changing the recovery target must be detected as drift")
 }

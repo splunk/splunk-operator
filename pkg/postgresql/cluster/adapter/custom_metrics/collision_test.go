@@ -23,7 +23,6 @@ import (
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/utils/ptr"
 )
 
 func src(name string) mtypes.QuerySource {
@@ -35,7 +34,7 @@ func clusterQ(metric, source string) mtypes.ResolvedQuery {
 }
 
 func dbQ(metric, source, db string) mtypes.ResolvedQuery {
-	return mtypes.ResolvedQuery{PlatformQuery: mtypes.PlatformQuery{Name: metric}, Source: src(source), TargetDatabase: ptr.To(db)}
+	return mtypes.ResolvedQuery{PlatformQuery: mtypes.PlatformQuery{Name: metric}, Source: src(source), TargetDatabase: new(db)}
 }
 
 func clusterSet(queries ...mtypes.ResolvedQuery) mtypes.ClusterQuerySet {

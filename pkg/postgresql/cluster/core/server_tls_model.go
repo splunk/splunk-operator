@@ -272,8 +272,6 @@ func serverTLSIdentity(cluster *platformv1alpha1.PostgresCluster) tlsport.Identi
 	if cluster == nil {
 		return tlsport.Identity{}
 	}
-	controller := true
-	blockOwnerDeletion := true
 	return tlsport.Identity{
 		ClusterName: cluster.Name,
 		Namespace:   cluster.Namespace,
@@ -283,8 +281,8 @@ func serverTLSIdentity(cluster *platformv1alpha1.PostgresCluster) tlsport.Identi
 			Kind:               "PostgresCluster",
 			Name:               cluster.Name,
 			UID:                cluster.UID,
-			Controller:         &controller,
-			BlockOwnerDeletion: &blockOwnerDeletion,
+			Controller:         new(true),
+			BlockOwnerDeletion: new(true),
 		},
 		CertificateName: cluster.Name + "-server-tls",
 		ServerTLSSecret: cluster.Name + "-server-tls",

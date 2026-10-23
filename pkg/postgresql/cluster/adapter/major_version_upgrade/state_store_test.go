@@ -31,15 +31,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 func TestMajorUpgradeInputFromClusterRequiresAllow(t *testing.T) {
 	cluster := &platformv1alpha1.PostgresCluster{
 		Spec: platformv1alpha1.PostgresClusterSpec{
-			PostgresVersion: ptr.To("18"),
+			PostgresVersion: new("18"),
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-				Allow: ptr.To(false),
+				Allow: new(false),
 			},
 		},
 	}
@@ -53,9 +52,9 @@ func TestMajorUpgradeInputFromClusterRequiresAllow(t *testing.T) {
 func TestMajorUpgradeInputFromClusterUsesPostgresVersionAsTarget(t *testing.T) {
 	cluster := &platformv1alpha1.PostgresCluster{
 		Spec: platformv1alpha1.PostgresClusterSpec{
-			PostgresVersion: ptr.To("18"),
+			PostgresVersion: new("18"),
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-				Allow: ptr.To(true),
+				Allow: new(true),
 			},
 		},
 	}
@@ -70,10 +69,10 @@ func TestMajorUpgradeInputFromClusterUsesPostgresVersionAsTarget(t *testing.T) {
 func TestMajorUpgradeInputFromClusterEnablesBlueGreenStrategy(t *testing.T) {
 	cluster := &platformv1alpha1.PostgresCluster{
 		Spec: platformv1alpha1.PostgresClusterSpec{
-			PostgresVersion: ptr.To("18"),
+			PostgresVersion: new("18"),
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-				Allow:    ptr.To(true),
-				Strategy: ptr.To(mvutypes.MajorUpgradeFlowBlueGreen),
+				Allow:    new(true),
+				Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen),
 			},
 		},
 	}
@@ -88,10 +87,10 @@ func TestMajorUpgradeInputFromClusterEnablesBlueGreenStrategy(t *testing.T) {
 func TestMajorUpgradeInputFromClusterKeepsBlueGreenDisabledWithoutAllow(t *testing.T) {
 	cluster := &platformv1alpha1.PostgresCluster{
 		Spec: platformv1alpha1.PostgresClusterSpec{
-			PostgresVersion: ptr.To("18"),
+			PostgresVersion: new("18"),
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-				Allow:    ptr.To(false),
-				Strategy: ptr.To(mvutypes.MajorUpgradeFlowBlueGreen),
+				Allow:    new(false),
+				Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen),
 			},
 		},
 	}
@@ -105,9 +104,9 @@ func TestMajorUpgradeInputFromClusterKeepsBlueGreenDisabledWithoutAllow(t *testi
 func TestMajorUpgradeStateStoreReadsClusterFromSpecification(t *testing.T) {
 	reader := NewMajorUpgradeStateStore(fakeStateStore{
 		spec: &platformv1alpha1.PostgresClusterSpec{
-			PostgresVersion: ptr.To("18"),
+			PostgresVersion: new("18"),
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-				Allow: ptr.To(true),
+				Allow: new(true),
 			},
 		},
 	})
@@ -124,9 +123,9 @@ func TestMajorUpgradeStateStoreComposesSpecificationStatusAndAnnotations(t *test
 	retryAt := "2026-06-24T10:00:00Z"
 	reader := NewMajorUpgradeStateStore(fakeStateStore{
 		spec: &platformv1alpha1.PostgresClusterSpec{
-			PostgresVersion: ptr.To("18"),
+			PostgresVersion: new("18"),
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-				Allow: ptr.To(true),
+				Allow: new(true),
 			},
 		},
 		annotations: map[string]string{
@@ -157,9 +156,9 @@ func TestMajorUpgradeInputFromClusterSkipsWhenSourceMajorMatchesTargetMajor(t *t
 
 	cluster := &platformv1alpha1.PostgresCluster{
 		Spec: platformv1alpha1.PostgresClusterSpec{
-			PostgresVersion: ptr.To("18.2"),
+			PostgresVersion: new("18.2"),
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-				Allow: ptr.To(true),
+				Allow: new(true),
 			},
 		},
 		Status: platformv1alpha1.PostgresClusterStatus{
@@ -464,7 +463,7 @@ func TestMajorUpgradeInputFromPartsNilPostgresVersion(t *testing.T) {
 	spec := &platformv1alpha1.PostgresClusterSpec{
 		PostgresVersion: nil,
 		PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-			Allow: ptr.To(true),
+			Allow: new(true),
 		},
 	}
 	intent, enabled, err := MajorUpgradeInputFromParts(spec, nil, nil, "17")
@@ -485,7 +484,7 @@ func TestMajorUpgradeInputFromPartsNilPostgresVersionWithOverride(t *testing.T) 
 		spec: &platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: nil,
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-				Allow: ptr.To(true),
+				Allow: new(true),
 			},
 		},
 		sourcePgVersion: "17",
@@ -648,8 +647,8 @@ func TestStateWithProgressReplacesBlueGreenStatusAtomically(t *testing.T) {
 			PostgresDatabaseName: "app",
 			PostgresDatabaseUID:  "database-uid",
 			DatabaseName:         "application",
-			InitialCopyComplete:  ptr.To(true),
-			SubscriptionHealthy:  ptr.To(true),
+			InitialCopyComplete:  new(true),
+			SubscriptionHealthy:  new(true),
 		}},
 		Gates: &platformv1alpha1.BlueGreenGateStatus{
 			Allow: &platformv1alpha1.BlueGreenGateConsumptionStatus{Generation: 4, ConsumedAt: &now},
@@ -676,7 +675,7 @@ func TestStateWithProgressReplacesBlueGreenStatusAtomically(t *testing.T) {
 		TargetPgVersion: target,
 		AttemptID:       "attempt-2",
 		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
-			Phase:           ptr.To(string(mvutypes.Preflight)),
+			Phase:           new(string(mvutypes.Preflight)),
 			Strategy:        &strategy,
 			SourcePgVersion: &source,
 			TargetPgVersion: &target,
@@ -777,9 +776,9 @@ func TestBlueGreenAttemptRequiresObservedRearmBeforeStartingNextAttempt(t *testi
 		},
 	}}
 	spec := &platformv1alpha1.PostgresClusterSpec{
-		PostgresVersion: ptr.To(target),
+		PostgresVersion: new(target),
 		PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-			Allow:    ptr.To(true),
+			Allow:    new(true),
 			Strategy: &strategy,
 		},
 	}
@@ -814,9 +813,9 @@ func TestBlueGreenActiveAttemptKeepsRunningAfterAllowIsCleared(t *testing.T) {
 		},
 	}}
 	spec := &platformv1alpha1.PostgresClusterSpec{
-		PostgresVersion: ptr.To(target),
+		PostgresVersion: new(target),
 		PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-			Allow: ptr.To(false), Strategy: &strategy,
+			Allow: new(false), Strategy: &strategy,
 		},
 	}
 	intent, enabled, err := MajorUpgradeInputFromParts(spec, entries, nil, source)
@@ -833,9 +832,9 @@ func TestMajorUpgradeStateStoreReadReturnsBlueGreenRearmWithoutWritingStatus(t *
 	cancelled := string(mvutypes.Cancelled)
 	store := &recordingStateStore{fakeStateStore: fakeStateStore{
 		spec: &platformv1alpha1.PostgresClusterSpec{
-			PostgresVersion: ptr.To(target),
+			PostgresVersion: new(target),
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-				Allow:    ptr.To(false),
+				Allow:    new(false),
 				Strategy: &strategy,
 			},
 		},
@@ -1045,9 +1044,9 @@ func TestMajorUpgradeInputSkipsUnavailableBlueGreenSourceHistory(t *testing.T) {
 	target16 := "16"
 	target17 := "17"
 	spec := &platformv1alpha1.PostgresClusterSpec{
-		PostgresVersion: ptr.To(target17),
+		PostgresVersion: new(target17),
 		PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-			Allow:    ptr.To(true),
+			Allow:    new(true),
 			Strategy: &pgUpgrade,
 		},
 	}
