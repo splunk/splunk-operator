@@ -15,6 +15,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -47,11 +48,7 @@ func (p sourceBaseline) secretFingerprint(ctx context.Context, name string) (pla
 		return platformv1alpha1.BlueGreenCredentialFingerprintStatus{}, err
 	}
 	digest := sha256.New()
-	keys := make([]string, 0, len(secret.Data))
-	for key := range secret.Data {
-		keys = append(keys, key)
-	}
-	slices.Sort(keys)
+	keys := slices.Sorted(maps.Keys(secret.Data))
 	for _, key := range keys {
 		digest.Write([]byte(key))
 		digest.Write([]byte{0})

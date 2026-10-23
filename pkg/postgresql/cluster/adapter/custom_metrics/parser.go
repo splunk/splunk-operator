@@ -19,6 +19,7 @@ package custommetrics
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -57,11 +58,7 @@ func (Parser) Parse(raw []byte, source mtypes.QuerySource, targetDB *string) ([]
 			mtypes.ErrInvalidQueryDefinition, source.Namespace, source.ConfigMapName, source.ConfigMapKey)
 	}
 
-	names := make([]string, 0, len(entries))
-	for name := range entries {
-		names = append(names, name)
-	}
-	slices.Sort(names)
+	names := slices.Sorted(maps.Keys(entries))
 
 	resolved := make([]mtypes.ResolvedQuery, 0, len(entries))
 	var validationIssues []string
