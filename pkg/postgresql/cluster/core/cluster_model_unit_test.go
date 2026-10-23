@@ -827,6 +827,31 @@ func TestGetMergedConfig(t *testing.T) {
 		assert.Equal(t, "hostssl all all 0.0.0.0/0 scram-sha-256", cfg.Spec.PgHBA[0])
 	})
 
+	t.Run("explicit zero and false pointers override class defaults", func(t *testing.T) {
+		class := baseClass.DeepCopy()
+		class.Spec.Config.Backup = &platformv1alpha1.BackupConfig{
+			Enabled: new(true), Schedule: new("0 2 * * *"),
+		}
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{
+				Instances: new(int32(0)),
+				Backup: &platformv1alpha1.BackupConfig{
+					Enabled: new(false), Schedule: new(""),
+				},
+			},
+		}
+
+		cfg := GetMergedConfig(class, cluster)
+
+		require.NotNil(t, cfg.Spec.Instances)
+		assert.Zero(t, *cfg.Spec.Instances)
+		require.NotNil(t, cfg.Spec.Backup)
+		require.NotNil(t, cfg.Spec.Backup.Enabled)
+		assert.False(t, *cfg.Spec.Backup.Enabled)
+		require.NotNil(t, cfg.Spec.Backup.Schedule)
+		assert.Empty(t, *cfg.Spec.Backup.Schedule)
+	})
+
 	t.Run("class defaults fill in nil cluster fields", func(t *testing.T) {
 		classImage := "registry.example.com/platform/postgresql:17.4"
 		classPullSecrets := []corev1.LocalObjectReference{{Name: "class-registry-creds"}}

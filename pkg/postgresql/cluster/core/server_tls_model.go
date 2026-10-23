@@ -17,6 +17,7 @@ limitations under the License.
 package core
 
 import (
+	"cmp"
 	"context"
 	"crypto/x509"
 	"errors"
@@ -245,9 +246,7 @@ func serverTLSNames(cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig
 	if cluster == nil {
 		return nil
 	}
-	if environmentName == "" {
-		environmentName = cluster.Name
-	}
+	environmentName = cmp.Or(environmentName, cluster.Name)
 	names := []string{}
 	for _, endpoint := range []string{"rw", "ro", "r"} {
 		names = append(names, serviceDNSNames(environmentName+"-"+endpoint, cluster.Namespace)...)
@@ -334,9 +333,7 @@ func newCNPGDefaultServerTLSPlan(cluster *platformv1alpha1.PostgresCluster, cfg 
 	if cluster == nil || cfg == nil || cfg.Spec == nil || !isPoolerEnabled(cfg.Spec.ConnectionPooler) {
 		return plan
 	}
-	if environmentName == "" {
-		environmentName = cluster.Name
-	}
+	environmentName = cmp.Or(environmentName, cluster.Name)
 	plan.poolerEnabled = true
 	plan.requiredPoolerSANs = computeDesiredPoolerSANSet(true, nil, environmentName, cluster.Namespace)
 	return plan
@@ -364,9 +361,7 @@ func certManagerPoolerSANs(cluster *platformv1alpha1.PostgresCluster, cfg *Merge
 	if cluster == nil || cfg == nil || cfg.Spec == nil || !isPoolerEnabled(cfg.Spec.ConnectionPooler) {
 		return nil
 	}
-	if environmentName == "" {
-		environmentName = cluster.Name
-	}
+	environmentName = cmp.Or(environmentName, cluster.Name)
 	poolerNames := make([]string, 0, 8)
 	if poolerReadWriteWanted(cfg.Spec.ConnectionPooler) {
 		poolerNames = append(poolerNames, serviceDNSNames(environmentName+defaultPoolerSuffix+readWriteEndpoint, cluster.Namespace)...)

@@ -17,6 +17,7 @@ limitations under the License.
 package core
 
 import (
+	"cmp"
 	"context"
 	"crypto/x509"
 	"encoding/json"
@@ -437,24 +438,14 @@ func GetMergedConfig(class *platformv1alpha1.PostgresClusterClass, cluster *plat
 
 	// Config is optional on the class — apply defaults only when provided.
 	if defaults := class.Spec.Config; defaults != nil {
-		if result.Instances == nil {
-			result.Instances = defaults.Instances
-		}
-		if result.PostgresVersion == nil {
-			result.PostgresVersion = defaults.PostgresVersion
-		}
-		if result.PostgresImage == nil {
-			result.PostgresImage = defaults.PostgresImage
-		}
+		result.Instances = cmp.Or(result.Instances, defaults.Instances)
+		result.PostgresVersion = cmp.Or(result.PostgresVersion, defaults.PostgresVersion)
+		result.PostgresImage = cmp.Or(result.PostgresImage, defaults.PostgresImage)
 		if cluster.Spec.ImagePullSecrets == nil {
 			result.ImagePullSecrets = defaults.ImagePullSecrets
 		}
-		if result.Resources == nil {
-			result.Resources = defaults.Resources
-		}
-		if result.Storage == nil {
-			result.Storage = defaults.Storage
-		}
+		result.Resources = cmp.Or(result.Resources, defaults.Resources)
+		result.Storage = cmp.Or(result.Storage, defaults.Storage)
 		if len(result.PostgreSQLConfig) == 0 {
 			result.PostgreSQLConfig = defaults.PostgreSQLConfig
 		}
@@ -466,12 +457,8 @@ func GetMergedConfig(class *platformv1alpha1.PostgresClusterClass, cluster *plat
 			if result.Backup == nil {
 				result.Backup = defaults.Backup.DeepCopy()
 			} else {
-				if result.Backup.Enabled == nil {
-					result.Backup.Enabled = defaults.Backup.Enabled
-				}
-				if result.Backup.Schedule == nil {
-					result.Backup.Schedule = defaults.Backup.Schedule
-				}
+				result.Backup.Enabled = cmp.Or(result.Backup.Enabled, defaults.Backup.Enabled)
+				result.Backup.Schedule = cmp.Or(result.Backup.Schedule, defaults.Backup.Schedule)
 			}
 		}
 	}
@@ -1246,12 +1233,10 @@ func NormalizeBlueGreenSourceCNPGSpec(spec cnpgv1.ClusterSpec) BlueGreenSourceCN
 	if normalized.ReplicationSlots.HighAvailability.Enabled == nil {
 		normalized.ReplicationSlots.HighAvailability.Enabled = new(true)
 	}
-	if normalized.ReplicationSlots.HighAvailability.SlotPrefix == "" {
-		normalized.ReplicationSlots.HighAvailability.SlotPrefix = cnpgv1.DefaultReplicationSlotsHASlotPrefix
-	}
-	if normalized.ReplicationSlots.UpdateInterval == 0 {
-		normalized.ReplicationSlots.UpdateInterval = cnpgv1.DefaultReplicationSlotsUpdateInterval
-	}
+	normalized.ReplicationSlots.HighAvailability.SlotPrefix = cmp.Or(
+		normalized.ReplicationSlots.HighAvailability.SlotPrefix, cnpgv1.DefaultReplicationSlotsHASlotPrefix)
+	normalized.ReplicationSlots.UpdateInterval = cmp.Or(
+		normalized.ReplicationSlots.UpdateInterval, cnpgv1.DefaultReplicationSlotsUpdateInterval)
 	if replicas := normalized.ReplicationSlots.SynchronizeReplicas; replicas != nil && replicas.Enabled == nil {
 		replicas.Enabled = new(true)
 	}
