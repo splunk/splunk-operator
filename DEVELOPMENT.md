@@ -25,6 +25,8 @@ truth instead of extending this file with a command catalog.
   methods, CRDs, RBAC roles, or webhook manifests.
 - Update the owning user or developer document when behavior or configuration
   changes.
+- After changing Go dependencies, run `make mod-verify` to verify module
+  checksums and ensure `go.mod` and `go.sum` are tidy without rewriting them.
 - When a change to `test/testenv/`, an integration runner, or integration
   configuration alters a shared lifecycle or execution contract, follow the
   `splunk-operator-integration-tests` skill and update
