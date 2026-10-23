@@ -1197,11 +1197,13 @@ func (d *Deployment) DeployStandaloneWithGivenSmartStoreSpec(ctx context.Context
 
 	spec := enterpriseApi.StandaloneSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "IfNotPresent",
-				Image:           d.testenv.splunkImage,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "IfNotPresent",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 		},
 		SmartStore: smartStoreSpec,
 	}
@@ -1398,11 +1400,13 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 	// Deploy the Cluster Manager
 	cmSpec := enterpriseApi.ClusterManagerSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
 				Name: licenseManager,
 			},
@@ -1425,11 +1429,13 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenAppFrameworkSpec(ctx contex
 
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			ClusterManagerRef: corev1.ObjectReference{
 				Name: name,
 			},
@@ -1476,11 +1482,13 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx 
 	// Deploy the Cluster Master
 	cmSpec := enterpriseApiV3.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			LicenseMasterRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
@@ -1503,11 +1511,13 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenAppFrameworkSpec(ctx 
 
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			ClusterMasterRef: corev1.ObjectReference{
 				Name: name,
 			},
@@ -1568,18 +1578,20 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 	// Cluster Manager Spec
 	cmSpec := enterpriseApi.ClusterManagerSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			Defaults: defaults,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
 				Name: licenseManager,
 			},
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
 			},
-			Defaults: defaults,
 		},
 		AppFrameworkConfig: appFrameworkSpecIdxc,
 	}
@@ -1609,11 +1621,14 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 	// Deploy the SH Cluster
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			Defaults: siteDefaults,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			ClusterManagerRef: corev1.ObjectReference{
 				Name: name,
 			},
@@ -1623,7 +1638,6 @@ func (d *Deployment) DeployMultisiteClusterWithSearchHeadAndAppFramework(ctx con
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
 			},
-			Defaults: siteDefaults,
 			// LivenessInitialDelaySeconds:  int32(delaySeconds),
 			// ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
@@ -1672,18 +1686,20 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(c
 	// Cluster Manager Spec
 	cmSpec := enterpriseApiV3.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			Defaults: defaults,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			LicenseMasterRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
 			},
-			Defaults: defaults,
 		},
 		AppFrameworkConfig: appFrameworkSpecIdxc,
 	}
@@ -1713,11 +1729,14 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(c
 	// Deploy the SH Cluster
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			Defaults: siteDefaults,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			ClusterMasterRef: corev1.ObjectReference{
 				Name: name,
 			},
@@ -1727,7 +1746,6 @@ func (d *Deployment) DeployMultisiteClusterMasterWithSearchHeadAndAppFramework(c
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
 			},
-			Defaults: siteDefaults,
 			// LivenessInitialDelaySeconds:  int32(delaySeconds),
 			// ReadinessInitialDelaySeconds: int32(delaySeconds),
 		},
@@ -1762,11 +1780,13 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 	// Deploy the Cluster Manager
 	cmSpec := enterpriseApi.ClusterManagerSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
 				Name: licenseManager,
 			},
@@ -1788,11 +1808,13 @@ func (d *Deployment) DeploySingleSiteClusterWithGivenMonitoringConsole(ctx conte
 
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			ClusterManagerRef: corev1.ObjectReference{
 				Name: name,
 			},
@@ -1834,11 +1856,13 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx
 	// Deploy the Cluster Master
 	cmSpec := enterpriseApiV3.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			LicenseMasterRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
@@ -1860,11 +1884,13 @@ func (d *Deployment) DeploySingleSiteClusterMasterWithGivenMonitoringConsole(ctx
 
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			ClusterMasterRef: corev1.ObjectReference{
 				Name: name,
 			},
@@ -1920,15 +1946,17 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 	// Cluster Manager Spec
 	cmSpec := enterpriseApi.ClusterManagerSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			Defaults: defaults,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
 				Name: licenseManager,
 			},
-			Defaults: defaults,
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: monitoringConsoleName,
 			},
@@ -1960,18 +1988,20 @@ func (d *Deployment) DeployMultisiteClusterWithMonitoringConsole(ctx context.Con
 	// Deploy the SH Cluster
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			Defaults: siteDefaults,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			ClusterManagerRef: corev1.ObjectReference{
 				Name: name,
 			},
 			LicenseManagerRef: corev1.ObjectReference{
 				Name: licenseManager,
 			},
-			Defaults: siteDefaults,
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: monitoringConsoleName,
 			},
@@ -2020,15 +2050,17 @@ func (d *Deployment) DeployMultisiteClusterMasterWithMonitoringConsole(ctx conte
 	// Cluster Master Spec
 	cmSpec := enterpriseApiV3.ClusterMasterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			Defaults: defaults,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			LicenseManagerRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
-			Defaults: defaults,
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: monitoringConsoleName,
 			},
@@ -2060,18 +2092,20 @@ func (d *Deployment) DeployMultisiteClusterMasterWithMonitoringConsole(ctx conte
 	// Deploy the SH Cluster
 	shSpec := enterpriseApi.SearchHeadClusterSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           d.testenv.splunkImage,
+			Defaults: siteDefaults,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           d.testenv.splunkImage,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			ClusterMasterRef: corev1.ObjectReference{
 				Name: name,
 			},
 			LicenseManagerRef: corev1.ObjectReference{
 				Name: licenseMaster,
 			},
-			Defaults: siteDefaults,
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: monitoringConsoleName,
 			},

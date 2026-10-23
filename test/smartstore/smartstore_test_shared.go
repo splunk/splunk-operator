@@ -153,11 +153,13 @@ func RunS1DefaultVolumesTest(ctx context.Context, deployment *testenv.Deployment
 func RunS1EphemeralStorageTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, storageConfig enterpriseApi.StorageClassSpec, etcStorage bool) {
 	spec := enterpriseApi.StandaloneSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "Always",
-				Image:           testcaseEnvInst.GetSplunkImage(),
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "Always",
+					Image:           testcaseEnvInst.GetSplunkImage(),
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 		},
 	}
 	if etcStorage {

@@ -112,7 +112,8 @@ func standaloneWithCerts(ns, name string, certs []enterpriseApi.CertSpec) *enter
 	return &enterpriseApi.Standalone{
 		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
 		Spec: enterpriseApi.StandaloneSpec{
-			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Certs: certs},
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Certs: certs}},
 		},
 	}
 }

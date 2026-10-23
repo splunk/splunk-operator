@@ -19,9 +19,11 @@ func NewStandalone(name, ns, image string) *enterpriseApi.Standalone {
 	}
 
 	cs := &enterpriseApi.CommonSplunkSpec{
-		Mock:    true,
-		Spec:    *c,
-		Volumes: []corev1.Volume{},
+		Mock: true,
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+			Spec:    *c,
+			Volumes: []corev1.Volume{},
+		},
 		MonitoringConsoleRef: corev1.ObjectReference{
 			Name: "mcName",
 		},
@@ -51,7 +53,9 @@ func NewIngestorCluster(name, ns, image string, os *enterpriseApi.ObjectStorage,
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
 		Spec: enterpriseApi.IngestorClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{ImagePullPolicy: string(pullPolicy)},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{ImagePullPolicy: string(pullPolicy)},
+				},
 			},
 			Replicas: 3,
 			QueueRef: corev1.ObjectReference{
@@ -90,9 +94,11 @@ func NewSearchHeadCluster(name, ns, image string) *enterpriseApi.SearchHeadClust
 	}
 
 	cs := &enterpriseApi.CommonSplunkSpec{
-		Mock:    true,
-		Spec:    *c,
-		Volumes: []corev1.Volume{},
+		Mock: true,
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+			Spec:    *c,
+			Volumes: []corev1.Volume{},
+		},
 		MonitoringConsoleRef: corev1.ObjectReference{
 			Name: "mcName",
 		},
@@ -124,9 +130,11 @@ func NewMonitoringConsole(name, ns, image string) *enterpriseApi.MonitoringConso
 	}
 
 	cs := &enterpriseApi.CommonSplunkSpec{
-		Mock:    true,
-		Spec:    *c,
-		Volumes: []corev1.Volume{},
+		Mock: true,
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+			Spec:    *c,
+			Volumes: []corev1.Volume{},
+		},
 		MonitoringConsoleRef: corev1.ObjectReference{
 			Name: "mcName",
 		},
@@ -158,9 +166,11 @@ func NewClusterMaster(name, ns, image string) *enterpriseApiV3.ClusterMaster {
 	}
 
 	cs := &enterpriseApi.CommonSplunkSpec{
-		Mock:    true,
-		Spec:    *c,
-		Volumes: []corev1.Volume{},
+		Mock: true,
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+			Spec:    *c,
+			Volumes: []corev1.Volume{},
+		},
 		MonitoringConsoleRef: corev1.ObjectReference{
 			Name: "mcName",
 		},
@@ -192,9 +202,11 @@ func NewClusterManager(name, ns, image string) *enterpriseApi.ClusterManager {
 	}
 
 	cs := &enterpriseApi.CommonSplunkSpec{
-		Mock:    true,
-		Spec:    *c,
-		Volumes: []corev1.Volume{},
+		Mock: true,
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+			Spec:    *c,
+			Volumes: []corev1.Volume{},
+		},
 		MonitoringConsoleRef: corev1.ObjectReference{
 			Name: "mcName",
 		},
@@ -226,9 +238,11 @@ func NewLicenseManager(name, ns, image string) *enterpriseApi.LicenseManager {
 	}
 
 	cs := &enterpriseApi.CommonSplunkSpec{
-		Mock:    true,
-		Spec:    *c,
-		Volumes: []corev1.Volume{},
+		Mock: true,
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+			Spec:    *c,
+			Volumes: []corev1.Volume{},
+		},
 		MonitoringConsoleRef: corev1.ObjectReference{
 			Name: "mcName",
 		},
@@ -260,9 +274,11 @@ func NewLicenseMaster(name, ns, image string) *enterpriseApiV3.LicenseMaster {
 	}
 
 	cs := &enterpriseApi.CommonSplunkSpec{
-		Mock:    true,
-		Spec:    *c,
-		Volumes: []corev1.Volume{},
+		Mock: true,
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+			Spec:    *c,
+			Volumes: []corev1.Volume{},
+		},
 		MonitoringConsoleRef: corev1.ObjectReference{
 			Name: "mcName",
 		},
@@ -294,9 +310,11 @@ func NewIndexerCluster(name, ns, image string) *enterpriseApi.IndexerCluster {
 	}
 
 	cs := &enterpriseApi.CommonSplunkSpec{
-		Mock:    true,
-		Spec:    *c,
-		Volumes: []corev1.Volume{},
+		Mock: true,
+		CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+			Spec:    *c,
+			Volumes: []corev1.Volume{},
+		},
 		MonitoringConsoleRef: corev1.ObjectReference{
 			Name: "mcName",
 		},

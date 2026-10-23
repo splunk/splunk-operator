@@ -339,12 +339,14 @@ func NewStandaloneSpecWithMCRef(image string, mcName string) enterpriseApi.Stand
 func NewStandaloneSpecWithMCRefAndResources(image string, mcName string, resources corev1.ResourceRequirements) enterpriseApi.StandaloneSpec {
 	return enterpriseApi.StandaloneSpec{
 		CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-			Spec: enterpriseApi.Spec{
-				ImagePullPolicy: "IfNotPresent",
-				Image:           image,
-				Resources:       resources,
+			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+				Spec: enterpriseApi.Spec{
+					ImagePullPolicy: "IfNotPresent",
+					Image:           image,
+					Resources:       resources,
+				},
+				Volumes: []corev1.Volume{},
 			},
-			Volumes: []corev1.Volume{},
 			MonitoringConsoleRef: corev1.ObjectReference{
 				Name: mcName,
 			},

@@ -45,6 +45,11 @@ spec:
       kind: IngestorCluster
       name: ingestorclusters.enterprise.splunk.com
       version: v4
+    - description: KVService is the Schema for the kvservices API
+      displayName: KV Service
+      kind: KVService
+      name: kvservices.enterprise.splunk.com
+      version: v4
     - description: LicenseManager is the Schema for a Splunk Enterprise license manager.
       displayName: License Manager
       kind: LicenseManager

@@ -377,7 +377,9 @@ func TestApplySearchHeadClusterValidationFailure(t *testing.T) {
 				LivenessProbe: &enterpriseApi.Probe{
 					InitialDelaySeconds: -5, // Invalid value
 				},
-				Volumes: []corev1.Volume{},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Volumes: []corev1.Volume{},
+				},
 			},
 		},
 		Status: enterpriseApi.SearchHeadClusterStatus{},
@@ -1337,10 +1339,12 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 		},
 		Spec: enterpriseApi.SearchHeadClusterSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 			Replicas: 3,
 		},

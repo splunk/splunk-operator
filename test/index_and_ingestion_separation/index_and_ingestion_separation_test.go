@@ -50,9 +50,11 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 
 		cmSpec = enterpriseApi.ClusterManagerSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
-					Image:           testcaseEnvInst.GetSplunkImage(),
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+						Image:           testcaseEnvInst.GetSplunkImage(),
+					},
 				},
 			},
 		}
@@ -121,8 +123,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 				Spec: enterpriseApi.IngestorClusterSpec{
 					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
 						// ServiceAccount:               serviceAccountName,
-						LivenessInitialDelaySeconds:  600,
-						ReadinessInitialDelaySeconds: 50,
+
 						StartupProbe: &enterpriseApi.Probe{
 							InitialDelaySeconds: 40,
 							TimeoutSeconds:      30,
@@ -141,9 +142,13 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 							PeriodSeconds:       30,
 							FailureThreshold:    12,
 						},
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "Always",
-							Image:           testcaseEnvInst.GetSplunkImage(),
+						CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+							Spec: enterpriseApi.Spec{
+								ImagePullPolicy: "Always",
+								Image:           testcaseEnvInst.GetSplunkImage(),
+							},
+							LivenessInitialDelaySeconds:  600,
+							ReadinessInitialDelaySeconds: 50,
 						},
 					},
 					QueueRef:           v1.ObjectReference{Name: q.Name},
@@ -353,16 +358,18 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 				},
 				Spec: enterpriseApi.IngestorClusterSpec{
 					CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-						Spec: enterpriseApi.Spec{
-							ImagePullPolicy: "Always",
-							Image:           testcaseEnvInst.GetSplunkImage(),
-						},
-						Volumes: []v1.Volume{
-							{
-								Name: cmName,
-								VolumeSource: v1.VolumeSource{
-									ConfigMap: &v1.ConfigMapVolumeSource{
-										LocalObjectReference: v1.LocalObjectReference{Name: cmName},
+						CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+							Spec: enterpriseApi.Spec{
+								ImagePullPolicy: "Always",
+								Image:           testcaseEnvInst.GetSplunkImage(),
+							},
+							Volumes: []v1.Volume{
+								{
+									Name: cmName,
+									VolumeSource: v1.VolumeSource{
+										ConfigMap: &v1.ConfigMapVolumeSource{
+											LocalObjectReference: v1.LocalObjectReference{Name: cmName},
+										},
 									},
 								},
 							},

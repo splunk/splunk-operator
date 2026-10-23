@@ -20,6 +20,9 @@ import "fmt"
 type contextKey string
 
 const (
+	// KVServiceCrName is the fixed name for the shared KVService CR.
+	KVServiceCrName = "splunk-kvservice"
+
 	// namespace scoped secret name
 	namespaceScopedSecretNameTemplateStr = "splunk-%s-secret"
 
@@ -151,3 +154,6 @@ func GetLabelTypes() map[string]string {
 		"instance":  "app.kubernetes.io/instance",
 	}
 }
+
+// KVServicePort is the KVService HTTP port.
+const KVServicePort = 8066

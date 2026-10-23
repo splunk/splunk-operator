@@ -93,7 +93,9 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 				Name: "noah",
 			},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				},
 			},
 		},
 	}
@@ -157,7 +159,9 @@ func TestApplySearchHeadClusterNoah_DeletionAbortsOnOwnerReferenceCleanupError(t
 				Name: "noah",
 			},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				},
 			},
 		},
 	}
@@ -180,7 +184,9 @@ func TestApplySearchHeadClusterNoah_PendingWhenNoahClusterMissing(t *testing.T) 
 			Replicas:       3,
 			NoahClusterRef: &corev1.LocalObjectReference{Name: "missing-noah-cluster"},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				},
 			},
 		},
 	}
@@ -217,7 +223,9 @@ func TestApplySearchHeadClusterNoah_ReportsUnknownDependencyReadFailure(t *testi
 			Replicas:       3,
 			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				},
 			},
 		},
 	}
@@ -255,7 +263,9 @@ func TestApplySearchHeadClusterNoah_ReportsResolvedDependency(t *testing.T) {
 			Replicas:       3,
 			NoahClusterRef: &corev1.LocalObjectReference{Name: "noah"},
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{Image: "splunk/splunk:latest"},
+				},
 			},
 		},
 	}

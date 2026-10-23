@@ -264,9 +264,54 @@ type Probe struct {
 	FailureThreshold int32 `json:"failureThreshold,omitempty"`
 }
 
+// CommonWorkloadSpec defines workload settings shared by KVService and Splunk Enterprise CRD types.
+type CommonWorkloadSpec struct {
+	Spec `json:",inline"`
+
+	// List of one or more Kubernetes volumes. These will be mounted in all pod containers as as /mnt/<name>
+	// +optional
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
+
+	// ServiceAccount is the service account used by the pods deployed by the CRD.
+	// If not specified uses the default serviceAccount for the namespace as per
+	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#use-the-default-service-account-to-access-the-api-server
+	// +optional
+	ServiceAccount string `json:"serviceAccount,omitempty"`
+
+	// ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
+	// WARNING: Setting environment variables used by Splunk or Ansible will affect Splunk installation and operation
+	// +optional
+	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
+
+	// Sets imagePullSecrets if image is being pulled from a private registry.
+	// See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
+	// Note: If needed, Operator overrides with a higher value
+	// +kubebuilder:validation:Minimum=0
+	ReadinessInitialDelaySeconds int32 `json:"readinessInitialDelaySeconds"`
+
+	// LivenessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) for the Liveness probe
+	// Note: If needed, Operator overrides with a higher value
+	// +kubebuilder:validation:Minimum=0
+	LivenessInitialDelaySeconds int32 `json:"livenessInitialDelaySeconds"`
+
+	// Certs lists TLS certificates to mount into Splunk pods.
+	// Each entry references a Kubernetes Secret containing tls.crt and tls.key.
+	// When role is set, the cert is mounted at the fixed platform path
+	// /mnt/tls/splunk-<role>-tls-cert/. When role is unset, the cert is mounted
+	// as-is at /mnt/tls/<secretRef.name>/. At most one entry per role is allowed.
+	// +kubebuilder:validation:MaxItems=10
+	// +kubebuilder:validation:XValidation:rule="self.filter(c, has(c.role) && c.role == 'server').size() <= 1 && self.filter(c, has(c.role) && c.role == 'input').size() <= 1",message="at most one entry per role is allowed"
+	// +optional
+	Certs []CertSpec `json:"certs,omitempty"`
+}
+
 // CommonSplunkSpec defines the desired state of parameters that are common across all Splunk Enterprise CRD types
 type CommonSplunkSpec struct {
-	Spec `json:",inline"`
+	CommonWorkloadSpec `json:",inline"`
 
 	// Storage configuration for /opt/splunk/etc volume
 	// +optional
@@ -275,10 +320,6 @@ type CommonSplunkSpec struct {
 	// Storage configuration for /opt/splunk/var volume
 	// +optional
 	VarVolumeStorageConfig StorageClassSpec `json:"varVolumeStorageConfig,omitempty"`
-
-	// List of one or more Kubernetes volumes. These will be mounted in all pod containers as as /mnt/<name>
-	// +optional
-	Volumes []corev1.Volume `json:"volumes,omitempty"`
 
 	// Inline map of default.yml overrides used to initialize the environment
 	Defaults string `json:"defaults"`
@@ -315,27 +356,6 @@ type CommonSplunkSpec struct {
 	// Mock to differentiate between UTs and actual reconcile
 	Mock bool `json:"Mock"`
 
-	// ServiceAccount is the service account used by the pods deployed by the CRD.
-	// If not specified uses the default serviceAccount for the namespace as per
-	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#use-the-default-service-account-to-access-the-api-server
-	// +optional
-	ServiceAccount string `json:"serviceAccount,omitempty"`
-
-	// ExtraEnv refers to extra environment variables to be passed to the Splunk instance containers
-	// WARNING: Setting environment variables used by Splunk or Ansible will affect Splunk installation and operation
-	// +optional
-	ExtraEnv []corev1.EnvVar `json:"extraEnv,omitempty"`
-
-	// ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
-	// Note: If needed, Operator overrides with a higher value
-	// +kubebuilder:validation:Minimum=0
-	ReadinessInitialDelaySeconds int32 `json:"readinessInitialDelaySeconds"`
-
-	// LivenessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) for the Liveness probe
-	// Note: If needed, Operator overrides with a higher value
-	// +kubebuilder:validation:Minimum=0
-	LivenessInitialDelaySeconds int32 `json:"livenessInitialDelaySeconds"`
-
 	// LivenessProbe as defined in https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
 	// +optional
 	// +kubebuilder:default:={"initialDelaySeconds":30,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":3}
@@ -350,21 +370,6 @@ type CommonSplunkSpec struct {
 	// +optional
 	// +kubebuilder:default:={"initialDelaySeconds":40,"timeoutSeconds":30,"periodSeconds":30,"failureThreshold":12}
 	StartupProbe *Probe `json:"startupProbe,omitempty"`
-
-	// Sets imagePullSecrets if image is being pulled from a private registry.
-	// See https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
-	// +optional
-	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-
-	// Certs lists TLS certificates to mount into Splunk pods.
-	// Each entry references a Kubernetes Secret containing tls.crt and tls.key.
-	// When role is set, the cert is mounted at the fixed platform path
-	// /mnt/tls/splunk-<role>-tls-cert/. When role is unset, the cert is mounted
-	// as-is at /mnt/tls/<secretRef.name>/. At most one entry per role is allowed.
-	// +kubebuilder:validation:MaxItems=10
-	// +kubebuilder:validation:XValidation:rule="self.filter(c, has(c.role) && c.role == 'server').size() <= 1 && self.filter(c, has(c.role) && c.role == 'input').size() <= 1",message="at most one entry per role is allowed"
-	// +optional
-	Certs []CertSpec `json:"certs,omitempty"`
 }
 
 // StorageClassSpec defines storage class configuration

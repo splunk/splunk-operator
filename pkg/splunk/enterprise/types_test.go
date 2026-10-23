@@ -40,6 +40,7 @@ func TestInstanceType(t *testing.T) {
 		SplunkLicenseManager:    splcommon.LicenseManagerRole,
 		SplunkMonitoringConsole: "splunk_monitor",
 		SplunkIngestor:          "splunk_ingestor",
+		SplunkKVService:         "splunk_kvservice",
 	}
 	for key, val := range instMap {
 		if key.ToRole() != val {
@@ -59,6 +60,7 @@ func TestInstanceType(t *testing.T) {
 		SplunkLicenseManager:    "license-manager",
 		SplunkMonitoringConsole: "monitoring-console",
 		SplunkIngestor:          "ingestor",
+		SplunkKVService:         "kvservice",
 	}
 	for key, val := range instMap {
 		if key.ToKind() != val {
@@ -77,6 +79,7 @@ func TestKindToInstanceString(t *testing.T) {
 		{"ClusterMaster", "cluster-master"},
 		{"IndexerCluster", "indexer"},
 		{"IngestorCluster", "ingestor"},
+		{"KVService", "kvservice"},
 		{"LicenseManager", "license-manager"},
 		{"LicenseMaster", "license-master"},
 		{"MonitoringConsole", "monitoring-console"},

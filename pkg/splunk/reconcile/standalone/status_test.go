@@ -62,10 +62,12 @@ func TestUpdateCRStatus(t *testing.T) {
 		},
 		Spec: enterpriseApi.StandaloneSpec{
 			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{
-				Spec: enterpriseApi.Spec{
-					ImagePullPolicy: "Always",
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					Spec: enterpriseApi.Spec{
+						ImagePullPolicy: "Always",
+					},
+					Volumes: []corev1.Volume{},
 				},
-				Volumes: []corev1.Volume{},
 			},
 		},
 		Status: enterpriseApi.StandaloneStatus{
