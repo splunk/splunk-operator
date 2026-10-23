@@ -16,11 +16,6 @@ import (
 
 // ApplySplunkConfig reconciles the namespace secret and per-CR config map.
 func ApplySplunkConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonSplunkSpec, instanceType splcommon.InstanceType) (*corev1.Secret, error) {
-	return ApplyWorkloadConfig(ctx, client, cr, spec.CommonWorkloadSpec, instanceType)
-}
-
-// ApplyWorkloadConfig reconciles the shared namespace secret and inline configuration.
-func ApplyWorkloadConfig(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, spec enterpriseApi.CommonWorkloadSpec, instanceType splcommon.InstanceType) (*corev1.Secret, error) {
 	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, cr.GetNamespace())
 	if err != nil {
 		return nil, err

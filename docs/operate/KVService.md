@@ -11,9 +11,9 @@ The controller manages a Deployment and an HTTP Service on port 8066.
 KVService shares workload settings with the Enterprise CRs through
 `CommonWorkloadSpec`: image and pull policy, resources, scheduling, pod
 annotations, Service customization, volumes, inline defaults, service account,
-environment variables, image pull secrets, and certificates. These fields remain directly
-under `spec` in YAML. PostgreSQL connection settings and credentials can be
-provided through `spec.extraEnv`, Secret references, and `spec.volumes`.
+environment variables, image pull secrets, certificates, and initial probe
+delays. These fields remain directly under `spec` in YAML. PostgreSQL connection
+settings and credentials can be provided through `spec.extraEnv`, Secret references, and `spec.volumes`.
 Enterprise cluster and license references and Splunk storage settings are not
 part of the KVService API.
 
@@ -32,6 +32,9 @@ part of the KVService API.
   `spec.readinessInitialDelaySeconds` fields apply when the corresponding probe
   does not specify an initial delay. HTTP endpoints and the success threshold
   remain fixed; KVService does not configure a startup probe.
+  The CRD supplies timeout, period, and failure-threshold defaults for omitted
+  probe objects. The 30-second initial-delay fallback is applied by the controller
+  so the separate initial-delay fields continue to take effect.
 - `spec.certs` uses the shared certificate mounting and rotation workflow when
   the `CertManagement` feature gate is enabled. Existing Secrets may contain
   `tls.crt` and `tls.key`, optionally with `ca.crt`, or just `ca.crt` for a

@@ -118,11 +118,11 @@ var _ = Describe("KVService Controller", func() {
 							Spec: enterprisev4.Spec{
 								ImagePullPolicy: "IfNotPresent",
 							},
-							ServiceAccount: "kvservice-test-sa",
+							ServiceAccount:              "kvservice-test-sa",
+							LivenessInitialDelaySeconds: 90,
 						},
-						LivenessInitialDelaySeconds: 90,
-						ReadinessProbe:              &enterprisev4.Probe{TimeoutSeconds: 7},
-						Replicas:                    1,
+						ReadinessProbe: &enterprisev4.Probe{TimeoutSeconds: 7},
+						Replicas:       1,
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -143,6 +143,12 @@ var _ = Describe("KVService Controller", func() {
 			Expect(os.Unsetenv("SPLUNK_GENERAL_TERMS")).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
+			Expect(k8sClient.Get(ctx, typeNamespacedName, kvservice)).To(Succeed())
+			Expect(kvservice.Spec.LivenessInitialDelaySeconds).To(Equal(int32(90)))
+			Expect(kvservice.Spec.LivenessProbe).To(Equal(&enterprisev4.Probe{
+				TimeoutSeconds: 1, PeriodSeconds: 5, FailureThreshold: 3,
+			}))
+			Expect(kvservice.Spec.ReadinessProbe.TimeoutSeconds).To(Equal(int32(7)))
 			By("Reconciling the created resource")
 			controllerReconciler := &KVServiceReconciler{
 				Client: k8sClient,

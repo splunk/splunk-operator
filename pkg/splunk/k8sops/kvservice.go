@@ -16,7 +16,11 @@ package k8sops
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"os"
+	"strconv"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/logging"
@@ -66,22 +70,18 @@ func GetKVServiceDeployment(ctx context.Context, c splcommon.ControllerClient, c
 	if secret == nil {
 		return nil, fmt.Errorf("deployment secret for %s is unavailable", desired.Name)
 	}
-	spec := cr.Spec.CommonWorkloadSpec.DeepCopy()
-	resources.ConfigureWorkloadPortsAndVolumes(&desired.Spec.Template, spec)
-	configureWorkloadVolumes(ctx, c, &desired.Spec.Template, cr, spec, splcommon.SplunkKVService, secret.Name)
-	resources.ConfigureWorkloadSecurity(&desired.Spec.Template)
+	spec := cr.Spec.DeepCopy()
+	configureKVServiceVolumes(ctx, c, &desired.Spec.Template, cr, secret.Name)
 	defaultsURL := "/mnt/splunk-secrets/default.yml"
 	if spec.Defaults != "" {
 		defaultsURL = "/mnt/splunk-defaults/default.yml," + defaultsURL
 	}
-	env := getWorkloadEnv(defaultsURL, splcommon.SplunkKVService.ToRole())
+	env := getKVServiceEnv(defaultsURL)
 	env = append(env, corev1.EnvVar{Name: splunkKVStoreDefaultTypeEnv, Value: splunkKVStoreTypeLocal})
 	env = resources.RemoveDuplicateEnvVars(append(spec.ExtraEnv, env...))
 	for idx := range desired.Spec.Template.Spec.Containers {
-		desired.Spec.Template.Spec.Containers[idx].Resources = spec.Resources
 		desired.Spec.Template.Spec.Containers[idx].Env = env
 	}
-	resources.ConfigureKVServiceHTTPProbes(&desired.Spec.Template, &cr.Spec)
 	return desired, nil
 }
 
@@ -149,4 +149,145 @@ func removeOwnerReference(ownerRefs []metav1.OwnerReference, cr splcommon.MetaOb
 		}
 	}
 	return remainingRefs
+}
+
+// configureKVServiceVolumes mounts KVService configuration and stamps ConfigMap content hashes.
+func configureKVServiceVolumes(ctx context.Context, client splcommon.ControllerClient, podTemplateSpec *corev1.PodTemplateSpec, cr *enterpriseApi.KVService, secretToMount string) {
+	logger := logging.FromContext(ctx).With("func", "configureKVServiceVolumes")
+	spec := &cr.Spec
+	// Explicitly set the default value here so we can compare for changes correctly with current Deployment.
+	secretVolDefaultMode := corev1.SecretVolumeSourceDefaultMode
+	resources.AddSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-secrets", "/mnt/splunk-secrets", corev1.VolumeSource{
+		Secret: &corev1.SecretVolumeSource{
+			SecretName:  secretToMount,
+			DefaultMode: &secretVolDefaultMode,
+		},
+	})
+
+	// Explicitly set the default value here so we can compare for changes correctly with current Deployment.
+	configMapVolDefaultMode := corev1.ConfigMapVolumeSourceDefaultMode
+
+	// Mount inline KVService defaults when provided.
+	if spec.Defaults != "" {
+		configMapName := splutil.GetSplunkDefaultsName(cr.GetName(), splcommon.SplunkKVService)
+		resources.AddSplunkVolumeToTemplate(podTemplateSpec, "mnt-splunk-defaults", "/mnt/splunk-defaults", corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: configMapName,
+				},
+				DefaultMode: &configMapVolDefaultMode,
+			},
+		})
+
+		namespacedName := types.NamespacedName{Namespace: cr.GetNamespace(), Name: configMapName}
+
+		// We stamp a content hash of configMap.Data (not ResourceVersion) so that
+		// owner-reference-only writes during bootstrap do not trigger pod restarts.
+		configMapObj, err := GetConfigMap(ctx, client, namespacedName)
+		if err == nil {
+			podTemplateSpec.ObjectMeta.Annotations["defaultConfigRev"] = splutil.ConfigDataHash(configMapObj.Data)
+		} else {
+			logger.ErrorContext(ctx, "Failed to fetch KVService defaults ConfigMap for restart annotation", "error", err)
+		}
+	}
+
+	// Stamp splcommon.ConfigMapRevAnnotationPrefix+<vol-name> annotation for each user-supplied
+	// ConfigMap volume using a content hash rather than ResourceVersion. ResourceVersion changes
+	// on any metadata update (labels, annotations) and would cause spurious pod rolls; the hash
+	// only changes when the mounted data itself changes.
+	// The annotation key uses the volume name (a valid DNS label, ≤63 chars) as the suffix,
+	// not the ConfigMap name, which can exceed Kubernetes' 63-char annotation-suffix limit.
+	// Projected volumes that reference ConfigMaps are handled via the Sources loop.
+	for _, vol := range spec.Volumes {
+		switch {
+		case vol.ConfigMap != nil:
+			cmNS := types.NamespacedName{Namespace: cr.GetNamespace(), Name: vol.ConfigMap.Name}
+			cm, err := GetConfigMap(ctx, client, cmNS)
+			if err != nil {
+				logger.ErrorContext(ctx, "Failed to fetch ConfigMap for restart annotation", "volume", vol.Name, "error", err)
+				break
+			}
+			if cm.Annotations[splcommon.ConfigMapRestartOptOutAnnotation] == "false" {
+				// Consumer handles dynamic reload; skip the restart-triggering annotation.
+				break
+			}
+			hash, err := GetConfigMapDataHash(ctx, client, cmNS, vol.ConfigMap.Items)
+			if err == nil {
+				podTemplateSpec.ObjectMeta.Annotations[splcommon.ConfigMapRevAnnotationPrefix+vol.Name] = hash
+			} else {
+				logger.ErrorContext(ctx, "Failed to get ConfigMap data hash for annotation", "volume", vol.Name, "error", err)
+			}
+		case vol.Projected != nil:
+			for i, src := range vol.Projected.Sources {
+				if src.ConfigMap == nil {
+					continue
+				}
+				cmNS := types.NamespacedName{Namespace: cr.GetNamespace(), Name: src.ConfigMap.Name}
+				cm, err := GetConfigMap(ctx, client, cmNS)
+				if err != nil {
+					logger.ErrorContext(ctx, "Failed to fetch projected ConfigMap for restart annotation", "volume", vol.Name, "configMap", src.ConfigMap.Name, "error", err)
+					continue
+				}
+				if cm.Annotations[splcommon.ConfigMapRestartOptOutAnnotation] == "false" {
+					continue
+				}
+				hash, err := GetConfigMapDataHash(ctx, client, cmNS, src.ConfigMap.Items)
+				if err == nil {
+					// Build a collision-free annotation key suffix ≤63 chars.
+					// vol.Name is a DNS label (≤63 chars); appending ".<n>" can push past the
+					// Kubernetes annotation name-segment limit. When the combined length exceeds
+					// 63, replace vol.Name with "p.<8-hex-digest>" — the "p." prefix contains a
+					// dot, which is legal in annotation name segments but cannot appear in a
+					// Kubernetes DNS-label volume name, making hashed keys structurally distinct
+					// from any real short volume name and preventing false collisions.
+					idxStr := strconv.Itoa(i)
+					volNamePart := vol.Name
+					if len(volNamePart)+1+len(idxStr) > 63 {
+						sum := sha256.Sum256([]byte(vol.Name))
+						volNamePart = "p." + hex.EncodeToString(sum[:])[:8]
+					}
+					podTemplateSpec.ObjectMeta.Annotations[splcommon.ConfigMapRevAnnotationPrefix+volNamePart+"."+idxStr] = hash
+				} else {
+					logger.ErrorContext(ctx, "Failed to get ConfigMap data hash for projected annotation", "volume", vol.Name, "configMap", src.ConfigMap.Name, "error", err)
+				}
+			}
+		}
+	}
+
+}
+
+// getKVServiceEnv provides the KVService container entrypoint settings.
+func getKVServiceEnv(splunkDefaults string) []corev1.EnvVar {
+	env := []corev1.EnvVar{
+		{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
+		{Name: "SPLUNK_START_ARGS", Value: "--accept-license"},
+		{Name: "SPLUNK_DEFAULTS_URL", Value: splunkDefaults},
+		{Name: "SPLUNK_HOME_OWNERSHIP_ENFORCEMENT", Value: "false"},
+		{Name: "SPLUNK_ROLE", Value: splcommon.SplunkKVService.ToRole()},
+		{Name: "SPLUNK_DECLARATIVE_ADMIN_PASSWORD", Value: "true"},
+		{Name: livenessProbeDriverPathEnv, Value: splutil.GetLivenessDriverFilePath()},
+		{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
+		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
+		{Name: "SPLUNK_NODE_SIDECAR_POSTGRES_DISABLED", Value: "true"},
+	}
+	return env
+}
+
+// ApplyKVServiceConfig reconciles KVService's namespace secret and configuration maps.
+func ApplyKVServiceConfig(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService) error {
+	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, cr.Namespace)
+	if err != nil {
+		return err
+	}
+	if err := splutil.SetSecretOwnerRef(ctx, c, secret.Name, cr); err != nil {
+		return err
+	}
+	if cr.Spec.Defaults != "" {
+		defaults := resources.GetSplunkDefaults(cr.Name, cr.Namespace, splcommon.SplunkKVService, cr.Spec.Defaults)
+		defaults.SetOwnerReferences(append(defaults.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
+		if _, err := ApplyConfigMap(ctx, c, defaults); err != nil {
+			return err
+		}
+	}
+	return reconcileCRSpecificConfigMap(ctx, c, cr)
 }

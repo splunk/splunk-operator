@@ -19,9 +19,13 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func TestGetStandardK8sServiceForKVServiceDeployment(t *testing.T) {
@@ -135,4 +139,40 @@ func TestKVServicePodSettings(t *testing.T) {
 			t.Errorf("HTTP health endpoint lost: %+v", probe)
 		}
 	}
+}
+
+func TestKVServiceDeploymentVolumesPortsAndSecurity(t *testing.T) {
+	cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "test"}}
+	mode := int32(0400)
+	cr.Spec.Volumes = []corev1.Volume{
+		{Name: "db-tls", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "db-tls"}}},
+		{Name: "config", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: "config"}, DefaultMode: &mode}}},
+	}
+	cr.Spec.Resources.Requests = corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")}
+	cr.Spec.ServiceTemplate.Spec.Ports = []corev1.ServicePort{{Name: "metrics", Port: 9090, TargetPort: intstr.FromInt(9091), Protocol: corev1.ProtocolTCP}}
+	SetKVServiceVolumeDefaults(&cr.Spec)
+	assert.Equal(t, corev1.SecretVolumeSourceDefaultMode, *cr.Spec.Volumes[0].Secret.DefaultMode)
+	assert.Equal(t, mode, *cr.Spec.Volumes[1].ConfigMap.DefaultMode, "explicit volume permissions must be preserved")
+	before := cr.DeepCopy()
+	deployment := NewKVServiceDeployment(cr)
+	pod := &deployment.Spec.Template.Spec
+	require.Len(t, pod.Containers, 1)
+	container := &pod.Containers[0]
+	assert.Equal(t, cr.Spec.Resources, container.Resources)
+	assert.Contains(t, container.Ports, corev1.ContainerPort{Name: "http-splunkv", ContainerPort: splcommon.KVServicePort, Protocol: corev1.ProtocolTCP})
+	assert.Contains(t, container.Ports, corev1.ContainerPort{Name: "metrics", ContainerPort: 9091, Protocol: corev1.ProtocolTCP})
+	assert.Equal(t, cr.Spec.Volumes, pod.Volumes)
+	assert.Contains(t, container.VolumeMounts, corev1.VolumeMount{Name: "db-tls", MountPath: "/mnt/db-tls"})
+	require.NotNil(t, pod.SecurityContext)
+	assert.Equal(t, int64(41812), *pod.SecurityContext.RunAsUser)
+	assert.Equal(t, int64(41812), *pod.SecurityContext.FSGroup)
+	require.NotNil(t, container.SecurityContext)
+	assert.True(t, *container.SecurityContext.RunAsNonRoot)
+	assert.False(t, *container.SecurityContext.AllowPrivilegeEscalation)
+	assert.False(t, *container.SecurityContext.Privileged)
+	assert.Equal(t, corev1.SeccompProfileTypeRuntimeDefault, container.SecurityContext.SeccompProfile.Type)
+	assert.Contains(t, container.SecurityContext.Capabilities.Drop, corev1.Capability("ALL"))
+	assert.Equal(t, before, cr, "building the Deployment must not mutate the CR")
+	pod.Volumes[0].Secret.SecretName = "changed"
+	assert.Equal(t, "db-tls", cr.Spec.Volumes[0].Secret.SecretName)
 }

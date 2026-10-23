@@ -182,11 +182,6 @@ func ValidateKVStoreDefaultTypeExtraEnv(extraEnv []corev1.EnvVar) error {
 
 // ValidateImagePullSecrets sets default values for imagePullSecrets if not provided.
 func ValidateImagePullSecrets(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonSplunkSpec) error {
-	return ValidateWorkloadImagePullSecrets(ctx, c, cr, &spec.CommonWorkloadSpec)
-}
-
-// ValidateWorkloadImagePullSecrets checks referenced image credentials and normalizes an empty list.
-func ValidateWorkloadImagePullSecrets(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, spec *enterpriseApi.CommonWorkloadSpec) error {
 	logger := logging.FromContext(ctx).With("func", "ValidateImagePullSecrets")
 	if len(spec.ImagePullSecrets) == 0 {
 		spec.ImagePullSecrets = nil

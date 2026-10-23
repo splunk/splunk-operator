@@ -16,14 +16,21 @@ package k8sops
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestGetKVServiceDeployment(t *testing.T) {
@@ -134,4 +141,77 @@ func TestGetKVServiceDeployment(t *testing.T) {
 	if len(deployment.OwnerReferences) == 0 {
 		t.Errorf("deployment owner references not set")
 	}
+}
+
+func TestKVServiceConfigurationAndConfigMapRollouts(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, enterpriseApi.AddToScheme(scheme))
+	cr := &enterpriseApi.KVService{
+		TypeMeta:   metav1.TypeMeta{Kind: "KVService", APIVersion: enterpriseApi.GroupVersion.String()},
+		ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "test", UID: "kvservice-id"},
+	}
+	cr.Spec.Defaults = "splunk:\n  hec:\n    enable: false\n"
+	cr.Spec.ExtraEnv = []corev1.EnvVar{{Name: "SPLUNK_ROLE", Value: "custom-role"}, {Name: "DB_HOST", Value: "postgres"}}
+	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "db-config", Namespace: cr.Namespace}, Data: map[string]string{"used": "first", "unused": "ignore"}}
+	cr.Spec.Volumes = []corev1.Volume{
+		{Name: "config", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
+			LocalObjectReference: corev1.LocalObjectReference{Name: cm.Name}, Items: []corev1.KeyToPath{{Key: "used", Path: "db"}},
+		}}},
+		{Name: strings.Repeat("p", 63), VolumeSource: corev1.VolumeSource{Projected: &corev1.ProjectedVolumeSource{Sources: []corev1.VolumeProjection{{ConfigMap: &corev1.ConfigMapProjection{
+			LocalObjectReference: corev1.LocalObjectReference{Name: cm.Name}, Items: []corev1.KeyToPath{{Key: "used", Path: "db"}},
+		}}}}}},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, cm).Build()
+	require.NoError(t, ApplyKVServiceConfig(ctx, c, cr))
+	before := cr.DeepCopy()
+	deployment, err := GetKVServiceDeployment(ctx, c, cr)
+	require.NoError(t, err)
+	assert.Equal(t, before, cr, "resolving configuration must not mutate the CR")
+	require.Len(t, deployment.Spec.Template.Spec.Containers, 1)
+	container := deployment.Spec.Template.Spec.Containers[0]
+	assert.Contains(t, container.Env, corev1.EnvVar{Name: "SPLUNK_DEFAULTS_URL", Value: "/mnt/splunk-defaults/default.yml,/mnt/splunk-secrets/default.yml"})
+	assert.Contains(t, container.Env, corev1.EnvVar{Name: "SPLUNK_ROLE", Value: "custom-role"})
+	assert.Contains(t, container.Env, corev1.EnvVar{Name: "DB_HOST", Value: "postgres"})
+	roleCount := 0
+	for _, env := range container.Env {
+		if env.Name == "SPLUNK_ROLE" {
+			roleCount++
+		}
+	}
+	assert.Equal(t, 1, roleCount, "user environment overrides must not create duplicate entries")
+	assert.Contains(t, container.VolumeMounts, corev1.VolumeMount{Name: "mnt-splunk-secrets", MountPath: "/mnt/splunk-secrets"})
+	assert.Contains(t, container.VolumeMounts, corev1.VolumeMount{Name: "mnt-splunk-defaults", MountPath: "/mnt/splunk-defaults"})
+	first := deployment.Spec.Template.Annotations
+	assert.NotEmpty(t, first["defaultConfigRev"])
+	assert.NotEmpty(t, first[splcommon.ConfigMapRevAnnotationPrefix+"config"])
+	projectedKey := ""
+	for key := range first {
+		if strings.HasPrefix(key, splcommon.ConfigMapRevAnnotationPrefix+"p.") {
+			projectedKey = key
+		}
+	}
+	require.NotEmpty(t, projectedKey, "long projected volume names need a valid restart annotation")
+	assert.LessOrEqual(t, len(strings.SplitN(projectedKey, "/", 2)[1]), 63)
+	cmKey := types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}
+	require.NoError(t, c.Get(ctx, cmKey, cm))
+	cm.Labels = map[string]string{"metadata": "updated"}
+	cm.Data["unused"] = "changed"
+	require.NoError(t, c.Update(ctx, cm))
+	unchanged, err := GetKVServiceDeployment(ctx, c, cr)
+	require.NoError(t, err)
+	assert.Equal(t, first, unchanged.Spec.Template.Annotations, "metadata and unmounted keys must not trigger a rollout")
+	cm.Data["used"] = "second"
+	require.NoError(t, c.Update(ctx, cm))
+	changed, err := GetKVServiceDeployment(ctx, c, cr)
+	require.NoError(t, err)
+	assert.NotEqual(t, first[splcommon.ConfigMapRevAnnotationPrefix+"config"], changed.Spec.Template.Annotations[splcommon.ConfigMapRevAnnotationPrefix+"config"])
+	assert.NotEqual(t, first[projectedKey], changed.Spec.Template.Annotations[projectedKey])
+	cm.Annotations = map[string]string{splcommon.ConfigMapRestartOptOutAnnotation: "false"}
+	require.NoError(t, c.Update(ctx, cm))
+	optOut, err := GetKVServiceDeployment(ctx, c, cr)
+	require.NoError(t, err)
+	assert.NotContains(t, optOut.Spec.Template.Annotations, splcommon.ConfigMapRevAnnotationPrefix+"config")
+	assert.NotContains(t, optOut.Spec.Template.Annotations, projectedKey)
 }

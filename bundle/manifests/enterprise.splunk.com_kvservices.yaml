@@ -1295,12 +1295,16 @@ spec:
                 type: array
               livenessInitialDelaySeconds:
                 description: |-
-                  LivenessInitialDelaySeconds overrides the default 30-second liveness delay
-                  when livenessProbe.initialDelaySeconds is not specified.
+                  LivenessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) for the Liveness probe
+                  Note: If needed, Operator overrides with a higher value
                 format: int32
                 minimum: 0
                 type: integer
               livenessProbe:
+                default:
+                  failureThreshold: 3
+                  periodSeconds: 5
+                  timeoutSeconds: 1
                 description: |-
                   LivenessProbe overrides HTTP probe timings. Defaults are a 30-second delay,
                   a 1-second timeout, a 5-second period, and a failure threshold of 3.
@@ -1336,12 +1340,16 @@ spec:
                 type: object
               readinessInitialDelaySeconds:
                 description: |-
-                  ReadinessInitialDelaySeconds overrides the default 30-second readiness delay
-                  when readinessProbe.initialDelaySeconds is not specified.
+                  ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
+                  Note: If needed, Operator overrides with a higher value
                 format: int32
                 minimum: 0
                 type: integer
               readinessProbe:
+                default:
+                  failureThreshold: 3
+                  periodSeconds: 5
+                  timeoutSeconds: 1
                 description: |-
                   ReadinessProbe overrides HTTP probe timings. Defaults are a 30-second delay,
                   a 1-second timeout, a 5-second period, and a failure threshold of 3.

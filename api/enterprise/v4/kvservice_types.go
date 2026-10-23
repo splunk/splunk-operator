@@ -30,26 +30,16 @@ type KVServiceSpec struct {
 	// Common workload spec
 	CommonWorkloadSpec `json:",inline"`
 
-	// LivenessInitialDelaySeconds overrides the default 30-second liveness delay
-	// when livenessProbe.initialDelaySeconds is not specified.
-	// +optional
-	// +kubebuilder:validation:Minimum=0
-	LivenessInitialDelaySeconds int32 `json:"livenessInitialDelaySeconds,omitempty"`
-
-	// ReadinessInitialDelaySeconds overrides the default 30-second readiness delay
-	// when readinessProbe.initialDelaySeconds is not specified.
-	// +optional
-	// +kubebuilder:validation:Minimum=0
-	ReadinessInitialDelaySeconds int32 `json:"readinessInitialDelaySeconds,omitempty"`
-
 	// LivenessProbe overrides HTTP probe timings. Defaults are a 30-second delay,
 	// a 1-second timeout, a 5-second period, and a failure threshold of 3.
 	// +optional
+	// +kubebuilder:default:={"timeoutSeconds":1,"periodSeconds":5,"failureThreshold":3}
 	LivenessProbe *Probe `json:"livenessProbe,omitempty"`
 
 	// ReadinessProbe overrides HTTP probe timings. Defaults are a 30-second delay,
 	// a 1-second timeout, a 5-second period, and a failure threshold of 3.
 	// +optional
+	// +kubebuilder:default:={"timeoutSeconds":1,"periodSeconds":5,"failureThreshold":3}
 	ReadinessProbe *Probe `json:"readinessProbe,omitempty"`
 
 	// Replicas is the desired number of KVService pods. Defaults to 1 when omitted.

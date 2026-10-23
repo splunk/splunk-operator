@@ -275,11 +275,6 @@ func GetStandaloneExtraEnv(cr splcommon.MetaObject, replicas int32) []corev1.Env
 
 // SetVolumeDefaults sets default modes for Secret and ConfigMap volumes.
 func SetVolumeDefaults(spec *enterpriseApi.CommonSplunkSpec) {
-	SetWorkloadVolumeDefaults(&spec.CommonWorkloadSpec)
-}
-
-// SetWorkloadVolumeDefaults sets default modes for shared Secret and ConfigMap volumes.
-func SetWorkloadVolumeDefaults(spec *enterpriseApi.CommonWorkloadSpec) {
 	if spec.Volumes == nil {
 		spec.Volumes = []corev1.Volume{}
 	}
@@ -310,9 +305,6 @@ func GetSplunkDefaults(identifier, namespace string, instanceType splcommon.Inst
 
 // GetSplunkPorts returns ports for a Splunk instance.
 func GetSplunkPorts(instanceType splcommon.InstanceType) map[string]int {
-	if instanceType == splcommon.SplunkKVService {
-		return map[string]int{splutil.GetPortName("splunkv", "http"): splcommon.KVServicePort}
-	}
 	result := map[string]int{
 		splutil.GetPortName("splunkweb", "http"): 8000,
 		splutil.GetPortName("splunkd", "https"):  8089,
