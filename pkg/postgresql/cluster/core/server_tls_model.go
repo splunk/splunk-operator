@@ -315,7 +315,7 @@ func resolvedServerTLSUsages(usages []string) []string {
 	if len(usages) == 0 {
 		return []string{"digital signature", "key encipherment", "server auth"}
 	}
-	return append([]string(nil), usages...)
+	return slices.Clone(usages)
 }
 
 func resolvedServerTLSRetentionPolicy(certificates *platformv1alpha1.PostgresCertificateConfig) platformv1alpha1.PostgresCertificateRetentionPolicy {

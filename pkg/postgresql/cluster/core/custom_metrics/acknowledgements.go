@@ -122,7 +122,7 @@ func (f *acknowledgementFailure) addDetail(detail string) {
 }
 
 func (f acknowledgementFailure) message() string {
-	details := append([]string(nil), f.details...)
+	details := slices.Clone(f.details)
 	slices.Sort(details)
 	return joinDiagnostics(details)
 }
