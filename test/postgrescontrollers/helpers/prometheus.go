@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -172,6 +172,6 @@ func managedMetricFamilyNames(families MetricFamilies) []string {
 			result = append(result, name)
 		}
 	}
-	sort.Strings(result)
+	slices.Sort(result)
 	return result
 }

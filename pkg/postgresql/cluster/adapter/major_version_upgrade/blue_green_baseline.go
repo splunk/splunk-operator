@@ -15,7 +15,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -51,7 +51,7 @@ func (p sourceBaseline) secretFingerprint(ctx context.Context, name string) (pla
 	for key := range secret.Data {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	for _, key := range keys {
 		digest.Write([]byte(key))
 		digest.Write([]byte{0})
@@ -92,7 +92,7 @@ func credentialSecretNames(source *cnpgv1.Cluster, databases []declaredDatabase,
 			ordered = append(ordered, name)
 		}
 	}
-	sort.Strings(ordered)
+	slices.Sort(ordered)
 	return ordered
 }
 

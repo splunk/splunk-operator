@@ -20,7 +20,7 @@ package custommetrics
 import (
 	"fmt"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
@@ -61,7 +61,7 @@ func (Parser) Parse(raw []byte, source mtypes.QuerySource, targetDB *string) ([]
 	for name := range entries {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 
 	resolved := make([]mtypes.ResolvedQuery, 0, len(entries))
 	var validationIssues []string

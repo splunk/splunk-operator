@@ -15,7 +15,7 @@ package helpers
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/onsi/ginkgo/v2"
 
@@ -95,7 +95,7 @@ func CustomMetricsFailureDump(
 				for key := range entries {
 					keys = append(keys, key)
 				}
-				sort.Strings(keys)
+				slices.Sort(keys)
 			}
 			owner := generated.GetOwnerReferences()
 			fmt.Fprintf(ginkgo.GinkgoWriter, "generated ConfigMap %s ownerReferences=%v resourceVersion=%s hash=%s queryKeys=%v\n",

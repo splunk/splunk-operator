@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sort"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -264,7 +263,7 @@ func serverTLSNames(cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig
 	if cluster.Spec.TLS != nil {
 		names = append(names, cluster.Spec.TLS.ServerAltDNSNames...)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return slices.Compact(names)
 }
 
@@ -300,8 +299,8 @@ func completeServerTLSNames(desired, observed []string, environmentName, namespa
 			retained = append(retained, dnsName)
 		}
 	}
-	sort.Strings(all)
-	sort.Strings(retained)
+	slices.Sort(all)
+	slices.Sort(retained)
 	return slices.Compact(all), slices.Compact(retained)
 }
 
@@ -375,7 +374,7 @@ func certManagerPoolerSANs(cluster *platformv1alpha1.PostgresCluster, cfg *Merge
 	if poolerReadOnlyWanted(cfg.Spec.ConnectionPooler) {
 		poolerNames = append(poolerNames, serviceDNSNames(environmentName+defaultPoolerSuffix+readOnlyEndpoint, cluster.Namespace)...)
 	}
-	sort.Strings(poolerNames)
+	slices.Sort(poolerNames)
 	return poolerNames
 }
 

@@ -16,7 +16,7 @@ package postgrescontrollers
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -463,7 +463,7 @@ func upgradeBackupSummary(ctx SpecContext, kubeClient client.Client, clusterKey 
 	if len(parts) == 0 {
 		return "none"
 	}
-	sort.Strings(parts)
+	slices.Sort(parts)
 	return strings.Join(parts, "; ")
 }
 
