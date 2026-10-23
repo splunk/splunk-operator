@@ -682,6 +682,6 @@ FROM (
 ) definitions`
 
 func isDuplicateRole(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "42710"
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	return ok && pgErr.Code == "42710"
 }
