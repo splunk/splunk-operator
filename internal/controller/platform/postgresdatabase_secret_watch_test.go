@@ -12,7 +12,7 @@ package controller
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"testing"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -118,9 +118,9 @@ func TestExtractExternalRoleSecretNames(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := extractExternalRoleSecretNames(tc.obj)
-			sort.Strings(got)
+			slices.Sort(got)
 			want := append([]string(nil), tc.want...)
-			sort.Strings(want)
+			slices.Sort(want)
 			assert.Equal(t, want, got)
 		})
 	}
@@ -160,7 +160,7 @@ func TestEnqueuePostgresDatabasesForExternalSecret(t *testing.T) {
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: admSecret, Namespace: ns}})
 		require.Len(t, reqs, 2)
 		got := []string{reqs[0].Name, reqs[1].Name}
-		sort.Strings(got)
+		slices.Sort(got)
 		assert.Equal(t, []string{"pd-one", "pd-two"}, got)
 	})
 
@@ -216,7 +216,7 @@ func TestEnqueuePostgresDatabasesForExternalSecret(t *testing.T) {
 		reqs := r.enqueuePostgresDatabasesForExternalSecret(context.Background(), esoOwned)
 		require.Len(t, reqs, 2, "ESO-owned external secret must enqueue every referencing PD")
 		got := []string{reqs[0].Name, reqs[1].Name}
-		sort.Strings(got)
+		slices.Sort(got)
 		assert.Equal(t, []string{"pd-one", "pd-two"}, got)
 	})
 

@@ -19,9 +19,10 @@ limitations under the License.
 package cnpg
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	backuptypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/backup"
@@ -252,12 +253,8 @@ func (a *backupBackend) ListBackups(ctx context.Context, owner client.Object, cn
 	}
 	// Most recent first; name as secondary tiebreaker for deterministic order when
 	// StartedAt is equal (including two nil values for not-yet-started backups).
-	sort.SliceStable(results, func(i, j int) bool {
-		si, sj := backupStartUnix(results[i]), backupStartUnix(results[j])
-		if si != sj {
-			return si > sj
-		}
-		return results[i].Name < results[j].Name
+	slices.SortStableFunc(results, func(a, b backuptypes.BackupResult) int {
+		return cmp.Or(cmp.Compare(backupStartUnix(b), backupStartUnix(a)), cmp.Compare(a.Name, b.Name))
 	})
 	return results, nil
 }

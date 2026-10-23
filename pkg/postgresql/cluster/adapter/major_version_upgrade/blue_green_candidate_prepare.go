@@ -16,7 +16,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	cnpgutils "github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
@@ -248,8 +248,8 @@ func (p *BlueGreenCandidatePreparer) buildCandidate(ctx context.Context, source 
 	for role := range roles {
 		roleNames = append(roleNames, role)
 	}
-	sort.Strings(databaseNames)
-	sort.Strings(roleNames)
+	slices.Sort(databaseNames)
+	slices.Sort(roleNames)
 	if len(databaseNames) == 0 {
 		return nil, fmt.Errorf("%w: no managed databases are available for schema-only import", mvutypes.ErrUpgradeFlowFailed)
 	}

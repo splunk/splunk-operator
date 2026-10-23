@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"maps"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -845,7 +845,7 @@ func validatePostgreSQLConfigNoCNPGFixedKeys(params map[string]string) error {
 	if len(invalid) == 0 {
 		return nil
 	}
-	sort.Strings(invalid)
+	slices.Sort(invalid)
 	return fmt.Errorf("postgresqlConfig must not set CNPG-managed parameters: %s", strings.Join(invalid, ", "))
 }
 
@@ -1397,7 +1397,7 @@ func computeDesiredPoolerSANSet(poolerEnabled bool, current []string, clusterNam
 	for s := range set {
 		out = append(out, s)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

@@ -11,12 +11,13 @@ You may obtain a copy of the License at
 package majorupgradeadapter
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -511,11 +512,8 @@ func listManagedDatabases(ctx context.Context, c client.Client, key types.Namesp
 			result = append(result, declaredDatabase{parent: parent, name: database.Name, definition: database})
 		}
 	}
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].parent.Name == result[j].parent.Name {
-			return result[i].name < result[j].name
-		}
-		return result[i].parent.Name < result[j].parent.Name
+	slices.SortFunc(result, func(a, b declaredDatabase) int {
+		return cmp.Or(cmp.Compare(a.parent.Name, b.parent.Name), cmp.Compare(a.name, b.name))
 	})
 	return result, nil
 }
