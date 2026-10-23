@@ -365,8 +365,8 @@ func TestSecretModel_ExternalSecretActuate(t *testing.T) {
 			"a non-conflict status error is not a pure conflict")
 		assert.ErrorIs(t, err, transient,
 			"the returned error must carry the status-write failure so controller-runtime retries")
-		var missingSecretErr secretReconcileError
-		assert.True(t, errors.As(err, &missingSecretErr),
+		_, isSecretError := errors.AsType[secretReconcileError](err)
+		assert.True(t, isSecretError,
 			"the joined error must still carry the missing-secret cause")
 		assert.Equal(t, pgcconstants.Failed, health.State)
 		assert.Equal(t, reasonExternalSecretMissing, health.Reason)
@@ -478,8 +478,8 @@ func TestSecretModel_ExternalSecretActuate(t *testing.T) {
 		health, err := s.Observe(t.Context(), reconcileErr)
 
 		require.Error(t, err)
-		var reconcileErrType secretReconcileError
-		assert.False(t, errors.As(err, &reconcileErrType),
+		_, isSecretError := errors.AsType[secretReconcileError](err)
+		assert.False(t, isSecretError,
 			"a non-NotFound/transient Get error must not be classified as secretReconcileError")
 		assert.False(t, errors.Is(err, reconcile.TerminalError(nil)),
 			"a transient API error must stay requeueable, never terminal")

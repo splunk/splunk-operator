@@ -86,8 +86,8 @@ func (e *stepError) Unwrap() error { return e.err }
 // IsEndpointResolutionFailure reports whether err was produced while resolving
 // endpoints rather than while building or applying a ConfigMap.
 func IsEndpointResolutionFailure(err error) bool {
-	var stepErr *stepError
-	return errors.As(err, &stepErr) && stepErr.kind == failureEndpoint
+	stepErr, ok := errors.AsType[*stepError](err)
+	return ok && stepErr.kind == failureEndpoint
 }
 
 // Step reconciles one connection-metadata unit.

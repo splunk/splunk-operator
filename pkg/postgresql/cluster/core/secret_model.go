@@ -103,8 +103,7 @@ func (s *secretModel) Observe(_ context.Context, reconcileErr error) (componentH
 	// retrying cannot fix them: terminalize and let the external-Secret watch (or,
 	// for an empty ref, a spec edit) drive recovery. Transient Get failures are
 	// returned untyped and stay retryable.
-	var se secretReconcileError
-	if errors.As(reconcileErr, &se) {
+	if _, ok := errors.AsType[secretReconcileError](reconcileErr); ok {
 		switch {
 		case apierrors.IsConflict(statusErr):
 			return health, statusErr
@@ -124,9 +123,8 @@ func (s *secretModel) computeHealth(reconcileErr error) (componentHealth, error)
 
 		// One typed carrier for both "missing" and "present but invalid": the
 		// embedded reason drives the failed health directly, so a single
-		// errors.As replaces the former missing/invalid type split.
-		var secretErr secretReconcileError
-		if errors.As(reconcileErr, &secretErr) {
+		// errors.AsType replaces the former missing/invalid type split.
+		if secretErr, ok := errors.AsType[secretReconcileError](reconcileErr); ok {
 			reason := secretErr.reason
 			if reason == reasonExternalSecretInvalid {
 				reason = reasonSuperUserSecretFailed
