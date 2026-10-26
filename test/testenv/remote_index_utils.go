@@ -3,10 +3,14 @@ package testenv
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 
+	"k8s.io/apimachinery/pkg/util/wait"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -72,6 +76,52 @@ func RollHotToWarm(ctx context.Context, deployment *Deployment, podName string, 
 	}
 	logf.Log.Info("Command executed on pod", "pod", podName, "command", command, "stdin", stdin, "stdout", stdout, "stderr", stderr)
 	return true
+}
+
+// WaitForRemoteBucket waits until Splunk can list receipt.json for one exact
+// SmartStore bucket. The command runs inside the indexer, so it exercises the
+// configured remote endpoint and the pod's workload identity without exposing
+// cloud credentials to the test runner.
+func WaitForRemoteBucket(
+	ctx context.Context,
+	deployment *Deployment,
+	podName string,
+	bucketID string,
+	timeout time.Duration,
+) error {
+	if strings.TrimSpace(bucketID) == "" {
+		return fmt.Errorf("bucket ID must not be empty")
+	}
+
+	var lastFailure string
+	err := wait.PollUntilContextTimeout(ctx, PollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		stdout, stderr, execErr := deployment.PodExecCommand(
+			ctx,
+			podName,
+			[]string{"/opt/splunk/bin/splunk", "cmd", "splunkd", "rfs", "ls", "bucket:" + bucketID},
+			"",
+			false,
+		)
+		if execErr != nil {
+			lastFailure = fmt.Sprintf("command failed: %v: %s", execErr, strings.TrimSpace(stderr))
+			return false, nil
+		}
+		if !strings.Contains(stdout, "/receipt.json") {
+			lastFailure = "remote listing did not contain receipt.json"
+			return false, nil
+		}
+		return true, nil
+	})
+	if err != nil {
+		return fmt.Errorf(
+			"wait for SmartStore bucket %q on pod %s: %w (last observation: %s)",
+			bucketID,
+			podName,
+			err,
+			lastFailure,
+		)
+	}
+	return nil
 }
 
 // GenerateIndexVolumeSpec return VolumeSpec struct with given values

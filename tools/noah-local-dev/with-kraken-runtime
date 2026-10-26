@@ -1,0 +1,87 @@
+#!/bin/sh
+# Validate the saved Kraken runtime contract, then run a command with the
+# non-secret ServiceAccount and S3/SQS coordinates exported for fixtures and
+# Ginkgo tests. Values are assigned before export so a failed jq lookup cannot
+# be hidden by the shell's export exit status.
+
+set -eu
+
+fail() {
+    printf '%s\n' "$*" >&2
+    exit 1
+}
+
+test "$#" -ge 2 || fail 'Usage: with-kraken-runtime <runtime.json> <command> [args...]'
+
+runtime_file=$1
+shift
+
+test -s "$runtime_file" || fail "Kraken runtime metadata not found: $runtime_file"
+
+required_value() {
+    selector=$1
+    field_name=$2
+    jq -er "$selector | strings | select(length > 0)" "$runtime_file" ||
+        fail "Kraken runtime metadata is missing $field_name."
+}
+
+NOAH_SPLUNK_SERVICE_ACCOUNT=$(required_value '.service_account.name' 'service_account.name')
+NOAH_SMARTSTORE_AUTH_REGION=$(required_value '.smartbus.queue.auth_region' 'smartbus.queue.auth_region')
+NOAH_SMARTSTORE_OBJECT_STORE_PATH=$(required_value '.smartbus.object_storage.s3_uri' 'smartbus.object_storage.s3_uri')
+NOAH_SMARTSTORE_OBJECT_STORE_ENDPOINT=$(required_value '.smartbus.object_storage.endpoint' 'smartbus.object_storage.endpoint')
+NOAH_SMARTSTORE_QUEUE_ENDPOINT=$(required_value '.smartbus.queue.endpoint' 'smartbus.queue.endpoint')
+NOAH_SMARTSTORE_QUEUE_URL=$(required_value '.smartbus.queue.url' 'smartbus.queue.url')
+
+require_scheme() {
+    field_name=$1
+    value=$2
+    scheme=$3
+    case "$value" in
+        "$scheme"://?*) ;;
+        *) fail "Kraken $field_name must use $scheme://." ;;
+    esac
+
+    remainder=${value#"$scheme"://}
+    case "$remainder" in
+        "" | /* | *@* | *\?* | *\#* | *[[:space:]]*)
+            fail "Kraken $field_name must contain a host and no credentials, query, fragment, or whitespace."
+            ;;
+    esac
+}
+
+require_external_endpoint() {
+    field_name=$1
+    value=$2
+    require_scheme "$field_name" "$value" https
+    if printf '%s\n' "$value" | grep -qi minio; then
+        fail "Kraken $field_name must not reference MinIO."
+    fi
+}
+
+require_scheme 'smartbus.object_storage.s3_uri' "$NOAH_SMARTSTORE_OBJECT_STORE_PATH" s3
+require_external_endpoint 'smartbus.object_storage.endpoint' "$NOAH_SMARTSTORE_OBJECT_STORE_ENDPOINT"
+require_external_endpoint 'smartbus.queue.endpoint' "$NOAH_SMARTSTORE_QUEUE_ENDPOINT"
+require_external_endpoint 'smartbus.queue.url' "$NOAH_SMARTSTORE_QUEUE_URL"
+
+export NOAH_SPLUNK_SERVICE_ACCOUNT
+export NOAH_SMARTSTORE_AUTH_REGION
+export NOAH_SMARTSTORE_OBJECT_STORE_PATH
+export NOAH_SMARTSTORE_OBJECT_STORE_ENDPOINT
+export NOAH_SMARTSTORE_QUEUE_ENDPOINT
+export NOAH_SMARTSTORE_QUEUE_URL
+
+NOAH_TEST_SPLUNK_SERVICE_ACCOUNT=$NOAH_SPLUNK_SERVICE_ACCOUNT
+NOAH_TEST_SMARTSTORE_AUTH_REGION=$NOAH_SMARTSTORE_AUTH_REGION
+NOAH_TEST_SMARTSTORE_OBJECT_STORE_PATH=$NOAH_SMARTSTORE_OBJECT_STORE_PATH
+NOAH_TEST_SMARTSTORE_OBJECT_STORE_ENDPOINT=$NOAH_SMARTSTORE_OBJECT_STORE_ENDPOINT
+NOAH_TEST_SMARTSTORE_QUEUE_ENDPOINT=$NOAH_SMARTSTORE_QUEUE_ENDPOINT
+NOAH_TEST_SMARTSTORE_QUEUE_URL=$NOAH_SMARTSTORE_QUEUE_URL
+
+export NOAH_TEST_SPLUNK_SERVICE_ACCOUNT
+export NOAH_TEST_SMARTSTORE_AUTH_REGION
+export NOAH_TEST_SMARTSTORE_OBJECT_STORE_PATH
+export NOAH_TEST_SMARTSTORE_OBJECT_STORE_ENDPOINT
+export NOAH_TEST_SMARTSTORE_QUEUE_ENDPOINT
+export NOAH_TEST_SMARTSTORE_QUEUE_URL
+
+exec "$@"

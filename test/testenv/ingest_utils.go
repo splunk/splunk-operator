@@ -157,16 +157,56 @@ EOF
 	return nil
 }
 
-// IngestFileViaOneshot ingests a file into an instance using the oneshot CLI
+// IngestFileViaOneshot copies and ingests a file at the same path in the target pod.
 func IngestFileViaOneshot(ctx context.Context, deployment *Deployment, logFile string, indexName string, podName string) error {
+	return IngestFileViaOneshotAtPath(ctx, deployment, logFile, logFile, indexName, podName)
+}
+
+// IngestFileViaOneshotAtPath copies a local file to remoteFile in the target pod
+// and submits that remote path to Splunk's oneshot input.
+func IngestFileViaOneshotAtPath(
+	ctx context.Context,
+	deployment *Deployment,
+	localFile string,
+	remoteFile string,
+	indexName string,
+	podName string,
+) error {
+	return ingestFileViaOneshotAtPath(ctx, deployment, localFile, remoteFile, indexName, "", podName)
+}
+
+// IngestFileViaOneshotAtPathWithSourcetype copies and ingests a local file at
+// remoteFile with an explicit sourcetype. A fixed sourcetype makes test data
+// independently searchable without relying on filename-based detection.
+func IngestFileViaOneshotAtPathWithSourcetype(
+	ctx context.Context,
+	deployment *Deployment,
+	localFile string,
+	remoteFile string,
+	indexName string,
+	sourcetype string,
+	podName string,
+) error {
+	return ingestFileViaOneshotAtPath(ctx, deployment, localFile, remoteFile, indexName, sourcetype, podName)
+}
+
+func ingestFileViaOneshotAtPath(
+	ctx context.Context,
+	deployment *Deployment,
+	localFile string,
+	remoteFile string,
+	indexName string,
+	sourcetype string,
+	podName string,
+) error {
 
 	// Send it to the instance
-	resp, stderr, cpErr := CopyFileToPod(ctx, deployment, podName, logFile, logFile)
+	resp, stderr, cpErr := CopyFileToPod(ctx, deployment, podName, localFile, remoteFile)
 	if cpErr != nil {
-		logf.Log.Error(cpErr, "Failed File Copy to pod", "logFile", logFile, "podName", podName, "stderr", stderr)
+		logf.Log.Error(cpErr, "Failed File Copy to pod", "localFile", localFile, "remoteFile", remoteFile, "podName", podName, "stderr", stderr)
 		return cpErr
 	}
-	logf.Log.Info("File Copied Successfully", "logFile", logFile, "resp", resp)
+	logf.Log.Info("File Copied Successfully", "localFile", localFile, "remoteFile", remoteFile, "resp", resp)
 
 	// oneshot log into specified index
 	var addOneshotCmd strings.Builder
@@ -175,7 +215,11 @@ func IngestFileViaOneshot(ctx context.Context, deployment *Deployment, logFile s
 	password := "$(cat /mnt/splunk-secrets/password) "
 	splunkCmd := "add oneshot"
 
-	fmt.Fprintf(&addOneshotCmd, "%s %s %s -index %s -auth %s:%s", splunkBin, splunkCmd, logFile, indexName, username, password)
+	fmt.Fprintf(&addOneshotCmd, "%s %s %s -index %s", splunkBin, splunkCmd, remoteFile, indexName)
+	if sourcetype != "" {
+		fmt.Fprintf(&addOneshotCmd, " -sourcetype %s", sourcetype)
+	}
+	fmt.Fprintf(&addOneshotCmd, " -auth %s:%s", username, password)
 	command := []string{"/bin/bash"}
 	stdin := addOneshotCmd.String()
 	addOneshotResp, stderr, err := deployment.PodExecCommand(ctx, podName, command, stdin, false)
@@ -185,13 +229,13 @@ func IngestFileViaOneshot(ctx context.Context, deployment *Deployment, logFile s
 	}
 
 	// Validate the expected CLI response
-	expectedResp := fmt.Sprintf("Oneshot '%s' added", logFile)
+	expectedResp := fmt.Sprintf("Oneshot '%s' added", remoteFile)
 	if !strings.Contains(addOneshotResp, expectedResp) {
-		err := fmt.Errorf("unexpected response to add oneshot %q to index %q on pod %s: %q", logFile, indexName, podName, addOneshotResp)
+		err := fmt.Errorf("unexpected response to add oneshot %q to index %q on pod %s: %q", remoteFile, indexName, podName, addOneshotResp)
 		logf.Log.Error(err, "Unexpected response to add oneshot to splunk", "pod", podName, "addOneshotResp", addOneshotResp, "expectedResp", expectedResp)
 		return err
 	}
-	logf.Log.Info("File Ingested via add oneshot Successfully", "logFile", logFile, "addOneshotResp", addOneshotResp)
+	logf.Log.Info("File accepted by add oneshot", "remoteFile", remoteFile, "addOneshotResp", addOneshotResp)
 	return nil
 }
 

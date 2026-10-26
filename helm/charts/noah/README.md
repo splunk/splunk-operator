@@ -6,7 +6,8 @@ vCluster:
 - one Noah server;
 - a PostgreSQL 15 StatefulSet with persistent storage;
 - an ephemeral Redis instance;
-- a single-node MinIO SmartStore service with persistent storage; and
+- an optional single-node MinIO SmartStore fallback with persistent storage;
+  and
 - the Noah migration image as an init container.
 
 It deliberately excludes ingress, a load balancer, Istio, autoscaling, a Pod
@@ -16,9 +17,10 @@ not require Vault or Noah's tenant-lifecycle SQS queue. Local mode reads optiona
 per-tenant overrides from the chart-managed `data/config.yaml`; the default file
 is an empty map.
 
-Kraken's SmartBus SQS queue and S3 bucket are separate from Noah. Splunk
-workloads consume those resources through the `splunk-runtime` ServiceAccount;
-Noah neither uses that ServiceAccount nor accesses SmartBus.
+Kraken's SmartBus SQS queue and S3 bucket are separate from Noah. The bundled
+integration workflow reuses them as the Indexers' SmartStore transport through
+the `splunk-runtime` ServiceAccount; Noah neither uses that ServiceAccount nor
+accesses the AWS resources.
 
 All chart workloads select and tolerate Kraken's `workload=splunk` node pool,
 matching the placement used by vCluster CoreDNS and Splunk workloads. This is
@@ -33,9 +35,10 @@ make noah-local-cluster
 ```
 
 Then install Noah in `splunk-operator`. Cluster setup adds Kraken's
-deployment-scoped Artifactory Secret to that namespace and its `default`
-ServiceAccount, which all chart workloads use. No separate manual copy, rename
-or pod-level reference is required:
+deployment-scoped Artifactory Secret to that namespace and to the ServiceAccounts
+used by Noah and Splunk. No separate manual copy, rename or pod-level reference
+is required. This Make target disables the chart's MinIO fallback because the
+C3 fixture uses the AWS resources provisioned with the Kraken deployment:
 
 ```console
 make noah-local-deploy
@@ -95,18 +98,22 @@ kubectl --context kraken -n splunk-operator get secret noah-database \
 To pin a known value instead, set it in an untracked values file and pass it
 with `--values`. Do not commit real credentials.
 
-MinIO provides the S3-compatible remote store required for an end-to-end Noah
-bucket-routing test. The chart creates the `noah-smartstore` bucket and exposes
-it at `http://noah-minio:9000`. Its credentials are stored in the `noah-minio`
-Secret and preserved across Helm upgrades. The bundled C3 fixture uses a
-cluster-specific `s3://noah-smartstore/c3` path; do not share that path
-with another active indexer cluster.
+MinIO is a fallback for chart users who do not have external object storage.
+When `minio.enabled=true` (the chart default), the chart creates the
+`noah-smartstore` bucket and exposes it at `http://noah-minio:9000`. Its
+credentials are stored in the `noah-minio` Secret and preserved across Helm
+upgrades.
 
 `minio.auth.rootPassword` is also empty by default and generated on first
 install. Set it in an untracked values file only if a known local credential is
 needed. The pinned MinIO images are intended only for this isolated development
 environment, and MinIO is not exposed outside the vCluster.
 
-Create the Splunk custom resources in the same namespace using Kraken's
-SmartBus-enabled `splunk-runtime` ServiceAccount. A locally run operator can
-watch `splunk-operator` without running inside the vCluster.
+The Kraken integration workflow sets `minio.enabled=false`, renders the Splunk
+custom resources with that deployment's S3 and SQS coordinates, and assigns the
+`splunk-runtime` ServiceAccount only to the IndexerCluster. A locally run
+operator can watch `splunk-operator` without running inside the vCluster.
+
+Disabling MinIO removes its chart-managed workloads and Service but intentionally
+does not delete an existing StatefulSet PVC. Delete that retained development
+PVC only after confirming its data is no longer required.

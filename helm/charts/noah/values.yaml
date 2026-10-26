@@ -103,6 +103,9 @@ redis:
       memory: 256Mi
 
 minio:
+  # Local S3-compatible fallback. The Kraken workflow disables this and uses
+  # the deployment-owned AWS resources returned by `kraken connection`.
+  enabled: true
   image:
     repository: docker-hub.repo.splunkdev.net/minio/minio
     tag: RELEASE.2025-09-07T16-13-09Z

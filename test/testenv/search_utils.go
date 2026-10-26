@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -80,6 +81,42 @@ func PerformSearchSync(ctx context.Context, deployment *Deployment, podName stri
 	}
 	logf.Log.Info("Output of search Query", "search", search, "output", resp)
 	return resp, nil
+}
+
+// ParseSearchExportResults decodes all result rows from a synchronous Splunk
+// search export response into the caller-provided type. The export endpoint
+// emits newline-delimited JSON and can include records without a result, such
+// as informational messages.
+func ParseSearchExportResults[T any](response string) ([]T, error) {
+	results := make([]T, 0)
+
+	for lineNumber, line := range strings.Split(response, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		var row struct {
+			Result json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal([]byte(line), &row); err != nil {
+			return nil, fmt.Errorf("parse search export line %d: %w", lineNumber+1, err)
+		}
+		if len(row.Result) == 0 || string(row.Result) == "null" {
+			continue
+		}
+
+		var result T
+		if err := json.Unmarshal(row.Result, &result); err != nil {
+			return nil, fmt.Errorf("parse search export result on line %d: %w", lineNumber+1, err)
+		}
+		results = append(results, result)
+	}
+
+	if len(results) == 0 {
+		return nil, fmt.Errorf("search export returned no result rows")
+	}
+	return results, nil
 }
 
 // PerformSearchReq makes a search request for a search to be performed.  Returns a sid to be used to check for status and results

@@ -23,11 +23,13 @@ spec:
         secretName: splunk-license
   licenseUrl: /mnt/licenses/enterprise.lic
   etcVolumeStorageConfig:
+    ephemeralStorage: false
     storageClassName: gp3-automode
     storageCapacity: 10Gi
   varVolumeStorageConfig:
+    ephemeralStorage: false
     storageClassName: gp3-automode
-    storageCapacity: 30Gi
+    storageCapacity: 20Gi
   defaults: |
     splunk:
       conf:
@@ -43,23 +45,14 @@ metadata:
   name: c3
 spec:
   replicas: 2
+  serviceAccount: ${NOAH_SPLUNK_SERVICE_ACCOUNT}
   noahClusterRef:
     name: c3
   licenseManagerRef:
     name: c3
   extraEnv:
-    - name: AWS_ACCESS_KEY_ID
-      valueFrom:
-        secretKeyRef:
-          name: noah-minio
-          key: accessKey
-    - name: AWS_SECRET_ACCESS_KEY
-      valueFrom:
-        secretKeyRef:
-          name: noah-minio
-          key: secretKey
     - name: AWS_DEFAULT_REGION
-      value: us-east-1
+      value: ${NOAH_SMARTSTORE_AUTH_REGION}
   resources:
     requests:
       cpu: 500m
@@ -68,11 +61,13 @@ spec:
       cpu: "2"
       memory: 4Gi
   etcVolumeStorageConfig:
+    ephemeralStorage: false
     storageClassName: gp3-automode
     storageCapacity: 10Gi
   varVolumeStorageConfig:
+    ephemeralStorage: false
     storageClassName: gp3-automode
-    storageCapacity: 30Gi
+    storageCapacity: 20Gi
   defaults: |
     splunk:
       conf:
@@ -92,11 +87,12 @@ spec:
           content:
             "volume:remote_store":
               storageType: remote
-              path: s3://noah-smartstore/c3
-              "remote.s3.endpoint": http://noah-minio:9000
-              "remote.s3.url_version": v1
+              path: ${NOAH_SMARTSTORE_OBJECT_STORE_PATH}
+              "remote.s3.endpoint": ${NOAH_SMARTSTORE_OBJECT_STORE_ENDPOINT}
               "remote.s3.signature_version": v4
-              "remote.s3.auth_region": us-east-1
+              "remote.s3.auth_region": ${NOAH_SMARTSTORE_AUTH_REGION}
+              "remote.s3.sqs.endpoint": ${NOAH_SMARTSTORE_QUEUE_ENDPOINT}
+              "remote.s3.sqs.queue_url": ${NOAH_SMARTSTORE_QUEUE_URL}
               "remote.s3.supports_versioning": "false"
             main:
               remotePath: volume:remote_store/main
@@ -138,11 +134,13 @@ spec:
       cpu: "2"
       memory: 4Gi
   etcVolumeStorageConfig:
+    ephemeralStorage: false
     storageClassName: gp3-automode
     storageCapacity: 10Gi
   varVolumeStorageConfig:
+    ephemeralStorage: false
     storageClassName: gp3-automode
-    storageCapacity: 30Gi
+    storageCapacity: 20Gi
   defaults: |
     splunk:
       conf:
