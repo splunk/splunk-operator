@@ -163,7 +163,7 @@ func TestKVServiceDeploymentVolumesPortsAndSecurity(t *testing.T) {
 	container := &pod.Containers[0]
 	assert.Equal(t, cr.Spec.ExtraEnv, container.Env)
 	assert.Equal(t, cr.Spec.Resources, container.Resources)
-	assert.Contains(t, container.Ports, corev1.ContainerPort{Name: "http-splunkv", ContainerPort: splcommon.KVServicePort, Protocol: corev1.ProtocolTCP})
+	assert.Contains(t, container.Ports, corev1.ContainerPort{Name: "http-kvservice", ContainerPort: splcommon.KVServicePort, Protocol: corev1.ProtocolTCP})
 	assert.Contains(t, container.Ports, corev1.ContainerPort{Name: "metrics", ContainerPort: 9091, Protocol: corev1.ProtocolTCP})
 	assert.Equal(t, cr.Spec.Volumes, pod.Volumes)
 	assert.Contains(t, container.VolumeMounts, corev1.VolumeMount{Name: "db-tls", MountPath: "/mnt/db-tls"})
@@ -181,4 +181,51 @@ func TestKVServiceDeploymentVolumesPortsAndSecurity(t *testing.T) {
 	assert.Equal(t, "postgres", cr.Spec.ExtraEnv[0].ValueFrom.SecretKeyRef.Name)
 	pod.Volumes[0].Secret.SecretName = "changed"
 	assert.Equal(t, "db-tls", cr.Spec.Volumes[0].Secret.SecretName)
+}
+
+func TestKVServiceTLSProtocolMetadata(t *testing.T) {
+	tests := []struct {
+		name         string
+		certs        []enterpriseApi.CertSpec
+		wantPortName string
+		wantScheme   corev1.URIScheme
+	}{
+		{name: "http", wantPortName: "http-kvservice", wantScheme: corev1.URISchemeHTTP},
+		{
+			name:         "https",
+			certs:        []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "server-cert"}, Role: enterpriseApi.CertRoleServer}},
+			wantPortName: "https-kvservice",
+			wantScheme:   corev1.URISchemeHTTPS,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &enterpriseApi.KVService{Name: "kv", Namespace: "test"}
+			cr.Spec.Certs = tt.certs
+			service := GetKVServiceService(cr, &cr.Spec)
+			deployment := NewKVServiceDeployment(cr)
+			container := deployment.Spec.Template.Spec.Containers[0]
+			if len(container.Command) != 1 || container.Command[0] != "kvstore-server" {
+				t.Errorf("container command=%q, want [kvstore-server]", container.Command)
+			}
+			if len(container.Args) != 2 || container.Args[0] != "--scheme" || container.Args[1] != tt.name {
+				t.Errorf("container args=%q, want [--scheme %s]", container.Args, tt.name)
+			}
+
+			if len(service.Spec.Ports) != 1 || service.Spec.Ports[0].Port != splcommon.KVServicePort || service.Spec.Ports[0].Name != tt.wantPortName {
+				t.Errorf("Service ports=%+v, want generated port %q on %d", service.Spec.Ports, tt.wantPortName, splcommon.KVServicePort)
+			}
+			if len(container.Ports) != 1 || container.Ports[0].Name != tt.wantPortName || container.Ports[0].ContainerPort != splcommon.KVServicePort {
+				t.Errorf("container ports=%+v, want generated port %q on %d", container.Ports, tt.wantPortName, splcommon.KVServicePort)
+			}
+			if got := deployment.Spec.Template.Annotations[splcommon.IstioIncludeInboundPortsAnnotation]; got != "8066" {
+				t.Errorf("Istio inbound ports=%q, want 8066", got)
+			}
+			for _, probe := range []*corev1.Probe{container.LivenessProbe, container.ReadinessProbe} {
+				if probe == nil || probe.HTTPGet == nil || probe.HTTPGet.Scheme != tt.wantScheme {
+					t.Errorf("health probe=%+v, want scheme %q", probe, tt.wantScheme)
+				}
+			}
+		})
+	}
 }
