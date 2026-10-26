@@ -22,6 +22,7 @@ import (
 	"slices"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -30,6 +31,18 @@ const PostgresImageNameFormat = "ghcr.io/cloudnative-pg/postgresql:%s"
 
 func PostgresImageName(version string) string {
 	return fmt.Sprintf(PostgresImageNameFormat, version)
+}
+
+// ImagePullSecrets converts Kubernetes secret references to CNPG's reference type.
+func ImagePullSecrets(refs []corev1.LocalObjectReference) []cnpgv1.LocalObjectReference {
+	if len(refs) == 0 {
+		return nil
+	}
+	secrets := make([]cnpgv1.LocalObjectReference, len(refs))
+	for i, ref := range refs {
+		secrets[i] = cnpgv1.LocalObjectReference{Name: ref.Name}
+	}
+	return secrets
 }
 
 // GetCnpgCluster reads the provider Cluster at key.

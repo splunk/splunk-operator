@@ -30,30 +30,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type PostgresImageForVersion func(string) (string, error)
-
 type PgUpgradeDriver struct {
 	client           client.Client
 	key              client.ObjectKey
 	targetPgVersion  string
-	imageForVersion  PostgresImageForVersion
+	targetImageName  string
 	imagePullSecrets []cnpgv1.LocalObjectReference
 }
 
-func NewPgUpgradeDriver(client client.Client, key client.ObjectKey, targetPgVersion string) *PgUpgradeDriver {
+func NewPgUpgradeDriver(client client.Client, key client.ObjectKey, targetPgVersion, targetImage string) *PgUpgradeDriver {
 	return &PgUpgradeDriver{
 		client:          client,
 		key:             key,
 		targetPgVersion: targetPgVersion,
-		imageForVersion: defaultPostgresImageForVersion,
+		targetImageName: targetImage,
 	}
-}
-
-func (d *PgUpgradeDriver) WithImageForVersion(imageForVersion PostgresImageForVersion) *PgUpgradeDriver {
-	if imageForVersion != nil {
-		d.imageForVersion = imageForVersion
-	}
-	return d
 }
 
 func (d *PgUpgradeDriver) WithImagePullSecrets(imagePullSecrets []cnpgv1.LocalObjectReference) *PgUpgradeDriver {
@@ -169,11 +160,7 @@ func (d *PgUpgradeDriver) targetImage(ctx context.Context) (*cnpgv1.Cluster, str
 		return nil, "", errors.Join(mvutypes.ErrUpgradeFlowFailed, fmt.Errorf("pg_upgrade target PostgreSQL version is not configured"))
 	}
 
-	targetImage, err := d.imageForVersion(d.targetPgVersion)
-	if err != nil {
-		return nil, "", errors.Join(mvutypes.ErrUpgradeFlowFailed, err)
-	}
-	if targetImage == "" {
+	if d.targetImageName == "" {
 		return nil, "", errors.Join(mvutypes.ErrUpgradeFlowFailed, fmt.Errorf("pg_upgrade target image is empty for PostgreSQL version %q", d.targetPgVersion))
 	}
 
@@ -181,9 +168,5 @@ func (d *PgUpgradeDriver) targetImage(ctx context.Context) (*cnpgv1.Cluster, str
 	if err := d.client.Get(ctx, d.key, cluster); err != nil {
 		return nil, "", err
 	}
-	return cluster, targetImage, nil
-}
-
-func defaultPostgresImageForVersion(version string) (string, error) {
-	return clusterCnpg.PostgresImageName(version), nil
+	return cluster, d.targetImageName, nil
 }

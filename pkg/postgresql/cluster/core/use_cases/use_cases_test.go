@@ -190,7 +190,7 @@ func TestReconcilerConstructsRegisteredFactoryOnceAndActs(t *testing.T) {
 	reconciler := NewUseCaseReconciler(
 		&platformv1alpha1.PostgresClusterSpec{PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: &allow}},
 		map[string]Factory{
-			majorversionupgradetypes.UseCaseName: func() UseCase { built++; return useCase },
+			majorversionupgradetypes.UseCaseName: func() (UseCase, error) { built++; return useCase, nil },
 		},
 	)
 
@@ -214,7 +214,7 @@ func TestReconcilerSkipsFactoryReturningNil(t *testing.T) {
 	reconciler := NewUseCaseReconciler(
 		&platformv1alpha1.PostgresClusterSpec{PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: &allow}},
 		map[string]Factory{
-			majorversionupgradetypes.UseCaseName: func() UseCase { return nil },
+			majorversionupgradetypes.UseCaseName: func() (UseCase, error) { return nil, nil },
 		},
 	)
 
@@ -227,13 +227,39 @@ func TestReconcilerSkipsFactoryReturningNil(t *testing.T) {
 	}
 }
 
+func TestReconcilerPropagatesFactoryError(t *testing.T) {
+	constructionErr := errors.New("target image mapping is missing")
+	for _, operation := range []string{"schedule", "prerequisites", "reconcile"} {
+		t.Run(operation, func(t *testing.T) {
+			reconciler := &Reconciler{
+				order: []string{"upgrade"},
+				factory: map[string]Factory{
+					"upgrade": func() (UseCase, error) { return nil, constructionErr },
+				},
+			}
+			var err error
+			switch operation {
+			case "schedule":
+				err = reconciler.Schedule(t.Context())
+			case "prerequisites":
+				err = reconciler.CheckPrerequisites(t.Context())
+			case "reconcile":
+				_, err = reconciler.Reconcile(t.Context())
+			}
+			if !errors.Is(err, constructionErr) {
+				t.Fatalf("%s error = %v, want %v", operation, err, constructionErr)
+			}
+		})
+	}
+}
+
 func TestReconcilerTriggerPolicySkipsUntriggeredUseCase(t *testing.T) {
 	built := 0
 	// allow is absent (nil) — trigger policy should gate the use case out.
 	reconciler := NewUseCaseReconciler(
 		&platformv1alpha1.PostgresClusterSpec{},
 		map[string]Factory{
-			majorversionupgradetypes.UseCaseName: func() UseCase { built++; return &fakeUseCase{scheduled: true} },
+			majorversionupgradetypes.UseCaseName: func() (UseCase, error) { built++; return &fakeUseCase{scheduled: true}, nil },
 		},
 	)
 
@@ -294,7 +320,7 @@ func reconcilerFromUseCases(order []string, available map[string]UseCase) *Recon
 	registry := make(map[string]Factory, len(available))
 	for name, useCase := range available {
 		uc := useCase
-		registry[name] = func() UseCase { return uc }
+		registry[name] = func() (UseCase, error) { return uc, nil }
 	}
 	return &Reconciler{order: append([]string(nil), order...), factory: registry}
 }
