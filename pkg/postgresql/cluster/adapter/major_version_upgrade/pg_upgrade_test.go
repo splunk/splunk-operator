@@ -22,6 +22,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
+	clusterCnpg "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,7 +43,7 @@ func TestPgUpgradeDriverStartUpgradePatchesCNPGImage(t *testing.T) {
 		},
 	})
 
-	err := NewPgUpgradeDriver(k8sClient, key, "18").ApplyTargetImage(ctx)
+	err := NewPgUpgradeDriver(k8sClient, key, "18", clusterCnpg.PostgresImageName("18")).ApplyTargetImage(ctx)
 	require.NoError(t, err)
 
 	cluster := &cnpgv1.Cluster{}
@@ -62,7 +63,7 @@ func TestPgUpgradeDriverStartUpgradePatchesCNPGImagePullSecrets(t *testing.T) {
 		},
 	})
 
-	err := NewPgUpgradeDriver(k8sClient, key, "18").
+	err := NewPgUpgradeDriver(k8sClient, key, "18", clusterCnpg.PostgresImageName("18")).
 		WithImagePullSecrets([]cnpgv1.LocalObjectReference{{Name: "target-registry-creds"}}).
 		ApplyTargetImage(ctx)
 	require.NoError(t, err)
@@ -91,7 +92,7 @@ func TestPgUpgradeDriverUpgradeCompleteWaitsForCNPGMajorUpgrade(t *testing.T) {
 		},
 	})
 
-	complete, err := NewPgUpgradeDriver(k8sClient, key, "18").UpgradeComplete(ctx)
+	complete, err := NewPgUpgradeDriver(k8sClient, key, "18", clusterCnpg.PostgresImageName("18")).UpgradeComplete(ctx)
 	require.NoError(t, err)
 	assert.False(t, complete)
 }
@@ -111,7 +112,7 @@ func TestPgUpgradeDriverUpgradeCompleteRequiresCNPGConversionEvidence(t *testing
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			k8sClient, key := newPgUpgradeTestClient(t, healthyUpgradeCluster(tt.pgDataMajor, tt.conversionPending))
-			complete, err := NewPgUpgradeDriver(k8sClient, key, "18").UpgradeComplete(t.Context())
+			complete, err := NewPgUpgradeDriver(k8sClient, key, "18", clusterCnpg.PostgresImageName("18")).UpgradeComplete(t.Context())
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, complete)
 		})
@@ -127,7 +128,7 @@ func TestPgUpgradeDriverUpgradeCompleteDoesNotWaitForRebuildingReplica(t *testin
 	}
 	k8sClient, key := newPgUpgradeTestClient(t, cluster)
 
-	complete, err := NewPgUpgradeDriver(k8sClient, key, "18").UpgradeComplete(t.Context())
+	complete, err := NewPgUpgradeDriver(k8sClient, key, "18", clusterCnpg.PostgresImageName("18")).UpgradeComplete(t.Context())
 	require.NoError(t, err)
 	assert.True(t, complete)
 }
@@ -150,7 +151,7 @@ func TestPgUpgradeDriverVerifyUpgradeRejectsWrongImage(t *testing.T) {
 		},
 	})
 
-	verified, err := NewPgUpgradeDriver(k8sClient, key, "18").VerifyUpgrade(ctx)
+	verified, err := NewPgUpgradeDriver(k8sClient, key, "18", clusterCnpg.PostgresImageName("18")).VerifyUpgrade(ctx)
 	require.Error(t, err)
 	assert.False(t, verified)
 	assert.Contains(t, err.Error(), "does not match target image")
@@ -159,7 +160,7 @@ func TestPgUpgradeDriverVerifyUpgradeRejectsWrongImage(t *testing.T) {
 func TestPgUpgradeDriverVerifyUpgradeRejectsOldPGData(t *testing.T) {
 	k8sClient, key := newPgUpgradeTestClient(t, healthyUpgradeCluster(17, false))
 
-	verified, err := NewPgUpgradeDriver(k8sClient, key, "18").VerifyUpgrade(t.Context())
+	verified, err := NewPgUpgradeDriver(k8sClient, key, "18", clusterCnpg.PostgresImageName("18")).VerifyUpgrade(t.Context())
 	require.Error(t, err)
 	assert.False(t, verified)
 	assert.Contains(t, err.Error(), "targetMajor=18 observedPGDataMajor=17")
@@ -170,7 +171,7 @@ func TestPgUpgradeDriverVerifyUpgradeWaitsForTransientClusterHealth(t *testing.T
 	cluster.Status.InstancesStatus = nil
 	k8sClient, key := newPgUpgradeTestClient(t, cluster)
 
-	verified, err := NewPgUpgradeDriver(k8sClient, key, "18").VerifyUpgrade(t.Context())
+	verified, err := NewPgUpgradeDriver(k8sClient, key, "18", clusterCnpg.PostgresImageName("18")).VerifyUpgrade(t.Context())
 	require.NoError(t, err)
 	assert.False(t, verified)
 }
@@ -184,7 +185,7 @@ func TestPgUpgradeDriverVerifyUpgradeDoesNotWaitForRebuildingReplica(t *testing.
 	}
 	k8sClient, key := newPgUpgradeTestClient(t, cluster)
 
-	verified, err := NewPgUpgradeDriver(k8sClient, key, "18").VerifyUpgrade(t.Context())
+	verified, err := NewPgUpgradeDriver(k8sClient, key, "18", clusterCnpg.PostgresImageName("18")).VerifyUpgrade(t.Context())
 	require.NoError(t, err)
 	assert.True(t, verified)
 }
@@ -205,14 +206,14 @@ func TestPgUpgradeDriverReturnsBlockingCNPGPhaseError(t *testing.T) {
 		},
 	})
 
-	complete, err := NewPgUpgradeDriver(k8sClient, key, "18").UpgradeComplete(ctx)
+	complete, err := NewPgUpgradeDriver(k8sClient, key, "18", clusterCnpg.PostgresImageName("18")).UpgradeComplete(ctx)
 	assert.False(t, complete)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, mvutypes.ErrUpgradeFlowFailed))
 	assert.Contains(t, err.Error(), "requires user action")
 }
 
-func TestPgUpgradeDriverUsesInjectedImageResolver(t *testing.T) {
+func TestPgUpgradeDriverPreservesSuppliedTargetImage(t *testing.T) {
 	ctx := t.Context()
 	k8sClient, key := newPgUpgradeTestClient(t, &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -224,10 +225,7 @@ func TestPgUpgradeDriverUsesInjectedImageResolver(t *testing.T) {
 		},
 	})
 
-	err := NewPgUpgradeDriver(k8sClient, key, "18").
-		WithImageForVersion(func(version string) (string, error) {
-			return "registry.example/postgres:" + version, nil
-		}).
+	err := NewPgUpgradeDriver(k8sClient, key, "18", "registry.example/postgres:18").
 		ApplyTargetImage(ctx)
 	require.NoError(t, err)
 
@@ -242,7 +240,7 @@ func TestPgUpgradeDriverApplyTargetImageTerminatesOnEmptyVersion(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 	})
 
-	err := NewPgUpgradeDriver(k8sClient, key, "").ApplyTargetImage(ctx)
+	err := NewPgUpgradeDriver(k8sClient, key, "", "").ApplyTargetImage(ctx)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, mvutypes.ErrUpgradeFlowFailed))
 }
@@ -253,8 +251,7 @@ func TestPgUpgradeDriverApplyTargetImageTerminatesOnUnresolvableImage(t *testing
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
 	})
 
-	err := NewPgUpgradeDriver(k8sClient, key, "99").
-		WithImageForVersion(func(string) (string, error) { return "", nil }).
+	err := NewPgUpgradeDriver(k8sClient, key, "99", "").
 		ApplyTargetImage(ctx)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, mvutypes.ErrUpgradeFlowFailed))

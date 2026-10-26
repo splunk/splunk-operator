@@ -147,7 +147,7 @@ func (r *PostgresClusterReconciler) useCaseRegistry(key types.NamespacedName, cl
 // adapters when invoked, with no relevance logic of its own (useCaseRegistry
 // already decided this use case is relevant before registering it).
 func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedName, cluster *platformv1alpha1.PostgresCluster, mergedConfig *clustercore.MergedConfig) usecases.Factory {
-	return func() usecases.UseCase {
+	return func() (usecases.UseCase, error) {
 		targetVersion := ""
 		if mergedConfig != nil && mergedConfig.Spec != nil && mergedConfig.Spec.PostgresVersion != nil {
 			targetVersion = *mergedConfig.Spec.PostgresVersion
@@ -162,22 +162,9 @@ func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedN
 		blueGreenCandidatePlan := majorupgradeadapter.BlueGreenCandidatePlan{}
 		if mergedConfig != nil && mergedConfig.Spec != nil && mergedConfig.Spec.PostgresVersion != nil {
 			targetImage = clustercore.EffectivePostgresImage(mergedConfig)
-			blueGreenPlan.TargetConfiguration = mergedConfig.Spec.DeepCopy()
-			blueGreenPlan.TargetImage = targetImage
-			blueGreenCandidatePlan.TargetConfiguration = mergedConfig.Spec.DeepCopy()
-			blueGreenCandidatePlan.TargetImage = targetImage
-			if mergedConfig.Spec.Instances != nil {
-				blueGreenCandidatePlan.TargetInstances = int(*mergedConfig.Spec.Instances)
-			}
-			if mergedConfig.Spec.Storage != nil {
-				storage := mergedConfig.Spec.Storage.DeepCopy()
-				blueGreenCandidatePlan.TargetStorage = &storage
-			}
+			blueGreenPlan, blueGreenCandidatePlan = blueGreenUpgradePlans(mergedConfig, targetImage)
 		}
-		driver := majorupgradeadapter.NewPgUpgradeDriver(r.Client, key, targetVersion).
-			WithImageForVersion(func(string) (string, error) {
-				return targetImage, nil
-			}).
+		driver := majorupgradeadapter.NewPgUpgradeDriver(r.Client, key, targetVersion, targetImage).
 			WithImagePullSecrets(clustercore.EffectiveCNPGImagePullSecrets(mergedConfig))
 
 		var notifier *majorupgradeadapter.UpgradeNotifier
@@ -187,13 +174,32 @@ func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedN
 		if !providerConfigured {
 			return majorversionupgrade.NewMajorUpgradeUseCase(infoStore, nil, driver, notifier,
 				majorupgradeadapter.NewBlueGreenPreparer(r.Client, key, cluster, r.IdentityResolver, blueGreenPlan),
-				majorupgradeadapter.NewBlueGreenCandidatePreparer(r.Client, key, cluster, blueGreenCandidatePlan))
+				majorupgradeadapter.NewBlueGreenCandidatePreparer(r.Client, key, cluster, blueGreenCandidatePlan)), nil
 		}
 		rollback := majorupgradeadapter.NewRollbackCapabilityAdapter(r.Client, r.Scheme, key, backupMethod, backupPluginName)
 		return majorversionupgrade.NewMajorUpgradeUseCase(infoStore, rollback, driver, notifier,
 			majorupgradeadapter.NewBlueGreenPreparer(r.Client, key, cluster, r.IdentityResolver, blueGreenPlan),
-			majorupgradeadapter.NewBlueGreenCandidatePreparer(r.Client, key, cluster, blueGreenCandidatePlan))
+			majorupgradeadapter.NewBlueGreenCandidatePreparer(r.Client, key, cluster, blueGreenCandidatePlan)), nil
 	}
+}
+
+func blueGreenUpgradePlans(mergedConfig *clustercore.MergedConfig, targetImage string) (majorupgradeadapter.BlueGreenPreflightPlan, majorupgradeadapter.BlueGreenCandidatePlan) {
+	preflight := majorupgradeadapter.BlueGreenPreflightPlan{
+		TargetConfiguration: mergedConfig.Spec.DeepCopy(),
+		TargetImage:         targetImage,
+	}
+	candidate := majorupgradeadapter.BlueGreenCandidatePlan{
+		TargetConfiguration: mergedConfig.Spec.DeepCopy(),
+		TargetImage:         targetImage,
+	}
+	if mergedConfig.Spec.Instances != nil {
+		candidate.TargetInstances = int(*mergedConfig.Spec.Instances)
+	}
+	if mergedConfig.Spec.Storage != nil {
+		storage := mergedConfig.Spec.Storage.DeepCopy()
+		candidate.TargetStorage = &storage
+	}
+	return preflight, candidate
 }
 
 // SetupWithManager registers the controller, owned resource watches, and an

@@ -128,49 +128,19 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 		return newReconcileFailure(reasonClusterGetFailed, fmt.Errorf("getting authoritative CNPG cluster: %w", err))
 	}
 	if apierrors.IsNotFound(err) {
-		newCluster, err := buildCNPGCluster(p.scheme, p.cluster, p.mergedConfig, p.contracts.Secret.Name, p.metricsEnabled)
-		if err != nil {
-			return newReconcileFailure(reasonClusterBuildFailed, err)
-		}
-		p.contracts.ServerTLS.ApplyToCNPG(&newCluster.Spec, newCluster.Name, p.cluster.Namespace)
-		desiredParameters := maps.Clone(newCluster.Spec.PostgresConfiguration.Parameters)
-		newCluster.Spec.PostgresConfiguration.Parameters = nil
-		if err = p.client.Create(ctx, newCluster); err != nil {
-			return newReconcileFailure(reasonClusterBuildFailed, err)
-		}
-		if err := applyPostgreSQLParameters(ctx, p.client, newCluster, desiredParameters); err != nil {
-			return newReconcileFailure(reasonClusterBuildFailed, err)
-		}
-		createdCNPG := &cnpgv1.Cluster{}
-		if err := p.client.Get(ctx, client.ObjectKeyFromObject(newCluster), createdCNPG); err != nil {
-			return newReconcileFailure(reasonClusterGetFailed, err)
-		}
-		p.cnpgPatch = cnpgPatchBody
-		p.events.emitNormal(p.cluster, EventClusterCreationStarted, fmt.Sprintf("CNPG cluster created for PostgresCluster %s, waiting for healthy state", p.cluster.Name))
-		p.cnpgCluster = createdCNPG
-		p.cnpgCreated = true
-		return nil
+		return p.createCNPGCluster(ctx)
 	}
+	return p.reconcileExistingCNPGCluster(ctx, existingCNPG)
+}
 
+func (p *clusterModel) reconcileExistingCNPGCluster(ctx context.Context, existingCNPG *cnpgv1.Cluster) error {
 	desiredSpec := buildCNPGClusterSpec(*existingCNPG.Spec.DeepCopy(), p.mergedConfig, existingCNPG.Name, p.contracts.Secret.Name, p.metricsEnabled)
 	desiredSpec.PostgresConfiguration.Parameters = maps.Clone(existingCNPG.Spec.PostgresConfiguration.Parameters)
 	p.contracts.ServerTLS.ApplyToCNPG(&desiredSpec, existingCNPG.Name, p.cluster.Namespace)
 
 	p.cnpgCluster = existingCNPG
-	hasOwnerRef, ownerRefErr := controllerutil.HasOwnerReference(p.cnpgCluster.GetOwnerReferences(), p.cluster, p.scheme)
-	if ownerRefErr != nil {
-		return newReconcileFailure(reasonClusterGetFailed, fmt.Errorf("failed to check owner reference on CNPG cluster: %w", ownerRefErr))
-	}
-	if !hasOwnerRef {
-		originalCNPG := p.cnpgCluster.DeepCopy()
-		if err := ctrl.SetControllerReference(p.cluster, p.cnpgCluster, p.scheme); err != nil {
-			return newReconcileFailure(reasonClusterPatchFailed, fmt.Errorf("failed to set controller reference on existing CNPG cluster: %w", err))
-		}
-		if err := patchObject(ctx, p.client, originalCNPG, p.cnpgCluster, "CNPGCluster"); err != nil {
-			return newReconcileFailure(reasonClusterPatchFailed, err)
-		}
-		p.events.emitNormal(p.cluster, EventClusterAdopted, fmt.Sprintf("Adopted existing CNPG cluster for PostgresCluster %s", p.cluster.Name))
-		p.cnpgPatch = cnpgPatchMetadata
+	if err := p.adoptCNPGCluster(ctx); err != nil {
+		return err
 	}
 
 	if health, blocked := p.majorVersionDriftBlock(p.cnpgCluster); blocked {
@@ -188,29 +158,9 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 		desiredSpec.StorageConfiguration.Size = existingCNPG.Spec.StorageConfiguration.Size
 	}
 
-	desiredNormalized := normalizeCNPGClusterSpec(desiredSpec)
-	currentNormalized := normalizeCNPGClusterSpec(p.cnpgCluster.Spec)
-	specDrift := isAnyClusterSpecDrift(desiredNormalized, currentNormalized)
-	updateMessage := fmt.Sprintf("CNPG cluster spec updated for PostgresCluster %s, waiting for healthy state", p.cluster.Name)
-	needsUpdateEvent := false
-
-	if specDrift {
-		originalCluster := p.cnpgCluster.DeepCopy()
-		patchKind := cnpgPatchMetadata
-		if isClusterDrift(desiredNormalized, currentNormalized) {
-			patchKind = cnpgPatchBody
-		}
-		p.cnpgCluster.Spec = desiredSpec
-		if err := patchObject(ctx, p.client, originalCluster, p.cnpgCluster, "CNPGCluster"); err != nil {
-			return newReconcileFailure(reasonClusterPatchFailed, err)
-		}
-		needsUpdateEvent = true
-		if p.cnpgPatch != cnpgPatchBody {
-			p.cnpgPatch = patchKind
-		}
-		if err := p.client.Get(ctx, client.ObjectKeyFromObject(p.cnpgCluster), p.cnpgCluster); err != nil {
-			return newReconcileFailure(reasonClusterGetFailed, err)
-		}
+	needsUpdateEvent, err := p.patchCNPGClusterSpec(ctx, desiredSpec)
+	if err != nil {
+		return err
 	}
 	beforeGeneration := p.cnpgCluster.Generation
 	if err := applyPostgreSQLParameters(ctx, p.client, p.cnpgCluster, p.mergedConfig.Spec.PostgreSQLConfig); err != nil {
@@ -227,11 +177,80 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 		needsUpdateEvent = true
 	}
 	if needsUpdateEvent {
-		p.events.emitNormal(p.cluster, EventClusterUpdateStarted, updateMessage)
+		p.events.emitNormal(p.cluster, EventClusterUpdateStarted, fmt.Sprintf("CNPG cluster spec updated for PostgresCluster %s, waiting for healthy state", p.cluster.Name))
 	}
 
 	p.contracts.CNPGCluster = p.cnpgCluster
 	return nil
+}
+
+func (p *clusterModel) createCNPGCluster(ctx context.Context) error {
+	newCluster, err := buildCNPGCluster(p.scheme, p.cluster, p.mergedConfig, p.contracts.Secret.Name, p.metricsEnabled)
+	if err != nil {
+		return newReconcileFailure(reasonClusterBuildFailed, err)
+	}
+	p.contracts.ServerTLS.ApplyToCNPG(&newCluster.Spec, newCluster.Name, p.cluster.Namespace)
+	desiredParameters := maps.Clone(newCluster.Spec.PostgresConfiguration.Parameters)
+	newCluster.Spec.PostgresConfiguration.Parameters = nil
+	if err = p.client.Create(ctx, newCluster); err != nil {
+		return newReconcileFailure(reasonClusterBuildFailed, err)
+	}
+	if err := applyPostgreSQLParameters(ctx, p.client, newCluster, desiredParameters); err != nil {
+		return newReconcileFailure(reasonClusterBuildFailed, err)
+	}
+	createdCNPG := &cnpgv1.Cluster{}
+	if err := p.client.Get(ctx, client.ObjectKeyFromObject(newCluster), createdCNPG); err != nil {
+		return newReconcileFailure(reasonClusterGetFailed, err)
+	}
+	p.cnpgPatch = cnpgPatchBody
+	p.events.emitNormal(p.cluster, EventClusterCreationStarted, fmt.Sprintf("CNPG cluster created for PostgresCluster %s, waiting for healthy state", p.cluster.Name))
+	p.cnpgCluster = createdCNPG
+	p.cnpgCreated = true
+	return nil
+}
+
+func (p *clusterModel) adoptCNPGCluster(ctx context.Context) error {
+	hasOwnerRef, err := controllerutil.HasOwnerReference(p.cnpgCluster.GetOwnerReferences(), p.cluster, p.scheme)
+	if err != nil {
+		return newReconcileFailure(reasonClusterGetFailed, fmt.Errorf("failed to check owner reference on CNPG cluster: %w", err))
+	}
+	if hasOwnerRef {
+		return nil
+	}
+	originalCNPG := p.cnpgCluster.DeepCopy()
+	if err := ctrl.SetControllerReference(p.cluster, p.cnpgCluster, p.scheme); err != nil {
+		return newReconcileFailure(reasonClusterPatchFailed, fmt.Errorf("failed to set controller reference on existing CNPG cluster: %w", err))
+	}
+	if err := patchObject(ctx, p.client, originalCNPG, p.cnpgCluster, "CNPGCluster"); err != nil {
+		return newReconcileFailure(reasonClusterPatchFailed, err)
+	}
+	p.events.emitNormal(p.cluster, EventClusterAdopted, fmt.Sprintf("Adopted existing CNPG cluster for PostgresCluster %s", p.cluster.Name))
+	p.cnpgPatch = cnpgPatchMetadata
+	return nil
+}
+
+func (p *clusterModel) patchCNPGClusterSpec(ctx context.Context, desiredSpec cnpgv1.ClusterSpec) (bool, error) {
+	desiredNormalized := normalizeCNPGClusterSpec(desiredSpec)
+	currentNormalized := normalizeCNPGClusterSpec(p.cnpgCluster.Spec)
+	if !isAnyClusterSpecDrift(desiredNormalized, currentNormalized) {
+		return false, nil
+	}
+	originalCluster := p.cnpgCluster.DeepCopy()
+	patchKind := cnpgPatchMetadata
+	if isClusterDrift(desiredNormalized, currentNormalized) {
+		patchKind = cnpgPatchBody
+	}
+	p.cnpgCluster.Spec = desiredSpec
+	if err := patchObject(ctx, p.client, originalCluster, p.cnpgCluster, "CNPGCluster"); err != nil {
+		return false, newReconcileFailure(reasonClusterPatchFailed, err)
+	}
+	if p.cnpgPatch != cnpgPatchBody {
+		p.cnpgPatch = patchKind
+	}
+	if err := p.client.Get(ctx, client.ObjectKeyFromObject(p.cnpgCluster), p.cnpgCluster); err != nil {
+		return false, newReconcileFailure(reasonClusterGetFailed, err)
+	}
+	return true, nil
 }
 
 func (p *clusterModel) Observe(_ context.Context, reconcileErr error) (componentHealth, error) {
@@ -905,14 +924,10 @@ func EffectivePostgresImage(cfg *MergedConfig) string {
 }
 
 func EffectiveCNPGImagePullSecrets(cfg *MergedConfig) []cnpgv1.LocalObjectReference {
-	if cfg == nil || cfg.Spec == nil || len(cfg.Spec.ImagePullSecrets) == 0 {
+	if cfg == nil || cfg.Spec == nil {
 		return nil
 	}
-	out := make([]cnpgv1.LocalObjectReference, 0, len(cfg.Spec.ImagePullSecrets))
-	for _, ref := range cfg.Spec.ImagePullSecrets {
-		out = append(out, cnpgv1.LocalObjectReference{Name: ref.Name})
-	}
-	return out
+	return clusterCnpg.ImagePullSecrets(cfg.Spec.ImagePullSecrets)
 }
 
 func buildCNPGPlugins(cfg *MergedConfig, clusterName string) []cnpgv1.PluginConfiguration {
