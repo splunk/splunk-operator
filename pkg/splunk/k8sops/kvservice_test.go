@@ -64,7 +64,7 @@ func TestGetKVServiceDeployment(t *testing.T) {
 	cr.Spec.ServiceAccount = "kvservice-sa"
 	cr.Spec.Replicas = 1
 
-	deployment, err := GetKVServiceDeployment(ctx, c, cr)
+	deployment, err := GetKVServiceDeployment(ctx, c, cr, nil)
 	if err != nil {
 		t.Fatalf("GetKVServiceDeployment error=%v", err)
 	}
@@ -164,7 +164,7 @@ func TestKVServiceConfigurationAndConfigMapRollouts(t *testing.T) {
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, cm).Build()
 	before := cr.DeepCopy()
-	deployment, err := GetKVServiceDeployment(ctx, c, cr)
+	deployment, err := GetKVServiceDeployment(ctx, c, cr, nil)
 	require.NoError(t, err)
 	assert.Equal(t, before, cr, "resolving configuration must not mutate the CR")
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 1)
@@ -191,18 +191,18 @@ func TestKVServiceConfigurationAndConfigMapRollouts(t *testing.T) {
 	cm.Labels = map[string]string{"metadata": "updated"}
 	cm.Data["unused"] = "changed"
 	require.NoError(t, c.Update(ctx, cm))
-	unchanged, err := GetKVServiceDeployment(ctx, c, cr)
+	unchanged, err := GetKVServiceDeployment(ctx, c, cr, nil)
 	require.NoError(t, err)
 	assert.Equal(t, first, unchanged.Spec.Template.Annotations, "metadata and unmounted keys must not trigger a rollout")
 	cm.Data["used"] = "second"
 	require.NoError(t, c.Update(ctx, cm))
-	changed, err := GetKVServiceDeployment(ctx, c, cr)
+	changed, err := GetKVServiceDeployment(ctx, c, cr, nil)
 	require.NoError(t, err)
 	assert.NotEqual(t, first[splcommon.ConfigMapRevAnnotationPrefix+"config"], changed.Spec.Template.Annotations[splcommon.ConfigMapRevAnnotationPrefix+"config"])
 	assert.NotEqual(t, first[projectedKey], changed.Spec.Template.Annotations[projectedKey])
 	cm.Annotations = map[string]string{splcommon.ConfigMapRestartOptOutAnnotation: "false"}
 	require.NoError(t, c.Update(ctx, cm))
-	optOut, err := GetKVServiceDeployment(ctx, c, cr)
+	optOut, err := GetKVServiceDeployment(ctx, c, cr, nil)
 	require.NoError(t, err)
 	assert.NotContains(t, optOut.Spec.Template.Annotations, splcommon.ConfigMapRevAnnotationPrefix+"config")
 	assert.NotContains(t, optOut.Spec.Template.Annotations, projectedKey)

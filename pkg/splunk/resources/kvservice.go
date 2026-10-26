@@ -43,12 +43,7 @@ func GetKVServiceService(cr splcommon.MetaObject, spec *enterpriseApi.KVServiceS
 	var partOfIdentifier string
 
 	service.Spec.Selector = GetSplunkLabels(instanceIdentifier, instanceType, partOfIdentifier)
-	service.Spec.Ports = append(service.Spec.Ports, corev1.ServicePort{
-		Name:       splutil.GetPortName("splunkv", "http"),
-		Port:       splcommon.KVServicePort,
-		TargetPort: intstr.FromInt(splcommon.KVServicePort),
-		Protocol:   corev1.ProtocolTCP,
-	})
+	service.Spec.Ports = append(service.Spec.Ports, splcommon.SortServicePorts([]corev1.ServicePort{getKVServiceServicePort(spec)})...)
 
 	// ensure labels and annotations are not nil
 	if service.ObjectMeta.Labels == nil {
@@ -74,11 +69,7 @@ func NewKVServiceDeployment(cr *enterpriseApi.KVService) *appsv1.Deployment {
 	instanceType := splcommon.SplunkKVService
 	replicas := spec.Replicas
 
-	ports := []corev1.ContainerPort{{
-		Name:          splutil.GetPortName("splunkv", "http"),
-		ContainerPort: splcommon.KVServicePort,
-		Protocol:      corev1.ProtocolTCP,
-	}}
+	ports := splcommon.SortContainerPorts([]corev1.ContainerPort{getKVServiceContainerPort(spec)})
 	annotations := splcommon.GetIstioAnnotations(ports)
 	selectLabels := GetSplunkLabels(cr.GetName(), instanceType, "")
 	affinity := splcommon.AppendPodAntiAffinity(&spec.Affinity, cr.GetName(), instanceType.ToString())
@@ -117,6 +108,8 @@ func NewKVServiceDeployment(cr *enterpriseApi.KVService) *appsv1.Deployment {
 						Image:           spec.Image,
 						ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
 						Name:            "kvservice",
+						Command:         []string{"kvstore-server"},
+						Args:            []string{"--scheme", kvServiceProtocol(spec)},
 						Ports:           ports,
 					},
 				},
@@ -140,14 +133,50 @@ func NewKVServiceDeployment(cr *enterpriseApi.KVService) *appsv1.Deployment {
 	return deployment
 }
 
-// ConfigureKVServiceHTTPProbes preserves the HTTP endpoints while applying user timing settings.
+func kvServiceProtocol(spec *enterpriseApi.KVServiceSpec) string {
+	if len(spec.Certs) > 0 {
+		return "https"
+	}
+	return "http"
+}
+
+func kvServicePortName(spec *enterpriseApi.KVServiceSpec) string {
+	return splutil.GetPortName("kvservice", kvServiceProtocol(spec))
+}
+
+func getKVServiceContainerPort(spec *enterpriseApi.KVServiceSpec) corev1.ContainerPort {
+	return corev1.ContainerPort{
+		Name:          kvServicePortName(spec),
+		ContainerPort: splcommon.KVServicePort,
+		Protocol:      corev1.ProtocolTCP,
+	}
+}
+
+func getKVServiceServicePort(spec *enterpriseApi.KVServiceSpec) corev1.ServicePort {
+	return corev1.ServicePort{
+		Name:       kvServicePortName(spec),
+		Port:       splcommon.KVServicePort,
+		TargetPort: intstr.FromInt(splcommon.KVServicePort),
+		Protocol:   corev1.ProtocolTCP,
+	}
+}
+
+func kvServiceProbeScheme(spec *enterpriseApi.KVServiceSpec) corev1.URIScheme {
+	if len(spec.Certs) > 0 {
+		return corev1.URISchemeHTTPS
+	}
+	return corev1.URISchemeHTTP
+}
+
+// ConfigureKVServiceHTTPProbes applies configured TLS scheme and probe timing settings.
 func ConfigureKVServiceHTTPProbes(template *corev1.PodTemplateSpec, spec *enterpriseApi.KVServiceSpec) {
 
 	kvserviceLivenessProbe := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
-				Path: "/service/liveness",
-				Port: intstr.FromInt(splcommon.KVServicePort),
+				Path:   "/service/liveness",
+				Port:   intstr.FromInt(splcommon.KVServicePort),
+				Scheme: kvServiceProbeScheme(spec),
 			},
 		},
 		InitialDelaySeconds: 30,
@@ -160,8 +189,9 @@ func ConfigureKVServiceHTTPProbes(template *corev1.PodTemplateSpec, spec *enterp
 	kvserviceReadinessProbe := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
-				Path: "/service/readiness",
-				Port: intstr.FromInt(splcommon.KVServicePort),
+				Path:   "/service/readiness",
+				Port:   intstr.FromInt(splcommon.KVServicePort),
+				Scheme: kvServiceProbeScheme(spec),
 			},
 		},
 		InitialDelaySeconds: 30,

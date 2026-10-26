@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -251,6 +252,14 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 					"current", current.Containers[idx].Image,
 					"revised", revised.Containers[idx].Image)
 				current.Containers[idx].Image = revised.Containers[idx].Image
+				result = true
+			}
+
+			if !slices.Equal(current.Containers[idx].Command, revised.Containers[idx].Command) ||
+				!slices.Equal(current.Containers[idx].Args, revised.Containers[idx].Args) {
+				scopedLog.InfoContext(ctx, "pod Container command or arguments differ")
+				current.Containers[idx].Command = revised.Containers[idx].Command
+				current.Containers[idx].Args = revised.Containers[idx].Args
 				result = true
 			}
 
