@@ -37,20 +37,36 @@ part of the KVService API.
   probe objects. The 30-second initial-delay fallback is applied by the controller
   so the separate initial-delay fields continue to take effect.
 - `spec.certs` uses the shared certificate mounting and rotation workflow when
-  the `CertManagement` feature gate is enabled. Existing Secrets may contain
-  `tls.crt` and `tls.key`, optionally with `ca.crt`, or just `ca.crt` for a
-  PostgreSQL CA. Without a role, certificates mount at `/mnt/tls/<secret-name>/`;
-  role-based paths follow the shared certificate convention. Secret content
+  the `CertManagement` feature gate is enabled. The serving Secret contains
+  `tls.crt` and `tls.key`, optionally with `ca.crt`. Additional Secrets may
+  contain just `ca.crt` for PostgreSQL trust; use `role: server` to select the
+  serving certificate when configuring multiple Secrets. Without a role,
+  certificates mount at `/mnt/tls/<secret-name>/`;
+  role-based paths follow the shared certificate convention. Different Secrets
+  must resolve to different mount paths; assign each role to at most one distinct
+  Secret. Secret content
   changes update a pod-template annotation to trigger a rollout. Missing Secrets
   can be issued through the shared cert-manager integration when its generation
-  feature gate is enabled and an issuer is configured. Mounting a certificate
-  does not by itself configure the KVService process to use TLS.
+  feature gate is enabled and an issuer is configured. The serving certificate
+  also enables HTTPS as described below.
 - Direct and projected ConfigMap references in `spec.volumes` trigger
   reconciliation when the referenced ConfigMap changes. Content hashes on the
   pod template trigger rollout when mounted configuration changes. The shared
   ConfigMap restart opt-out annotation remains supported.
 - Errors while resolving pod configuration prevent an incomplete Deployment
   from being applied.
+- Any nonempty `spec.certs` enables HTTPS for the KVService endpoint;
+  `role: server` is optional. The operator selects the first entry with that role,
+  or the first certificate entry when no server role is present. The operator
+  uses an existing customer-provided Secret or requests a missing certificate
+  through cert-manager, mounts the server certificate, configures the TLS
+  environment, and uses HTTPS readiness and liveness probes.
+  This requires the `CertManagement` feature gate; creating a missing certificate
+  also requires `CertManagerCertGeneration` and a pre-existing issuer reference.
+  The serving Secret must contain nonempty `tls.crt` and `tls.key`; a CA-only
+  Secret cannot serve the HTTPS endpoint. The operator runs `kvstore-server`
+  with an explicit HTTP or HTTPS scheme, independently of the single-tenant
+  database mode. Changing `spec.certs` updates the listener and both probes.
 
 ## Status
 

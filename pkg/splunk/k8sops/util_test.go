@@ -18,6 +18,7 @@ package k8sops
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -72,5 +73,32 @@ func TestHasProbeChanged(t *testing.T) {
 	result = hasProbeChanged(current.Spec.Containers[0].LivenessProbe, revised.Spec.Containers[0].LivenessProbe)
 	if !result {
 		t.Errorf("FailureThreshold different. hasProbeChanged() returned %t; want %t", false, true)
+	}
+}
+
+func TestHasProbeChangedHandler(t *testing.T) {
+	httpProbe := func(scheme corev1.URIScheme, path string) *corev1.Probe {
+		return &corev1.Probe{HTTPGet: &corev1.HTTPGetAction{Scheme: scheme, Path: path}}
+	}
+	tests := []struct {
+		name             string
+		current, revised *corev1.Probe
+		want             bool
+	}{
+		{name: "removed probe", current: httpProbe(corev1.URISchemeHTTP, "/"), want: true},
+		{name: "enable TLS", current: httpProbe(corev1.URISchemeHTTP, "/health"), revised: httpProbe(corev1.URISchemeHTTPS, "/health"), want: true},
+		{name: "disable TLS", current: httpProbe(corev1.URISchemeHTTPS, "/health"), revised: httpProbe(corev1.URISchemeHTTP, "/health"), want: true},
+		{name: "changed path", current: httpProbe(corev1.URISchemeHTTP, "/old"), revised: httpProbe(corev1.URISchemeHTTP, "/new"), want: true},
+		{name: "default scheme", current: httpProbe(corev1.URISchemeHTTP, "/health"), revised: httpProbe("", "/health")},
+		{name: "default path", current: httpProbe(corev1.URISchemeHTTP, "/"), revised: httpProbe(corev1.URISchemeHTTP, "")},
+		{name: "changed exec", current: &corev1.Probe{Exec: &corev1.ExecAction{Command: []string{"old"}}}, revised: &corev1.Probe{Exec: &corev1.ExecAction{Command: []string{"new"}}}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			originalCurrent, originalRevised := tt.current.DeepCopy(), tt.revised.DeepCopy()
+			assert.Equal(t, tt.want, hasProbeChanged(tt.current, tt.revised))
+			assert.Equal(t, originalCurrent, tt.current, "comparison must not mutate current probe")
+			assert.Equal(t, originalRevised, tt.revised, "comparison must not mutate desired probe")
+		})
 	}
 }

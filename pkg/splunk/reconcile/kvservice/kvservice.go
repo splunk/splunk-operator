@@ -24,7 +24,6 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
-	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -124,13 +123,13 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 		publisher.Warning(ctx, splcommon.EventReasonApplyServiceFailed, "KVService Service reconciliation failed")
 		return result, fmt.Errorf("apply KVService Service: %w", err)
 	}
-	deployment, err := k8sops.GetKVServiceDeployment(ctx, c, cr)
+	certMounts, extraEnv, certErr := reconcileKVServiceCertificates(ctx, c, cr)
+	if certErr != nil {
+		return result, certErr
+	}
+	deployment, err := k8sops.GetKVServiceDeployment(ctx, c, cr, extraEnv)
 	if err != nil {
 		return result, fmt.Errorf("configure KVService Deployment: %w", err)
-	}
-	certMounts, err := certs.ReconcileCerts(ctx, c, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(splcommon.SplunkKVService, cr.Name, cr.Namespace, cr.Spec.Replicas)))
-	if err != nil {
-		return result, fmt.Errorf("reconcile KVService certificates: %w", err)
 	}
 	certs.InjectCertMounts(&deployment.Spec.Template, certMounts)
 	phase, err := k8sops.ApplyDeployment(ctx, c, deployment)

@@ -234,13 +234,13 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "certs", Namespace: "test", UID: "kvservice-certs"},
 		Spec: enterpriseApi.KVServiceSpec{
 			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
-				Certs: []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "postgres-ca"}}},
+				Certs: []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "customer-tls"}}},
 			},
 		},
 	}
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "postgres-ca", Namespace: cr.Namespace},
-		Data:       map[string][]byte{"ca.crt": []byte("test-ca-v1")},
+		ObjectMeta: metav1.ObjectMeta{Name: "customer-tls", Namespace: cr.Namespace},
+		Data:       map[string][]byte{"tls.crt": []byte("test-cert-v1"), "tls.key": []byte("test-private-key"), "ca.crt": []byte("test-ca")},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).
 		WithStatusSubresource(&enterpriseApi.KVService{}, &appsv1.Deployment{}).
@@ -263,7 +263,7 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 	for _, mount := range deployment.Spec.Template.Spec.Containers[0].VolumeMounts {
 		if mount.Name == certVolume {
 			found = true
-			assert.Equal(t, "/mnt/tls/postgres-ca", mount.MountPath)
+			assert.Equal(t, "/mnt/tls/customer-tls", mount.MountPath)
 			assert.True(t, mount.ReadOnly)
 		}
 	}
@@ -278,7 +278,7 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 		certs.AutoDNSNames(splcommon.SplunkKVService, cr.Name, cr.Namespace, 3))
 
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, secret))
-	secret.Data["ca.crt"] = []byte("test-ca-v2")
+	secret.Data["tls.crt"] = []byte("test-cert-v2")
 	require.NoError(t, c.Update(ctx, secret))
 	_, err = Apply(ctx, c, key, nil)
 	require.NoError(t, err)
@@ -287,10 +287,20 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 		"certificate rotation must change the pod template to trigger a rollout")
 
 	before = deployment.Spec.Template.DeepCopy()
-	secret.Data = map[string][]byte{"tls.crt": []byte("missing-private-key")}
-	require.NoError(t, c.Update(ctx, secret))
-	_, err = Apply(ctx, c, key, nil)
-	require.ErrorContains(t, err, "tls.key")
-	require.NoError(t, c.Get(ctx, deploymentKey, deployment))
-	assert.Equal(t, before, &deployment.Spec.Template, "invalid certificates must preserve the working Deployment")
+	for _, invalid := range []struct {
+		name, missingKey string
+		data             map[string][]byte
+	}{
+		{name: "CA only", missingKey: "tls.crt", data: map[string][]byte{"ca.crt": []byte("test-ca")}},
+		{name: "missing private key", missingKey: "tls.key", data: map[string][]byte{"tls.crt": []byte("missing-private-key")}},
+	} {
+		t.Run(invalid.name, func(t *testing.T) {
+			secret.Data = invalid.data
+			require.NoError(t, c.Update(ctx, secret))
+			_, err = Apply(ctx, c, key, nil)
+			require.ErrorContains(t, err, invalid.missingKey)
+			require.NoError(t, c.Get(ctx, deploymentKey, deployment))
+			assert.Equal(t, before, &deployment.Spec.Template, "invalid certificates must preserve the working Deployment")
+		})
+	}
 }

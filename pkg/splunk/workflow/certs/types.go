@@ -57,3 +57,22 @@ type CertMountConfig struct {
 	// Annotations maps "certRev/<secretName>" to SHA-256(tls.crt+tls.key) for rotation detection.
 	Annotations map[string]string
 }
+
+// MountPathForSecret returns the final mount path resolved for a Secret.
+// It returns false when the config has no matching Secret volume and mount.
+func (c *CertMountConfig) MountPathForSecret(secretName string) (string, bool) {
+	if c == nil {
+		return "", false
+	}
+	for _, volume := range c.Volumes {
+		if volume.Secret == nil || volume.Secret.SecretName != secretName {
+			continue
+		}
+		for _, mount := range c.VolumeMounts {
+			if mount.Name == volume.Name {
+				return mount.MountPath, mount.MountPath != ""
+			}
+		}
+	}
+	return "", false
+}

@@ -16,6 +16,7 @@
 package k8sops
 
 import (
+	"cmp"
 	"context"
 	"reflect"
 
@@ -28,8 +29,20 @@ import (
 
 // hasProbeChanged checks for changes in given current probe
 func hasProbeChanged(currentProbe *corev1.Probe, revisedProbe *corev1.Probe) bool {
-	if currentProbe == nil {
-		return revisedProbe != nil
+	if currentProbe == nil || revisedProbe == nil {
+		return currentProbe != revisedProbe
+	}
+	currentHandler := currentProbe.ProbeHandler.DeepCopy()
+	revisedHandler := revisedProbe.ProbeHandler.DeepCopy()
+	// The API server defaults HTTP handlers; compare equivalent defaults equally.
+	for _, handler := range []*corev1.ProbeHandler{currentHandler, revisedHandler} {
+		if handler.HTTPGet != nil {
+			handler.HTTPGet.Scheme = cmp.Or(handler.HTTPGet.Scheme, corev1.URISchemeHTTP)
+			handler.HTTPGet.Path = cmp.Or(handler.HTTPGet.Path, "/")
+		}
+	}
+	if !reflect.DeepEqual(currentHandler, revisedHandler) {
+		return true
 	}
 	if currentProbe.InitialDelaySeconds != revisedProbe.InitialDelaySeconds {
 		return true

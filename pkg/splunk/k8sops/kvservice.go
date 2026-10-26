@@ -34,7 +34,7 @@ import (
 )
 
 // GetKVServiceDeployment resolves API-backed configuration before returning a complete workload.
-func GetKVServiceDeployment(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService) (*appsv1.Deployment, error) {
+func GetKVServiceDeployment(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService, extraEnv []corev1.EnvVar) (*appsv1.Deployment, error) {
 	desired := resources.NewKVServiceDeployment(cr)
 	current := &appsv1.Deployment{}
 	err := c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: desired.Name}, current)
@@ -62,6 +62,7 @@ func GetKVServiceDeployment(ctx context.Context, c splcommon.ControllerClient, c
 		}
 	}
 	configureKVServiceConfigMapRevisions(ctx, c, &desired.Spec.Template, cr)
+	desired.Spec.Template.Spec.Containers[0].Env = append(desired.Spec.Template.Spec.Containers[0].Env, extraEnv...)
 	return desired, nil
 }
 
