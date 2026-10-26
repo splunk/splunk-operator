@@ -180,13 +180,20 @@ func validateResourceRequirements(resources *corev1.ResourceRequirements, fldPat
 func validateStorageConfig(config *enterpriseApi.StorageClassSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
-	// Validate ephemeralStorage is mutually exclusive with storageClassName and storageCapacity
+	// Validate ephemeralStorage is mutually exclusive with storageClassName,
+	// volumeAttributesClassName, and storageCapacity
 	if config.EphemeralStorage {
 		if config.StorageClassName != "" {
 			allErrs = append(allErrs, field.Invalid(
 				fldPath.Child("storageClassName"),
 				config.StorageClassName,
 				"storageClassName cannot be set when ephemeralStorage is true"))
+		}
+		if config.VolumeAttributesClassName != "" {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("volumeAttributesClassName"),
+				config.VolumeAttributesClassName,
+				"volumeAttributesClassName cannot be set when ephemeralStorage is true"))
 		}
 		if config.StorageCapacity != "" {
 			allErrs = append(allErrs, field.Invalid(
