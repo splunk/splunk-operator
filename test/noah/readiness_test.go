@@ -15,7 +15,6 @@
 package noah
 
 import (
-	"context"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -29,10 +28,14 @@ var _ = Describe(
 	Serial,
 	Label("tier:noah-e2e", "sva:c3", "cloud:kraken", "variant:noah", "feature:noah", "scenario:readiness"),
 	func() {
+		// Readiness is meaningful for this workflow only when the C3 is wired to
+		// Kraken's external S3/SQS resources and no chart MinIO workload is active.
 		It(
 			"reports generation-current readiness for every indexer and search head",
 			NodeTimeout(testenv.MediumLongTimeout),
 			func(ctx SpecContext) {
+				_, err := checkKrakenExternalStorage(ctx)
+				Expect(err).NotTo(HaveOccurred(), "Kraken external storage is not wired as expected")
 				topology := waitForC3Ready(ctx)
 				Expect(topology.LicenseManagerPod).NotTo(BeEmpty())
 				Expect(topology.IndexerPods).NotTo(BeEmpty())
@@ -54,34 +57,3 @@ var _ = Describe(
 		)
 	},
 )
-
-func waitForC3Ready(ctx context.Context) *c3Topology {
-	GinkgoHelper()
-
-	readyCtx, cancel := context.WithTimeout(ctx, readyTimeout)
-	defer cancel()
-
-	var topology *c3Topology
-	Eventually(func() error {
-		current, err := inspectC3Ready(
-			readyCtx,
-			testcaseEnvInstance.GetKubeClient(),
-			operatorNamespace,
-			clusterName,
-			operatorName,
-			noahDeployment,
-		)
-		if isTerminalReadinessError(err) {
-			StopTrying("Noah C3 reported a terminal readiness condition").Wrap(err).Now()
-		}
-		if err == nil {
-			topology = current
-		}
-		return err
-	}).
-		WithContext(readyCtx).
-		WithTimeout(readyTimeout).
-		WithPolling(testenv.PollInterval).
-		Should(Succeed())
-	return topology
-}

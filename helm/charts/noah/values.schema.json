@@ -53,6 +53,10 @@
     "minio": {
       "type": "object",
       "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Deploy the development-only MinIO SmartStore fallback. Disable when an external S3 service is used."
+        },
         "auth": {
           "type": "object",
           "properties": {

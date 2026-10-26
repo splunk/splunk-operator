@@ -200,6 +200,37 @@ func inspectC3Ready(
 // backed by a cluster-wide cache, so its first read of a type starts an
 // informer that lists and watches that type in every namespace. Use this
 // client for Secrets and for reads that must observe the latest state.
+func waitForC3Ready(ctx context.Context) *c3Topology {
+	GinkgoHelper()
+
+	readyCtx, cancel := context.WithTimeout(ctx, readyTimeout)
+	defer cancel()
+
+	var topology *c3Topology
+	Eventually(func() error {
+		current, err := inspectC3Ready(
+			readyCtx,
+			testcaseEnvInstance.GetKubeClient(),
+			operatorNamespace,
+			clusterName,
+			operatorName,
+			noahDeployment,
+		)
+		if isTerminalReadinessError(err) {
+			StopTrying("Noah C3 reported a terminal readiness condition").Wrap(err).Now()
+		}
+		if err == nil {
+			topology = current
+		}
+		return err
+	}).
+		WithContext(readyCtx).
+		WithTimeout(readyTimeout).
+		WithPolling(testenv.PollInterval).
+		Should(Succeed())
+	return topology
+}
+
 func uncachedClient() client.Client {
 	GinkgoHelper()
 	kubeConfig, err := config.GetConfig()
@@ -259,7 +290,8 @@ type noahServiceProxy struct {
 
 func (proxy *noahServiceProxy) Do(request *http.Request) (*http.Response, error) {
 	forwarded := request.Clone(request.Context())
-	forwarded.URL = proxy.baseURL.Clone()
+	clonedBaseURL := *proxy.baseURL
+	forwarded.URL = &clonedBaseURL
 	forwarded.URL.Path = strings.TrimRight(proxy.baseURL.Path, "/") + request.URL.Path
 	forwarded.URL.RawPath = ""
 	forwarded.URL.RawQuery = request.URL.RawQuery
