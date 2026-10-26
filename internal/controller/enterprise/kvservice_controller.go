@@ -105,7 +105,7 @@ func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorder("kvservice-controller")
 	}
-	bldr := ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.KVService{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
@@ -141,13 +141,13 @@ func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				mgr.GetRESTMapper(),
 				&enterpriseApi.KVService{},
 			)).
-		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToKVServices)).
-		WithOptions(controller.Options{
-			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
-		})
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToKVServices))
 	if config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
-		bldr = bldr.Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(
-			certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.KVServiceList{})))
+		builder = builder.Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(
+			certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.KVServiceList{}),
+		))
 	}
-	return bldr.Complete(r)
+	return builder.WithOptions(controller.Options{
+		MaxConcurrentReconciles: enterpriseApi.TotalWorker,
+	}).Complete(r)
 }

@@ -59,6 +59,14 @@ func validateKVServiceSpec(ctx context.Context, c splcommon.ControllerClient, cr
 			logging.FromContext(ctx).ErrorContext(ctx, "couldn't get secret in the imagePullSecrets config", "Secret", secret.Name, "error", err)
 		}
 	}
+	if len(spec.Certs) > 0 {
+		reserved := map[string]struct{}{"TLS_CERTIFICATE": {}, "TLS_PRIVATE_KEY": {}, "TLS_HOST": {}, "TLS_PORT": {}}
+		for _, env := range spec.ExtraEnv {
+			if _, ok := reserved[env.Name]; ok {
+				return fmt.Errorf("spec.extraEnv cannot override operator-managed KVService TLS environment variable %q", env.Name)
+			}
+		}
+	}
 	resources.SetKVServiceVolumeDefaults(spec)
 	return reconcileutil.ValidateSpec(&spec.Spec, corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("4Gi")},
