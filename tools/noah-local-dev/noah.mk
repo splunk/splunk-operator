@@ -70,7 +70,7 @@ NOAH_LOCAL_DATA_PATH_TIMEOUT ?= 3m
 # against the API server up front, so one release cannot both create the
 # cert-manager CRDs and use them.
 # Keep this version in step with the dependency in the operator chart's Chart.yaml.
-NOAH_LOCAL_CERT_MANAGER_VERSION ?= v1.21.2
+NOAH_LOCAL_CERT_MANAGER_VERSION ?= v1.21.3
 NOAH_LOCAL_CERT_MANAGER_CHART ?= $(NOAH_LOCAL_OPERATOR_CHART)/charts/cert-manager-$(NOAH_LOCAL_CERT_MANAGER_VERSION).tgz
 NOAH_LOCAL_CERT_MANAGER_RELEASE ?= cert-manager
 NOAH_LOCAL_CERT_MANAGER_NAMESPACE ?= cert-manager
