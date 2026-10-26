@@ -1,3 +1,4 @@
+{{- if .Values.minio.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -61,3 +62,4 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
+{{- end }}

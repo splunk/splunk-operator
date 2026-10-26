@@ -9,9 +9,6 @@ nav_order: 4
 This guide explains the Splunk Operator in-cluster E2E framework, how it
 differs from faster test levels, and how to write, execute, and debug suites.
 
-For the Noah-backed C3 developer workflow, see
-[Noah integration testing on Kraken](NoahIntegrationTesting.md).
-
 > **Assumed for E2E execution:** You have a suitable Kubernetes test cluster
 > and have completed the setup in [How to Execute Tests](#how-to-execute-tests).
 
