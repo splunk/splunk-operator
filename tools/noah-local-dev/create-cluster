@@ -6,22 +6,119 @@
 #
 # Environment:
 #   NOAH_LOCAL_NAMESPACE          workload namespace to configure (required)
+#   NOAH_LOCAL_CONTEXT            kubeconfig context name to create or replace
 #   NOAH_LOCAL_DEPLOYMENT_ID_FILE where to record a newly created deployment ID
 #                                 as soon as it exists, so a failure during the
 #                                 setup that follows cannot orphan the vCluster
+#   NOAH_LOCAL_KRAKEN_RUNTIME_FILE where to write non-secret Kraken SmartBus and
+#                                 workload-identity coordinates
+#   NOAH_LOCAL_KRAKEN_BASE_URL    Kraken API base URL used for every request
+#   NOAH_LOCAL_KRAKEN_WAIT_TIMEOUT maximum readiness wait (seconds, or Ns/Nm/Nh)
+#   NOAH_LOCAL_KRAKEN_TTL_SECONDS optional deployment lease duration
+#   NOAH_LOCAL_KRAKEN_PURPOSE     optional deployment purpose metadata
+#   NOAH_LOCAL_KRAKEN_WORKFLOW_TAG optional workflow metadata tag value
+#   NOAH_LOCAL_KRAKEN_PIPELINE_TAG optional pipeline metadata tag value
+#   NOAH_LOCAL_KRAKEN_SHA_TAG     optional commit metadata tag value
 
 set -eu
 
 deployment_id=${1:-}
 deployment_id_file=${NOAH_LOCAL_DEPLOYMENT_ID_FILE:-}
+runtime_file=${NOAH_LOCAL_KRAKEN_RUNTIME_FILE:-}
+kraken_base_url=${NOAH_LOCAL_KRAKEN_BASE_URL:-https://kraken.cyclops-pdx10-play-payne.splunk8s.io}
+kraken_wait_timeout=${NOAH_LOCAL_KRAKEN_WAIT_TIMEOUT:-20m}
+kraken_ttl_seconds=${NOAH_LOCAL_KRAKEN_TTL_SECONDS:-}
+kraken_purpose=${NOAH_LOCAL_KRAKEN_PURPOSE:-}
+kraken_workflow_tag=${NOAH_LOCAL_KRAKEN_WORKFLOW_TAG:-}
+kraken_pipeline_tag=${NOAH_LOCAL_KRAKEN_PIPELINE_TAG:-}
+kraken_sha_tag=${NOAH_LOCAL_KRAKEN_SHA_TAG:-}
+request_file=
+created_deployment=false
 source_namespace=default
 # Exported so yq's strenv() can read it in the kubeconfig merge below.
 workload_namespace=${NOAH_LOCAL_NAMESPACE:-splunk-operator}
-export workload_namespace
+kube_context=${NOAH_LOCAL_CONTEXT:-kraken}
+kube_user=${kube_context}-super-admin
+export workload_namespace kube_context kube_user
+
+cleanup_request_file() {
+    if test -n "$request_file" && test -f "$request_file"; then
+        rm -f -- "$request_file"
+    fi
+}
+
+trap cleanup_request_file EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 fail() {
     printf '%s\n' "$*" >&2
     exit 1
+}
+
+test -n "$kube_context" || fail 'NOAH_LOCAL_CONTEXT must not be empty.'
+test -n "$kraken_base_url" || fail 'NOAH_LOCAL_KRAKEN_BASE_URL must not be empty.'
+
+duration_seconds() {
+    duration=$1
+    case $duration in
+        *s) duration_value=${duration%s}; duration_multiplier=1 ;;
+        *m) duration_value=${duration%m}; duration_multiplier=60 ;;
+        *h) duration_value=${duration%h}; duration_multiplier=3600 ;;
+        *) duration_value=$duration; duration_multiplier=1 ;;
+    esac
+    case $duration_value in
+        ''|*[!0-9]*)
+            fail "Invalid Kraken wait timeout '$duration'; use seconds or Ns, Nm, or Nh." ;;
+    esac
+    duration_result=$((duration_value * duration_multiplier))
+    test "$duration_result" -gt 0 ||
+        fail 'NOAH_LOCAL_KRAKEN_WAIT_TIMEOUT must be greater than zero.'
+    printf '%s\n' "$duration_result"
+}
+
+wait_for_kraken_ready() {
+    wait_deployment_id=$1
+    wait_timeout=$2
+    wait_timeout_seconds=$(duration_seconds "$wait_timeout")
+    wait_started_at=$(date +%s)
+    wait_deadline=$((wait_started_at + wait_timeout_seconds))
+    last_state=unknown
+
+    while :; do
+        if wait_status=$(kraken status --base-url "$kraken_base_url" \
+            "$wait_deployment_id" 2>&1); then
+            wait_state=$(printf '%s\n' "$wait_status" |
+                jq -er '.state | strings | select(length > 0)') ||
+                fail "Kraken returned an invalid status for deployment $wait_deployment_id."
+            if test "$wait_state" != "$last_state"; then
+                printf 'Kraken deployment %s is %s.\n' \
+                    "$wait_deployment_id" "$wait_state" >&2
+                last_state=$wait_state
+            fi
+            case $wait_state in
+                ready) return 0 ;;
+                failed|terminating|terminated)
+                    fail "Kraken deployment $wait_deployment_id became $wait_state before it was ready." ;;
+            esac
+        else
+            last_state='status unavailable'
+            printf 'Waiting for Kraken deployment %s status: %s\n' \
+                "$wait_deployment_id" "$wait_status" >&2
+        fi
+
+        wait_now=$(date +%s)
+        if test "$wait_now" -ge "$wait_deadline"; then
+            fail "Timed out after $wait_timeout waiting for Kraken deployment $wait_deployment_id (last state: $last_state)."
+        fi
+        wait_remaining=$((wait_deadline - wait_now))
+        wait_sleep=5
+        if test "$wait_remaining" -lt "$wait_sleep"; then
+            wait_sleep=$wait_remaining
+        fi
+        sleep "$wait_sleep"
+    done
 }
 
 for command_name in jq yq kubectl kraken; do
@@ -32,20 +129,70 @@ done
 script_dir=$(cd -- "$(dirname -- "$0")" && pwd)
 
 if test -z "$deployment_id"; then
-    deployment_id=$(
-        kraken create --file "$script_dir/kraken-request.yaml" --wait --json |
-            jq -er '.deployment.id'
-    ) || fail 'Failed to create the Kraken deployment.'
+    if test -n "$kraken_ttl_seconds"; then
+        case $kraken_ttl_seconds in
+            *[!0-9]*) fail 'NOAH_LOCAL_KRAKEN_TTL_SECONDS must be a positive integer.' ;;
+        esac
+        test "$kraken_ttl_seconds" -gt 0 ||
+            fail 'NOAH_LOCAL_KRAKEN_TTL_SECONDS must be a positive integer.'
+    fi
 
-    # Record the ID before the configuration below, which can fail and would
-    # otherwise leave a running vCluster that `make noah-local-destroy` cannot
-    # find. Reported to stderr so stdout stays just the ID.
-    if test -n "$deployment_id_file"; then
-        mkdir -p "$(dirname -- "$deployment_id_file")"
-        printf '%s\n' "$deployment_id" > "$deployment_id_file"
+    # Kraken request files are mutually exclusive with deployment flags such
+    # as --ttl-seconds. Render the lease into a private request copy. Purpose
+    # and tags remain CLI metadata flags so Kraken persists them on the
+    # deployment and operators can identify a leaked CI environment.
+    request_file=$(mktemp "${TMPDIR:-/tmp}/noah-kraken-request.XXXXXX")
+    cp "$script_dir/kraken-request.yaml" "$request_file"
+    chmod 0600 "$request_file"
+    if test -n "$kraken_ttl_seconds"; then
+        kraken_ttl_seconds="$kraken_ttl_seconds" yq eval --inplace \
+            '.lease.ttl_seconds = (strenv(kraken_ttl_seconds) | tonumber)' \
+            "$request_file"
+    fi
+
+    set -- create --base-url "$kraken_base_url" \
+        --file "$request_file" --json
+    if test -n "$kraken_purpose"; then
+        set -- "$@" --purpose "$kraken_purpose"
+    fi
+    if test -n "$kraken_workflow_tag"; then
+        set -- "$@" --tag "workflow=$kraken_workflow_tag"
+    fi
+    if test -n "$kraken_pipeline_tag"; then
+        set -- "$@" --tag "pipeline=$kraken_pipeline_tag"
+    fi
+    if test -n "$kraken_sha_tag"; then
+        set -- "$@" --tag "sha=$kraken_sha_tag"
+    fi
+
+    creation_json=$(kraken "$@") || fail 'Failed to create the Kraken deployment.'
+    deployment_id=$(printf '%s\n' "$creation_json" |
+        jq -er '(.id // .deployment.id) | strings | select(length > 0)') ||
+        fail 'Kraken creation response did not contain a deployment ID.'
+    unset creation_json
+
+    created_deployment=true
+fi
+
+# Record both newly created and explicitly selected deployments before any
+# later setup can fail. If an old runtime file remains, its deployment ID no
+# longer matches this file and the Makefile guard refuses to apply fixtures.
+if test -n "$deployment_id_file"; then
+    mkdir -p "$(dirname -- "$deployment_id_file")"
+    temporary_deployment_id_file="${deployment_id_file}.tmp"
+    umask 077
+    printf '%s\n' "$deployment_id" > "$temporary_deployment_id_file"
+    mv "$temporary_deployment_id_file" "$deployment_id_file"
+    if test "$created_deployment" = true; then
         printf 'Created Kraken deployment %s (recorded in %s).\n' \
             "$deployment_id" "$deployment_id_file" >&2
     fi
+fi
+
+# The deployment ID is durable before readiness polling so timeout, signal or
+# setup failures can always use noah-local-destroy to terminate the deployment.
+if test "$created_deployment" = true; then
+    wait_for_kraken_ready "$deployment_id" "$kraken_wait_timeout"
 fi
 
 kubeconfig=$HOME/.kube/config
@@ -69,71 +216,173 @@ if ! test -s "$kubeconfig"; then
         'contexts: []' > "$kubeconfig"
 fi
 
-kraken_kubeconfig=$(kraken connection "$deployment_id" | jq -er '.kubeconfig') ||
+connection_details=$(kraken connection --base-url "$kraken_base_url" \
+    "$deployment_id") ||
     fail "Failed to read the connection details for $deployment_id."
+kraken_kubeconfig=$(printf '%s\n' "$connection_details" | jq -er '.kubeconfig') ||
+    fail "Kraken connection details for $deployment_id have no kubeconfig."
+kraken_cluster_server=$(printf '%s\n' "$kraken_kubeconfig" | yq eval -er '.clusters[0].cluster.server' -) ||
+    fail "Kraken kubeconfig for $deployment_id has no cluster server."
+runtime_access=$(printf '%s\n' "$connection_details" | jq -ec \
+    --arg deployment_id "$deployment_id" \
+    --arg cluster_server "$kraken_cluster_server" '
+  if .deployment_id != $deployment_id then
+    error("Kraken connection returned a different deployment ID")
+  else
+  {
+    deployment_id: $deployment_id,
+    cluster_server: $cluster_server,
+    service_account: {
+      name: .service_account.name,
+      namespace: .service_account.namespace
+    },
+    smartbus: {
+      queue: {
+        name: .smartbus.queue.name,
+        url: .smartbus.queue.url,
+        dlq_name: .smartbus.queue.dlq_name,
+        endpoint: .smartbus.queue.endpoint,
+        auth_region: .smartbus.queue.auth_region
+      },
+      object_storage: {
+        bucket: .smartbus.object_storage.bucket,
+        region: .smartbus.object_storage.region,
+        endpoint: .smartbus.object_storage.endpoint,
+        path: .smartbus.object_storage.path,
+        s3_uri: .smartbus.object_storage.s3_uri
+      }
+    }
+  }
+  | if ([
+      .deployment_id,
+      .cluster_server,
+      .service_account.name,
+      .service_account.namespace,
+      .smartbus.queue.name,
+      .smartbus.queue.url,
+      .smartbus.queue.dlq_name,
+      .smartbus.queue.endpoint,
+      .smartbus.queue.auth_region,
+      .smartbus.object_storage.bucket,
+      .smartbus.object_storage.region,
+      .smartbus.object_storage.endpoint,
+      .smartbus.object_storage.path,
+      .smartbus.object_storage.s3_uri
+    ] | all(type == "string" and length > 0))
+    then .
+    else error("Kraken connection is missing SmartBus or workload-identity coordinates")
+    end
+  end
+') || fail "Kraken connection details for $deployment_id are incomplete."
+unset connection_details
 
-# Renames Kraken's cluster and user, then replaces any previous kraken entries
-# so repeated runs do not accumulate duplicates. The spaces around `//` are
-# required: yq parses `.clusters//[]` as a path and silently returns nothing.
+runtime_namespace=$(printf '%s\n' "$runtime_access" | jq -er '.service_account.namespace')
+runtime_service_account=$(printf '%s\n' "$runtime_access" | jq -er '.service_account.name')
+queue_auth_region=$(printf '%s\n' "$runtime_access" | jq -er '.smartbus.queue.auth_region')
+object_store_region=$(printf '%s\n' "$runtime_access" | jq -er '.smartbus.object_storage.region')
+test "$runtime_namespace" = "$workload_namespace" ||
+    fail "Kraken runtime ServiceAccount is in $runtime_namespace; expected $workload_namespace."
+test "$queue_auth_region" = "$object_store_region" ||
+    fail "Kraken returned different SQS ($queue_auth_region) and S3 ($object_store_region) regions."
+
+# Renames Kraken's cluster and user, then replaces any entries for the selected
+# context so repeated runs do not accumulate duplicates. The spaces around `//`
+# are required: yq parses `.clusters//[]` as a path and silently returns nothing.
 # shellcheck disable=SC2016 # $kraken is a yq alias, not a shell variable.
 printf '%s\n' "$kraken_kubeconfig" |
     yq eval --inplace '
       (
         load("/dev/stdin")
-        | .clusters[0].name = "kraken"
-        | .users[0].name = "kraken-super-admin"
+        | .clusters[0].name = strenv(kube_context)
+        | .users[0].name = strenv(kube_user)
       ) as $kraken
-      | .clusters = (((.clusters // []) | map(select(.name != "kraken"))) + [$kraken.clusters[0]])
-      | .users = (((.users // []) | map(select(.name != "kraken-super-admin"))) + [$kraken.users[0]])
-      | .contexts = (((.contexts // []) | map(select(.name != "kraken"))) + [{
-          "context": {"cluster": "kraken", "user": "kraken-super-admin", "namespace": strenv(workload_namespace)},
-          "name": "kraken"
+      | .clusters = (((.clusters // []) | map(select(.name != strenv(kube_context)))) + [$kraken.clusters[0]])
+      | .users = (((.users // []) | map(select(.name != strenv(kube_user)))) + [$kraken.users[0]])
+      | .contexts = (((.contexts // []) | map(select(.name != strenv(kube_context)))) + [{
+          "context": {"cluster": strenv(kube_context), "user": strenv(kube_user), "namespace": strenv(workload_namespace)},
+          "name": strenv(kube_context)
         }])
-      | ."current-context" = "kraken"
+      | ."current-context" = strenv(kube_context)
     ' "$kubeconfig"
 
 # Kraken issues a deployment-scoped Artifactory credential in the default
-# namespace. Copying it avoids pushing local docker credentials into the cluster.
+# namespace. Resolve the exact Secret Kraken attached to splunk-runtime instead
+# of choosing an arbitrary matching Secret left by another deployment.
 image_pull_secret=$(
-    kubectl --context kraken --namespace "$source_namespace" get secrets -o json |
+    kubectl --context "$kube_context" --namespace "$workload_namespace" \
+        get serviceaccount "$runtime_service_account" -o json |
         jq -er '
-          [.items[]
-            | select(
-                .type == "kubernetes.io/dockerconfigjson"
-                and (.metadata.name | startswith("kraken-artifactory-creds-"))
-              )
-          ][0].metadata.name
+          [.imagePullSecrets[]?.name
+            | select(startswith("kraken-artifactory-creds-"))
+          ] as $names
+          | if ($names | length) == 1 then $names[0]
+            else error("expected exactly one Kraken image pull Secret reference")
+            end
         '
-) || fail "No kraken-artifactory-creds-* secret found in $source_namespace."
+) || fail "ServiceAccount $runtime_service_account does not identify exactly one Kraken image pull Secret."
 
-kubectl --context kraken --namespace "$source_namespace" \
+kubectl --context "$kube_context" --namespace "$source_namespace" \
     get secret "$image_pull_secret" -o json |
     jq --arg namespace "$workload_namespace" '
-      .metadata.namespace = $namespace
+      if .type != "kubernetes.io/dockerconfigjson" then
+        error("Kraken image pull Secret has the wrong type")
+      else . end
+      | .metadata.namespace = $namespace
       | del(
           .metadata.creationTimestamp,
           .metadata.resourceVersion,
           .metadata.uid,
-          .metadata.managedFields
+          .metadata.managedFields,
+          .metadata.annotations."kubectl.kubernetes.io/last-applied-configuration"
         )
     ' |
-    kubectl --context kraken --namespace "$workload_namespace" apply -f - >/dev/null
+    kubectl --context "$kube_context" --namespace "$workload_namespace" \
+        apply --server-side --force-conflicts \
+        --field-manager=noah-local-dev -f - >/dev/null
 
-service_account_patch=$(
-    kubectl --context kraken --namespace "$workload_namespace" \
-        get serviceaccount default -o json |
-        jq -cer --arg name "$image_pull_secret" '
-          {
-            imagePullSecrets: (
-              ((.imagePullSecrets // []) + [{"name": $name}])
-              | unique_by(.name)
-            )
-          }
-        '
-) || fail "Failed to read the default ServiceAccount in $workload_namespace."
+# Older versions used client-side apply, which copied the complete encoded
+# Secret into this annotation. Remove it explicitly even when server-side apply
+# is updating an existing Secret.
+kubectl --context "$kube_context" --namespace "$workload_namespace" \
+    patch secret "$image_pull_secret" --type merge \
+    --patch '{"metadata":{"annotations":{"kubectl.kubernetes.io/last-applied-configuration":null}}}' \
+    >/dev/null
 
-kubectl --context kraken --namespace "$workload_namespace" patch serviceaccount default \
-    --type merge \
-    --patch "$service_account_patch" >/dev/null
+patch_service_account() {
+    service_account_name=$1
+    service_account_patch=$(
+        kubectl --context "$kube_context" --namespace "$workload_namespace" \
+            get serviceaccount "$service_account_name" -o json |
+            jq -cer --arg name "$image_pull_secret" '
+              {
+                imagePullSecrets: (
+                  ((.imagePullSecrets // [])
+                    | map(select(.name | startswith("kraken-artifactory-creds-") | not))
+                  ) + [{"name": $name}]
+                  | unique_by(.name)
+                )
+              }
+            '
+    ) || fail "Failed to read ServiceAccount $service_account_name in $workload_namespace."
+
+    kubectl --context "$kube_context" --namespace "$workload_namespace" \
+        patch serviceaccount "$service_account_name" \
+        --type merge \
+        --patch "$service_account_patch" >/dev/null
+}
+
+patch_service_account default
+if test "$runtime_service_account" != default; then
+    patch_service_account "$runtime_service_account"
+fi
+
+if test -n "$runtime_file"; then
+    mkdir -p "$(dirname -- "$runtime_file")"
+    temporary_runtime_file="${runtime_file}.tmp"
+    umask 077
+    printf '%s\n' "$runtime_access" > "$temporary_runtime_file"
+    mv "$temporary_runtime_file" "$runtime_file"
+fi
+unset runtime_access
 
 printf '%s\n' "$deployment_id"
