@@ -1334,6 +1334,34 @@ spec:
                   PodAnnotations is a map of annotations applied to Splunk instance pods.
                   These annotations override operator-provided pod annotations when keys overlap.
                 type: object
+              postgres:
+                description: Postgres config used by KVService.
+                properties:
+                  databaseName:
+                    description: |-
+                      Logical PostgreSQL database name used by KVService.
+                      When omitted, the controller selects kvstore.
+                    maxLength: 30
+                    pattern: ^[a-z][a-z0-9]*$
+                    type: string
+                  databaseRef:
+                    description: |-
+                      Reference to an existing PostgresDatabase resource in this namespace.
+                      When omitted, the controller selects the existing kvstore-database resource.
+                      KVService never creates or modifies the referenced PostgresDatabase.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                type: object
               readinessInitialDelaySeconds:
                 description: |-
                   ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe

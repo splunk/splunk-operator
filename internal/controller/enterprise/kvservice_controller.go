@@ -21,9 +21,11 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/internal/controller/common"
 	"github.com/splunk/splunk-operator/pkg/config"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/reconcile/kvservice"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	appsv1 "k8s.io/api/apps/v1"
@@ -64,6 +66,7 @@ type KVServiceReconciler struct {
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=kvservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=kvservices/finalizers,verbs=update
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=platform.splunk.com,resources=postgresdatabases,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -116,6 +119,7 @@ func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.PodChangedPredicate(),
 			common.ConfigMapChangedPredicate(),
 			common.CrdChangedPredicate(),
+			common.PostgresStatusChangedPredicate(),
 		)).
 		Watches(&appsv1.Deployment{},
 			handler.EnqueueRequestForOwner(
@@ -142,10 +146,18 @@ func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				&enterpriseApi.KVService{},
 			)).
 		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToKVServices))
+
 	if config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
 		builder = builder.Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(
-			certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.KVServiceList{}),
-		))
+			certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.KVServiceList{})))
+	}
+	if config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
+		mapper := k8sops.KVServicePostgresMapper{Client: r.Client}
+		builder = builder.
+			Watches(&platformApi.PostgresDatabase{}, handler.EnqueueRequestsFromMapFunc(mapper.MapDatabase)).
+			Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(mapper.MapConfigMap)).
+			Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(mapper.MapAdminSecret)).
+			Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(mapper.MapNamespaceSecret))
 	}
 	return builder.WithOptions(controller.Options{
 		MaxConcurrentReconciles: enterpriseApi.TotalWorker,

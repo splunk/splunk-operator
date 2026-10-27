@@ -38,7 +38,7 @@ func validateKVServiceSpec(ctx context.Context, c splcommon.ControllerClient, cr
 	for name, probe := range map[string]*enterpriseApi.Probe{"Liveness": spec.LivenessProbe, "Readiness": spec.ReadinessProbe} {
 		if probe != nil {
 			if err := splcommon.ValidateProbe(name, probe.InitialDelaySeconds, probe.TimeoutSeconds, probe.PeriodSeconds, probe.FailureThreshold); err != nil {
-				return err
+				return fmt.Errorf("validate KVService %s probe: %w", name, err)
 			}
 		}
 	}
@@ -49,7 +49,7 @@ func validateKVServiceSpec(ctx context.Context, c splcommon.ControllerClient, cr
 		return fmt.Errorf("spec.certs requires the CertManagement feature gate")
 	}
 	if err := reconcileutil.ValidateSplunkGeneralTerms(); err != nil {
-		return err
+		return fmt.Errorf("validate KVService general terms: %w", err)
 	}
 	if len(spec.ImagePullSecrets) == 0 {
 		spec.ImagePullSecrets = nil
@@ -67,9 +67,33 @@ func validateKVServiceSpec(ctx context.Context, c splcommon.ControllerClient, cr
 			}
 		}
 	}
+	if spec.Postgres != nil {
+		reserved := map[string]struct{}{
+			"KVSERVICE_SINGLE_TENANT_K8S_MODE":       {},
+			"KVSERVICE_SINGLE_TENANT_PASS4_SYMM_KEY": {},
+			"KVSERVICE_DB_HOST":                      {},
+			"KVSERVICE_DB_PORT":                      {},
+			"KVSERVICE_SINGLE_TENANT_PRIMARY_HOST":   {},
+			"KVSERVICE_SINGLE_TENANT_PRIMARY_PORT":   {},
+			"KVSERVICE_SINGLE_TENANT_REPLICA_HOST":   {},
+			"KVSERVICE_SINGLE_TENANT_REPLICA_PORT":   {},
+			"KVSERVICE_DB_ROOT_USER":                 {},
+			"KVSERVICE_DB_SERVICE_USER":              {},
+			"KVSERVICE_DB_PASSWORD":                  {},
+			"KVSERVICE_DB_SERVICE_PASSWORD":          {},
+		}
+		for _, env := range spec.ExtraEnv {
+			if _, ok := reserved[env.Name]; ok {
+				return fmt.Errorf("spec.extraEnv cannot override operator-managed KVService Postgres environment variable %q", env.Name)
+			}
+		}
+	}
 	resources.SetKVServiceVolumeDefaults(spec)
-	return reconcileutil.ValidateSpec(&spec.Spec, corev1.ResourceRequirements{
+	if err := reconcileutil.ValidateSpec(&spec.Spec, corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("4Gi")},
 		Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("4"), corev1.ResourceMemory: resource.MustParse("16Gi")},
-	})
+	}); err != nil {
+		return fmt.Errorf("validate KVService workload settings: %w", err)
+	}
+	return nil
 }
