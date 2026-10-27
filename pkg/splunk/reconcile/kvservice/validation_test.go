@@ -74,6 +74,35 @@ func TestValidateKVServiceSpec(t *testing.T) {
 			}
 		})
 	}
+	for _, name := range []string{
+		"KVSERVICE_SINGLE_TENANT_K8S_MODE",
+		"KVSERVICE_SINGLE_TENANT_PASS4_SYMM_KEY",
+		"KVSERVICE_DB_HOST",
+		"KVSERVICE_DB_PORT",
+		"KVSERVICE_SINGLE_TENANT_PRIMARY_HOST",
+		"KVSERVICE_SINGLE_TENANT_PRIMARY_PORT",
+		"KVSERVICE_SINGLE_TENANT_REPLICA_HOST",
+		"KVSERVICE_SINGLE_TENANT_REPLICA_PORT",
+		"KVSERVICE_DB_ROOT_USER",
+		"KVSERVICE_DB_SERVICE_USER",
+		"KVSERVICE_DB_PASSWORD",
+		"KVSERVICE_DB_SERVICE_PASSWORD",
+	} {
+		t.Run("reserved "+name, func(t *testing.T) {
+			candidate := cr.DeepCopy()
+			candidate.Spec.Postgres = &enterpriseApi.KVServicePostgresSpec{}
+			candidate.Spec.ExtraEnv = []corev1.EnvVar{{Name: name, Value: "override"}}
+			require.ErrorContains(t, validateKVServiceSpec(t.Context(), c, candidate), name)
+			candidate.Spec.Postgres = nil
+			require.NoError(t, validateKVServiceSpec(t.Context(), c, candidate), "without PostgreSQL configuration the variable is user-managed")
+		})
+	}
+	t.Run("unrelated extra environment", func(t *testing.T) {
+		candidate := cr.DeepCopy()
+		candidate.Spec.Postgres = &enterpriseApi.KVServicePostgresSpec{}
+		candidate.Spec.ExtraEnv = []corev1.EnvVar{{Name: "CUSTOM_SETTING", Value: "allowed"}}
+		require.NoError(t, validateKVServiceSpec(t.Context(), c, candidate))
+	})
 }
 
 func TestValidateKVServiceCertsFeatureGate(t *testing.T) {

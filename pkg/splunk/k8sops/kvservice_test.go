@@ -20,6 +20,9 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	pgdatabase "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
+	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	"github.com/stretchr/testify/assert"
@@ -30,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -206,4 +210,64 @@ func TestKVServiceConfigurationAndConfigMapRollouts(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, optOut.Spec.Template.Annotations, splcommon.ConfigMapRevAnnotationPrefix+"config")
 	assert.NotContains(t, optOut.Spec.Template.Annotations, projectedKey)
+}
+
+func TestResolveKVServicePostgresDependenciesRejectsMissingRequiredValues(t *testing.T) {
+	configMapKeys := map[string]string{
+		pgconninfo.KeyClusterRWEndpoint:  "postgres-rw.test.svc",
+		pgconninfo.KeyDefaultClusterPort: "5432",
+		pgdatabase.ConfigMapKeyAdminUser: "kvstore-admin",
+	}
+	tests := []struct {
+		name       string
+		configKey  string
+		secretName string
+		secretKey  string
+	}{
+		{name: "missing endpoint", configKey: pgconninfo.KeyClusterRWEndpoint},
+		{name: "missing port", configKey: pgconninfo.KeyDefaultClusterPort},
+		{name: "missing username", configKey: pgdatabase.ConfigMapKeyAdminUser},
+		{name: "missing password", secretName: "admin", secretKey: "password"},
+		{name: "missing pass4 key", secretName: splcommon.GetNamespaceScopedSecretName("test"), secretKey: kvServicePass4SymmKey},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := make(map[string]string, len(configMapKeys))
+			for key, value := range configMapKeys {
+				data[key] = value
+			}
+			if tt.configKey != "" {
+				delete(data, tt.configKey)
+			}
+			adminSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "admin", Namespace: "test"}, Data: map[string][]byte{"password": []byte("password")}}
+			namespaceSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: splcommon.GetNamespaceScopedSecretName("test"), Namespace: "test"}, Data: map[string][]byte{kvServicePass4SymmKey: []byte("pass4")}}
+			if tt.secretName == adminSecret.Name {
+				delete(adminSecret.Data, tt.secretKey)
+			}
+			if tt.secretName == namespaceSecret.Name {
+				delete(namespaceSecret.Data, tt.secretKey)
+			}
+			database := &platformApi.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{Name: "pg-database", Namespace: "test"},
+				Status: platformApi.PostgresDatabaseStatus{Databases: []platformApi.DatabaseInfo{{
+					Name:               "kvstore",
+					Ready:              true,
+					ConfigMapRef:       &corev1.LocalObjectReference{Name: "pg-config"},
+					AdminUserSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "admin"}, Key: "password"},
+				}}},
+			}
+			mockClient := spltest.NewMockClient()
+			mockClient.AddObjects([]client.Object{
+				database,
+				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "pg-config", Namespace: "test"}, Data: data},
+				adminSecret,
+				namespaceSecret,
+			})
+			cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "test"}}
+
+			_, ready, err := ResolveKVServicePostgresDependencies(t.Context(), mockClient, cr, database, "kvstore")
+			require.Error(t, err)
+			assert.False(t, ready)
+		})
+	}
 }
