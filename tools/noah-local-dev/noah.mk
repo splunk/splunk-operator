@@ -69,8 +69,9 @@ NOAH_LOCAL_DATA_PATH_TIMEOUT ?= 3m
 # separate release, before the operator chart: Helm validates a whole release
 # against the API server up front, so one release cannot both create the
 # cert-manager CRDs and use them.
-# Keep this version in step with the dependency in the operator chart's Chart.yaml.
-NOAH_LOCAL_CERT_MANAGER_VERSION ?= v1.21.3
+# The version is read from the operator chart's Chart.lock, which is what
+# `helm dependency build` downloads, so dependency bumps need no change here.
+NOAH_LOCAL_CERT_MANAGER_VERSION ?= $(shell awk '/name: cert-manager/ {found=1} found && /version:/ {gsub(/["'"'"']/, "", $$2); print $$2; exit}' $(NOAH_LOCAL_OPERATOR_CHART)/Chart.lock)
 NOAH_LOCAL_CERT_MANAGER_CHART ?= $(NOAH_LOCAL_OPERATOR_CHART)/charts/cert-manager-$(NOAH_LOCAL_CERT_MANAGER_VERSION).tgz
 NOAH_LOCAL_CERT_MANAGER_RELEASE ?= cert-manager
 NOAH_LOCAL_CERT_MANAGER_NAMESPACE ?= cert-manager
