@@ -67,6 +67,23 @@ part of the KVService API.
   Secret cannot serve the HTTPS endpoint. The operator runs `kvstore-server`
   with an explicit HTTP or HTTPS scheme, independently of the single-tenant
   database mode. Changing `spec.certs` updates the listener and both probes.
+- Optional `spec.postgres` references an existing `PostgresDatabase` in the
+  KVService namespace. When `databaseRef` is omitted, the controller selects
+  `kvstore-database`; when `databaseName` is omitted, it selects the logical
+  database `kvstore`. The API does not populate either default in the stored
+  spec. An explicitly provided `databaseRef` must have a nonempty name.
+  Provision the PostgresDatabase and its logical database separately; KVService
+  never creates, modifies, or takes ownership of the database resource.
+  KVService waits for the database controller to observe the current generation
+  and for the selected logical database to publish ready connection references.
+  It then reads connection details and tenant admin credentials from
+  `PostgresDatabase.status`. KVService does not watch or separately gate on
+  PostgresCluster readiness. This path requires the `PostgresController` gate.
+- PostgreSQL credential rollout annotations contain only Secret identity, key
+  name, UID, and resourceVersion; they contain no credential values or hashes of
+  credential values. Any update to a referenced Secret, including metadata or
+  unrelated keys, can trigger a rollout. Connection ConfigMap annotations still
+  use content hashes of the selected non-secret configuration fields.
 
 ## Status
 
@@ -78,6 +95,12 @@ For example:
 ```sh
 kubectl wait --for=condition=Ready kvservice/<name> --timeout=5m
 ```
+
+Invalid PostgreSQL configuration, such as an empty database reference name, an
+undefined logical database, or a disabled
+`PostgresController` feature gate, reports `phase: Error` and `Stalled=True`.
+These failures are terminal until the configuration is corrected. Missing or
+provisioning PostgreSQL dependencies report `Pending` and continue to reconcile.
 
 The `kvservice.enterprise.splunk.com/paused` annotation pauses reconciliation only
 when its value is `"true"`. Setting it to `"false"`, setting it to an empty value,

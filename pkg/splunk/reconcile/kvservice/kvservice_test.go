@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -36,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/events"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -191,6 +193,61 @@ func TestKVServiceReadinessAndConfigurationFailure(t *testing.T) {
 	ready = meta.FindStatusCondition(current.Status.Conditions, string(enterpriseApi.ConditionReady))
 	if ready == nil || ready.Status != metav1.ConditionFalse || current.Status.Phase != enterpriseApi.PhaseError || !strings.Contains(ready.Message, "missing-service-account") || current.Status.ObservedGeneration != 8 {
 		t.Errorf("failed generation was not reflected in status: %+v", current.Status)
+	}
+}
+
+func TestKVServicePostgresInitializesNamespaceSecretAndPreservesPendingMessage(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	featuregatetesting.SetFeatureGateDuringTest(t, config.DefaultMutableFeatureGate, config.PostgresController, true)
+	ctx := t.Context()
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, enterpriseApi.AddToScheme(scheme))
+	require.NoError(t, platformApi.AddToScheme(scheme))
+	cr := &enterpriseApi.KVService{
+		ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "test", UID: "kvservice-id", Generation: 1},
+		Spec: enterpriseApi.KVServiceSpec{
+			Postgres: &enterpriseApi.KVServicePostgresSpec{},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&enterpriseApi.KVService{}).WithObjects(cr).Build()
+
+	result, err := Apply(ctx, c, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, events.NewFakeRecorder(10))
+	require.NoError(t, err)
+	assert.NotZero(t, result.RequeueAfter, "KVService waiting for PostgreSQL should be retried")
+	secret := &corev1.Secret{}
+	secretKey := types.NamespacedName{Namespace: cr.Namespace, Name: splcommon.GetNamespaceScopedSecretName(cr.Namespace)}
+	require.NoError(t, c.Get(ctx, secretKey, secret), "namespace Secret should be initialized before the PostgreSQL readiness gate")
+	current := &enterpriseApi.KVService{}
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, current))
+	wantMessage := `waiting for PostgresDatabase "kvstore-database"`
+	assert.Equal(t, enterpriseApi.PhasePending, current.Status.Phase)
+	ready := meta.FindStatusCondition(current.Status.Conditions, string(enterpriseApi.ConditionReady))
+	require.NotNil(t, ready)
+	assert.Equal(t, metav1.ConditionFalse, ready.Status)
+	assert.Equal(t, wantMessage, ready.Message)
+	t.Run("PostgreSQL reconciliation lifecycle", testKVServicePostgresReconciliationLifecycle)
+}
+
+func TestEnsurePostgresReadyWaitsForCurrentNonDeletingDatabase(t *testing.T) {
+	featuregatetesting.SetFeatureGateDuringTest(t, config.DefaultMutableFeatureGate, config.PostgresController, true)
+	for _, name := range []string{"stale database status", "deleting database"} {
+		t.Run(name, func(t *testing.T) {
+			cr, _, database, c := postgresReadinessFixture(t, false)
+			if name == "stale database status" {
+				database.Status.ObservedGeneration = nil
+				require.NoError(t, c.Update(t.Context(), database))
+			} else {
+				database.Finalizers = []string{"test-finalizer"}
+				require.NoError(t, c.Update(t.Context(), database))
+				require.NoError(t, c.Delete(t.Context(), database))
+			}
+			dependencies, ready, message, err := ensurePostgresReady(t.Context(), c, cr)
+			require.NoError(t, err)
+			assert.False(t, ready)
+			assert.Nil(t, dependencies)
+			assert.Contains(t, message, "PostgresDatabase")
+		})
 	}
 }
 

@@ -6,4 +6,9 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: kvservice-sample
 spec:
-  # TODO(user): Add fields here
+  # Provision the PostgresDatabase separately before enabling this dependency.
+  # It must define the logical kvstore database and publish ready connection refs.
+  # postgres:
+  #   databaseRef:
+  #     name: kvstore-database
+  #   databaseName: kvstore
