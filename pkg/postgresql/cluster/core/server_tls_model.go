@@ -17,12 +17,12 @@ limitations under the License.
 package core
 
 import (
+	"cmp"
 	"context"
 	"crypto/x509"
 	"errors"
 	"fmt"
 	"slices"
-	"sort"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -246,9 +246,7 @@ func serverTLSNames(cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig
 	if cluster == nil {
 		return nil
 	}
-	if environmentName == "" {
-		environmentName = cluster.Name
-	}
+	environmentName = cmp.Or(environmentName, cluster.Name)
 	names := []string{}
 	for _, endpoint := range []string{"rw", "ro", "r"} {
 		names = append(names, serviceDNSNames(environmentName+"-"+endpoint, cluster.Namespace)...)
@@ -264,7 +262,7 @@ func serverTLSNames(cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig
 	if cluster.Spec.TLS != nil {
 		names = append(names, cluster.Spec.TLS.ServerAltDNSNames...)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return slices.Compact(names)
 }
 
@@ -272,8 +270,6 @@ func serverTLSIdentity(cluster *platformv1alpha1.PostgresCluster) tlsport.Identi
 	if cluster == nil {
 		return tlsport.Identity{}
 	}
-	controller := true
-	blockOwnerDeletion := true
 	return tlsport.Identity{
 		ClusterName: cluster.Name,
 		Namespace:   cluster.Namespace,
@@ -283,8 +279,8 @@ func serverTLSIdentity(cluster *platformv1alpha1.PostgresCluster) tlsport.Identi
 			Kind:               "PostgresCluster",
 			Name:               cluster.Name,
 			UID:                cluster.UID,
-			Controller:         &controller,
-			BlockOwnerDeletion: &blockOwnerDeletion,
+			Controller:         new(true),
+			BlockOwnerDeletion: new(true),
 		},
 		CertificateName: cluster.Name + "-server-tls",
 		ServerTLSSecret: cluster.Name + "-server-tls",
@@ -302,8 +298,8 @@ func completeServerTLSNames(desired, observed []string, environmentName, namespa
 			retained = append(retained, dnsName)
 		}
 	}
-	sort.Strings(all)
-	sort.Strings(retained)
+	slices.Sort(all)
+	slices.Sort(retained)
 	return slices.Compact(all), slices.Compact(retained)
 }
 
@@ -318,7 +314,7 @@ func resolvedServerTLSUsages(usages []string) []string {
 	if len(usages) == 0 {
 		return []string{"digital signature", "key encipherment", "server auth"}
 	}
-	return append([]string(nil), usages...)
+	return slices.Clone(usages)
 }
 
 func resolvedServerTLSRetentionPolicy(certificates *platformv1alpha1.PostgresCertificateConfig) platformv1alpha1.PostgresCertificateRetentionPolicy {
@@ -337,9 +333,7 @@ func newCNPGDefaultServerTLSPlan(cluster *platformv1alpha1.PostgresCluster, cfg 
 	if cluster == nil || cfg == nil || cfg.Spec == nil || !isPoolerEnabled(cfg.Spec.ConnectionPooler) {
 		return plan
 	}
-	if environmentName == "" {
-		environmentName = cluster.Name
-	}
+	environmentName = cmp.Or(environmentName, cluster.Name)
 	plan.poolerEnabled = true
 	plan.requiredPoolerSANs = computeDesiredPoolerSANSet(true, nil, environmentName, cluster.Namespace)
 	return plan
@@ -367,9 +361,7 @@ func certManagerPoolerSANs(cluster *platformv1alpha1.PostgresCluster, cfg *Merge
 	if cluster == nil || cfg == nil || cfg.Spec == nil || !isPoolerEnabled(cfg.Spec.ConnectionPooler) {
 		return nil
 	}
-	if environmentName == "" {
-		environmentName = cluster.Name
-	}
+	environmentName = cmp.Or(environmentName, cluster.Name)
 	poolerNames := make([]string, 0, 8)
 	if poolerReadWriteWanted(cfg.Spec.ConnectionPooler) {
 		poolerNames = append(poolerNames, serviceDNSNames(environmentName+defaultPoolerSuffix+readWriteEndpoint, cluster.Namespace)...)
@@ -377,7 +369,7 @@ func certManagerPoolerSANs(cluster *platformv1alpha1.PostgresCluster, cfg *Merge
 	if poolerReadOnlyWanted(cfg.Spec.ConnectionPooler) {
 		poolerNames = append(poolerNames, serviceDNSNames(environmentName+defaultPoolerSuffix+readOnlyEndpoint, cluster.Namespace)...)
 	}
-	sort.Strings(poolerNames)
+	slices.Sort(poolerNames)
 	return poolerNames
 }
 

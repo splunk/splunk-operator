@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -61,7 +61,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 				ObjectMeta: metav1.ObjectMeta{Name: "db-cluster", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
+					ClusterDeletionPolicy: new("Delete"),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())
@@ -127,7 +127,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 				ObjectMeta: metav1.ObjectMeta{Name: "db-cluster-del", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
+					ClusterDeletionPolicy: new("Delete"),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())
@@ -241,7 +241,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 				ObjectMeta: metav1.ObjectMeta{Name: "retain-db-cluster", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
+					ClusterDeletionPolicy: new("Delete"),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())
@@ -317,7 +317,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 				ObjectMeta: metav1.ObjectMeta{Name: "multi-db-cluster", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
+					ClusterDeletionPolicy: new("Delete"),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())
@@ -389,7 +389,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 				ObjectMeta: metav1.ObjectMeta{Name: "addremove-cluster", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
+					ClusterDeletionPolicy: new("Delete"),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())
@@ -514,7 +514,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 				ObjectMeta: metav1.ObjectMeta{Name: "does-not-exist", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
+					ClusterDeletionPolicy: new("Delete"),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())

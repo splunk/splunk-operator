@@ -140,7 +140,7 @@ func stateWithBlueGreenRearm(entries []platformv1alpha1.PostgresMajorUpgradeStat
 			return entries, false
 		}
 
-		next := append([]platformv1alpha1.PostgresMajorUpgradeStatus(nil), entries...)
+		next := slices.Clone(entries)
 		next[i] = *entry.DeepCopy()
 		now := metav1.Now()
 		next[i].BlueGreen.RearmedAt = &now

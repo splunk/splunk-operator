@@ -17,6 +17,7 @@ limitations under the License.
 package core
 
 import (
+	"cmp"
 	"context"
 	"crypto/x509"
 	"encoding/json"
@@ -25,7 +26,7 @@ import (
 	"fmt"
 	"maps"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -256,9 +257,9 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 		Name:       p.cnpgCluster.Name,
 		UID:        p.cnpgCluster.UID,
 	}
-	p.cluster.Status.Instances = ptr.To(int32(p.cnpgCluster.Status.Instances))
-	p.cluster.Status.ReadyInstances = ptr.To(int32(p.cnpgCluster.Status.ReadyInstances))
-	p.cluster.Status.CurrentPrimary = ptr.To(p.cnpgCluster.Status.CurrentPrimary)
+	p.cluster.Status.Instances = new(int32(p.cnpgCluster.Status.Instances))
+	p.cluster.Status.ReadyInstances = new(int32(p.cnpgCluster.Status.ReadyInstances))
+	p.cluster.Status.CurrentPrimary = new(p.cnpgCluster.Status.CurrentPrimary)
 	if info := p.cnpgCluster.Status.PGDataImageInfo; info != nil && info.MajorVersion > 0 {
 		p.cluster.Status.CurrentPgVersion = fmt.Sprintf("%d", info.MajorVersion)
 	}
@@ -437,24 +438,14 @@ func GetMergedConfig(class *platformv1alpha1.PostgresClusterClass, cluster *plat
 
 	// Config is optional on the class — apply defaults only when provided.
 	if defaults := class.Spec.Config; defaults != nil {
-		if result.Instances == nil {
-			result.Instances = defaults.Instances
-		}
-		if result.PostgresVersion == nil {
-			result.PostgresVersion = defaults.PostgresVersion
-		}
-		if result.PostgresImage == nil {
-			result.PostgresImage = defaults.PostgresImage
-		}
+		result.Instances = cmp.Or(result.Instances, defaults.Instances)
+		result.PostgresVersion = cmp.Or(result.PostgresVersion, defaults.PostgresVersion)
+		result.PostgresImage = cmp.Or(result.PostgresImage, defaults.PostgresImage)
 		if cluster.Spec.ImagePullSecrets == nil {
 			result.ImagePullSecrets = defaults.ImagePullSecrets
 		}
-		if result.Resources == nil {
-			result.Resources = defaults.Resources
-		}
-		if result.Storage == nil {
-			result.Storage = defaults.Storage
-		}
+		result.Resources = cmp.Or(result.Resources, defaults.Resources)
+		result.Storage = cmp.Or(result.Storage, defaults.Storage)
 		if len(result.PostgreSQLConfig) == 0 {
 			result.PostgreSQLConfig = defaults.PostgreSQLConfig
 		}
@@ -466,12 +457,8 @@ func GetMergedConfig(class *platformv1alpha1.PostgresClusterClass, cluster *plat
 			if result.Backup == nil {
 				result.Backup = defaults.Backup.DeepCopy()
 			} else {
-				if result.Backup.Enabled == nil {
-					result.Backup.Enabled = defaults.Backup.Enabled
-				}
-				if result.Backup.Schedule == nil {
-					result.Backup.Schedule = defaults.Backup.Schedule
-				}
+				result.Backup.Enabled = cmp.Or(result.Backup.Enabled, defaults.Backup.Enabled)
+				result.Backup.Schedule = cmp.Or(result.Backup.Schedule, defaults.Backup.Schedule)
 			}
 		}
 	}
@@ -845,7 +832,7 @@ func validatePostgreSQLConfigNoCNPGFixedKeys(params map[string]string) error {
 	if len(invalid) == 0 {
 		return nil
 	}
-	sort.Strings(invalid)
+	slices.Sort(invalid)
 	return fmt.Errorf("postgresqlConfig must not set CNPG-managed parameters: %s", strings.Join(invalid, ", "))
 }
 
@@ -864,7 +851,7 @@ func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, cluste
 		PgHBA:      specCfg.Spec.PgHBA,
 	}
 	live.SuperuserSecret = &cnpgv1.LocalObjectReference{Name: secretName}
-	live.EnableSuperuserAccess = ptr.To(true)
+	live.EnableSuperuserAccess = new(true)
 	live.Bootstrap = buildBootstrapConfiguration(specCfg, secretName)
 	live.StorageConfiguration = cnpgv1.StorageConfiguration{
 		Size: specCfg.Spec.Storage.String(),
@@ -935,8 +922,8 @@ func buildCNPGPlugins(cfg *MergedConfig, clusterName string) []cnpgv1.PluginConf
 	return []cnpgv1.PluginConfiguration{
 		{
 			Name:          barmanCloudPluginName,
-			Enabled:       ptr.To(true),
-			IsWALArchiver: ptr.To(true),
+			Enabled:       new(true),
+			IsWALArchiver: new(true),
 			Parameters: map[string]string{
 				"barmanObjectName": objectStoreName(clusterName),
 			},
@@ -1014,14 +1001,14 @@ func buildBootstrapRecovery(b *platformv1alpha1.BootstrapFrom) *cnpgv1.Bootstrap
 			Storage: corev1.TypedLocalObjectReference{
 				Name:     b.VolumeSnapshot.Storage,
 				Kind:     "VolumeSnapshot",
-				APIGroup: ptr.To("snapshot.storage.k8s.io"),
+				APIGroup: new("snapshot.storage.k8s.io"),
 			},
 		}
 		if b.VolumeSnapshot.WalStorage != nil {
 			recovery.VolumeSnapshots.WalStorage = &corev1.TypedLocalObjectReference{
 				Name:     *b.VolumeSnapshot.WalStorage,
 				Kind:     "VolumeSnapshot",
-				APIGroup: ptr.To("snapshot.storage.k8s.io"),
+				APIGroup: new("snapshot.storage.k8s.io"),
 			}
 		}
 	}
@@ -1244,16 +1231,14 @@ func NormalizeBlueGreenSourceCNPGSpec(spec cnpgv1.ClusterSpec) BlueGreenSourceCN
 		normalized.ReplicationSlots.HighAvailability = &cnpgv1.ReplicationSlotsHAConfiguration{}
 	}
 	if normalized.ReplicationSlots.HighAvailability.Enabled == nil {
-		normalized.ReplicationSlots.HighAvailability.Enabled = ptr.To(true)
+		normalized.ReplicationSlots.HighAvailability.Enabled = new(true)
 	}
-	if normalized.ReplicationSlots.HighAvailability.SlotPrefix == "" {
-		normalized.ReplicationSlots.HighAvailability.SlotPrefix = cnpgv1.DefaultReplicationSlotsHASlotPrefix
-	}
-	if normalized.ReplicationSlots.UpdateInterval == 0 {
-		normalized.ReplicationSlots.UpdateInterval = cnpgv1.DefaultReplicationSlotsUpdateInterval
-	}
+	normalized.ReplicationSlots.HighAvailability.SlotPrefix = cmp.Or(
+		normalized.ReplicationSlots.HighAvailability.SlotPrefix, cnpgv1.DefaultReplicationSlotsHASlotPrefix)
+	normalized.ReplicationSlots.UpdateInterval = cmp.Or(
+		normalized.ReplicationSlots.UpdateInterval, cnpgv1.DefaultReplicationSlotsUpdateInterval)
 	if replicas := normalized.ReplicationSlots.SynchronizeReplicas; replicas != nil && replicas.Enabled == nil {
-		replicas.Enabled = ptr.To(true)
+		replicas.Enabled = new(true)
 	}
 	return normalized
 }
@@ -1397,7 +1382,7 @@ func computeDesiredPoolerSANSet(poolerEnabled bool, current []string, clusterNam
 	for s := range set {
 		out = append(out, s)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

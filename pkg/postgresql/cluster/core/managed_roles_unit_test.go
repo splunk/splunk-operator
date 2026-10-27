@@ -244,8 +244,8 @@ func TestManagedRolesModelConverge(t *testing.T) {
 			)
 
 			// Act
-			reconcileErr := model.Reconcile(context.Background())
-			health, err := model.Observe(context.Background(), reconcileErr)
+			reconcileErr := model.Reconcile(t.Context())
+			health, err := model.Observe(t.Context(), reconcileErr)
 
 			// Assert
 			if tt.expectErr {
@@ -275,7 +275,7 @@ func TestManagedRolesContractsNotReadyIsUpstreamPending(t *testing.T) {
 
 	// Act
 	reconcileErr := model.CheckContracts()
-	health, err := model.Observe(context.Background(), reconcileErr)
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	// Assert
 	require.ErrorIs(t, reconcileErr, errContractsNotReady)
@@ -306,8 +306,8 @@ func TestManagedRolesConvergeDoesNotEmitFailureForPending(t *testing.T) {
 	)
 
 	// Act
-	reconcileErr := model.Reconcile(context.Background())
-	_, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	_, err := model.Observe(t.Context(), reconcileErr)
 
 	// Assert
 	require.NoError(t, err)
@@ -337,8 +337,8 @@ func TestManagedRolesConvergeEmitsReadyEventOnTransition(t *testing.T) {
 	model := newManagedRolesModel(indexedManagedRolesTestClient(scheme, cnpg, postgresDB).Build(), scheme, events, nil, cluster, contracts, nil)
 
 	// Act: first Observe — condition is False, event must fire.
-	reconcileErr := model.Reconcile(context.Background())
-	_, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	_, err := model.Observe(t.Context(), reconcileErr)
 
 	// Assert
 	require.NoError(t, err)
@@ -348,7 +348,7 @@ func TestManagedRolesConvergeEmitsReadyEventOnTransition(t *testing.T) {
 	// Act: second Observe with condition already True — no re-emission.
 	cluster.Status.Conditions = []metav1.Condition{{Type: string(managedRolesReady), Status: metav1.ConditionTrue}}
 	events.normals = nil
-	_, err = model.Observe(context.Background(), nil)
+	_, err = model.Observe(t.Context(), nil)
 
 	// Assert
 	require.NoError(t, err)
@@ -380,7 +380,7 @@ func TestManagedRolesModelRetainsOwnersOnEmptyObservation(t *testing.T) {
 		scheme, noopEventEmitter{}, nil, cluster, contracts, nil,
 	)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	assert.Equal(t, owner, model.roleOwners["app_admin"])
 	require.Len(t, model.desiredRoles, 1)
@@ -407,7 +407,7 @@ func TestManagedRolesModelPreservesCurrentRolesForLegacyDatabaseStatus(t *testin
 		scheme, noopEventEmitter{}, nil, cluster, contracts, nil,
 	)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	require.Len(t, model.desiredRoles, 1)
 	assert.Equal(t, "app_admin", model.desiredRoles[0].Name)
@@ -431,8 +431,8 @@ func TestManagedRolesModelNoOpWhenRolesEmpty(t *testing.T) {
 	)
 
 	// Act
-	reconcileErr := model.Reconcile(context.Background())
-	health, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	// Assert
 	require.NoError(t, err)
@@ -471,8 +471,8 @@ func TestManagedRolesRuntimeGateHealthMatchesConverge(t *testing.T) {
 		nil,
 	)
 
-	reconcileErr := model.Reconcile(context.Background())
-	health, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	health, err := model.Observe(t.Context(), reconcileErr)
 	require.NoError(t, err)
 	assert.Equal(t, pgcconstants.Pending, health.State)
 }
@@ -588,7 +588,7 @@ func TestManagedRolesCredentialSweepLogsCompleteOperation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var logOutput bytes.Buffer
-			ctx := logging.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(&logOutput, nil)))
+			ctx := logging.WithLogger(t.Context(), slog.New(slog.NewJSONHandler(&logOutput, nil)))
 			cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 			contracts := &reconcileContracts{
 				CNPGCluster: &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1"}},
@@ -674,10 +674,10 @@ func TestManagedRolesCredentialSweepSuccess(t *testing.T) {
 	model := newManagedRolesModel(c, scheme, events, nil, cluster, contracts, stubSweeper)
 
 	// Act
-	reconcileErr := model.Reconcile(context.Background())
+	reconcileErr := model.Reconcile(t.Context())
 	// Boundary: Reconcile must not emit events — that is Observe's job.
 	assert.Empty(t, events.normals, "Reconcile must not emit events — boundary violation")
-	health, err := model.Observe(context.Background(), reconcileErr)
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	// Assert: a successful sweep returns nil from Reconcile; the sweep ran.
 	require.NoError(t, reconcileErr)
@@ -696,7 +696,7 @@ func TestManagedRolesCredentialSweepSuccess(t *testing.T) {
 
 	// CNPG managed roles must not be patched during the sweep pass.
 	updatedCNPG := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(cnpg), updatedCNPG))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(cnpg), updatedCNPG))
 	assert.Nil(t, updatedCNPG.Spec.Managed)
 
 	// Completion event emitted.
@@ -739,10 +739,10 @@ func TestManagedRolesCredentialSweepConnectWaits(t *testing.T) {
 	model := newManagedRolesModel(c, scheme, events, nil, cluster, contracts, failingSweeper)
 
 	// Act
-	reconcileErr := model.Reconcile(context.Background())
+	reconcileErr := model.Reconcile(t.Context())
 	// Boundary: Reconcile must not emit events — that is Observe's job.
 	assert.Empty(t, events.warnings, "Reconcile must not emit warnings — boundary violation")
-	health, err := model.Observe(context.Background(), reconcileErr)
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	// Assert: a connect failure waits (requeue), it does not fail the cluster.
 	require.ErrorIs(t, reconcileErr, errSweepConnect)
@@ -792,8 +792,8 @@ func TestManagedRolesCredentialSweepConnectTerminal(t *testing.T) {
 	model := newManagedRolesModel(c, scheme, events, nil, cluster, contracts, terminalSweeper)
 
 	// Act
-	reconcileErr := model.Reconcile(context.Background())
-	health, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	// Assert: a terminal connect failure is terminal for the pass, not a requeue.
 	require.ErrorIs(t, reconcileErr, errSweepTerminal)
@@ -848,10 +848,10 @@ func TestManagedRolesCredentialSweepExecFails(t *testing.T) {
 	model := newManagedRolesModel(c, scheme, events, nil, cluster, contracts, sweeper)
 
 	// Act
-	reconcileErr := model.Reconcile(context.Background())
+	reconcileErr := model.Reconcile(t.Context())
 	// Boundary: Reconcile must not emit events — that is Observe's job.
 	assert.Empty(t, events.warnings, "Reconcile must not emit warnings — boundary violation")
-	health, err := model.Observe(context.Background(), reconcileErr)
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	// Assert: a sweep exec failure is terminal for this pass.
 	require.ErrorIs(t, reconcileErr, errSweepTerminal)

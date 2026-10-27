@@ -90,9 +90,7 @@ func (s *ClusterStateStore) SetAnnotations(ctx context.Context, annotations map[
 	if cluster.Annotations == nil {
 		cluster.Annotations = map[string]string{}
 	}
-	for k, v := range annotations {
-		cluster.Annotations[k] = v
-	}
+	maps.Copy(cluster.Annotations, annotations)
 	return s.client.Update(ctx, cluster)
 }
 

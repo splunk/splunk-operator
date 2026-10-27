@@ -32,7 +32,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -122,7 +122,7 @@ func TestCandidateReadyRequiresHealthySourceFailoverTopology(t *testing.T) {
 	source.Status.InstancesStatus[cnpgv1.PodHealthy] = []string{"source-1"}
 	assert.False(t, sourceReadyForFailover(source), "a healthy primary alone is not a failover-safe source")
 	status := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{DatabaseReplication: []platformv1alpha1.BlueGreenDatabaseReplicationStatus{{
-		DatabaseName: "orders", SlotHealthy: ptr.To(true), ReplicaSlots: []platformv1alpha1.BlueGreenReplicaSlotStatus{{ReplicaName: "source-1"}},
+		DatabaseName: "orders", SlotHealthy: new(true), ReplicaSlots: []platformv1alpha1.BlueGreenReplicaSlotStatus{{ReplicaName: "source-1"}},
 	}}}
 	verifier := &postgresCandidateVerifier{client: fake.NewClientBuilder().Build(), connect: func(context.Context, string, string, string, string, []byte) (pginfra.Conn, error) {
 		t.Fatal("degraded source must not begin SQL replication verification")
@@ -131,7 +131,7 @@ func TestCandidateReadyRequiresHealthySourceFailoverTopology(t *testing.T) {
 	ready, err := verifier.VerifyReplication(t.Context(), source, &cnpgv1.Cluster{}, nil, status)
 	require.NoError(t, err)
 	assert.False(t, ready)
-	assert.Equal(t, ptr.To(false), status.DatabaseReplication[0].SlotHealthy)
+	assert.Equal(t, new(false), status.DatabaseReplication[0].SlotHealthy)
 	assert.Empty(t, status.DatabaseReplication[0].ReplicaSlots)
 	source.Status.ReadyInstances = 3
 	assert.False(t, sourceReadyForFailover(source), "a stale ready count does not prove replica health")
@@ -431,7 +431,7 @@ func TestCandidateGuardsAreInstalledOnceThenOnlyVerified(t *testing.T) {
 		{true}, {[]any{"public", "orders"}}, {"valid"},
 	}}
 	require.NoError(t, verifier.VerifyAndGuard(t.Context(), target, databases, status))
-	assert.Equal(t, ptr.To(true), status.DatabaseReplication[0].SchemaImported)
+	assert.Equal(t, new(true), status.DatabaseReplication[0].SchemaImported)
 	assert.Len(t, conn.execs, 3, "first pass creates the schema, function, and table guard")
 	assert.Equal(t, 1, conn.commits)
 	assert.Zero(t, conn.rollbacks)
@@ -442,7 +442,7 @@ func TestCandidateGuardsAreInstalledOnceThenOnlyVerified(t *testing.T) {
 	}}
 	require.NoError(t, verifier.VerifyAndGuard(t.Context(), target, databases, unpersisted))
 	assert.Empty(t, conn.execs, "an unsaved receipt must adopt intact guards without replacing them")
-	assert.Equal(t, ptr.To(true), unpersisted.DatabaseReplication[0].SchemaImported)
+	assert.Equal(t, new(true), unpersisted.DatabaseReplication[0].SchemaImported)
 
 	conn = &preflightSQLTestConn{results: [][]any{
 		{schema}, {access}, {true}, {true}, {[]any{"public", "orders"}}, {"missing"},
@@ -512,7 +512,7 @@ func TestCandidateGuardReceiptSurvivesLaterDatabaseFailure(t *testing.T) {
 	}
 	err := verifier.VerifyAndGuard(t.Context(), target, []declaredDatabase{{name: "orders"}, {name: "inventory"}}, status)
 	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
-	assert.Equal(t, ptr.To(true), status.DatabaseReplication[0].SchemaImported)
+	assert.Equal(t, new(true), status.DatabaseReplication[0].SchemaImported)
 	assert.Nil(t, status.DatabaseReplication[1].SchemaImported)
 }
 

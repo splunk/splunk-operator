@@ -17,7 +17,6 @@ limitations under the License.
 package webhook_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -30,7 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -81,8 +80,8 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &platformApi.PostgresClusterClassConfig{
-						PostgresVersion: ptr.To("18"),
-						PostgresImage:   ptr.To("registry.example.com/team/postgresql:18.1"),
+						PostgresVersion: new("18"),
+						PostgresImage:   new("registry.example.com/team/postgresql:18.1"),
 					},
 				},
 			},
@@ -94,8 +93,8 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &platformApi.PostgresClusterClassConfig{
-						PostgresVersion: ptr.To("18"),
-						PostgresImage:   ptr.To("registry.example.com/team/postgresql:18.1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+						PostgresVersion: new("18"),
+						PostgresImage:   new("registry.example.com/team/postgresql:18.1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
 					},
 				},
 			},
@@ -107,8 +106,8 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &platformApi.PostgresClusterClassConfig{
-						PostgresVersion: ptr.To("18"),
-						PostgresImage:   ptr.To("registry.example.com/team/postgresql:latest"),
+						PostgresVersion: new("18"),
+						PostgresImage:   new("registry.example.com/team/postgresql:latest"),
 					},
 				},
 			},
@@ -121,8 +120,8 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 				Spec: platformApi.PostgresClusterClassSpec{
 					Provisioner: "postgresql.cnpg.io",
 					Config: &platformApi.PostgresClusterClassConfig{
-						PostgresVersion: ptr.To("18"),
-						PostgresImage:   ptr.To("registry.example.com/team/postgresql:17.5"),
+						PostgresVersion: new("18"),
+						PostgresImage:   new("registry.example.com/team/postgresql:17.5"),
 					},
 				},
 			},
@@ -290,7 +289,7 @@ func TestValidatePostgresClusterClassCreateRejectsACMEIssuer(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "acme"},
 		Spec:       cmapi.IssuerSpec{IssuerConfig: cmapi.IssuerConfig{ACME: &cmacme.ACMEIssuer{Server: "https://acme.example"}}},
 	}).Build()
-	errs := webhook.ValidatePostgresClusterClassCreateWithContext(context.Background(), class, reader)
+	errs := webhook.ValidatePostgresClusterClassCreateWithContext(t.Context(), class, reader)
 	require.Len(t, errs, 1)
 	assert.Contains(t, errs[0].Detail, "ACME issuers are not supported")
 }
@@ -306,7 +305,7 @@ func TestValidatePostgresClusterClassCreateDefersNamespacedIssuerLookup(t *testi
 	}}
 	scheme := runtime.NewScheme()
 	require.NoError(t, cmapi.AddToScheme(scheme))
-	errs := webhook.ValidatePostgresClusterClassCreateWithContext(context.Background(), class, fake.NewClientBuilder().WithScheme(scheme).Build())
+	errs := webhook.ValidatePostgresClusterClassCreateWithContext(t.Context(), class, fake.NewClientBuilder().WithScheme(scheme).Build())
 	assert.Empty(t, errs)
 }
 

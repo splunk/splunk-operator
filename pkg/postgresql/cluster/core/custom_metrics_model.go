@@ -17,10 +17,11 @@ limitations under the License.
 package core
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mon "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/custom_metrics"
@@ -221,14 +222,12 @@ func customMetricsStatusFromAcknowledgements(acknowledgements []mtypes.DatabaseA
 	if len(acknowledgements) == 0 {
 		return nil
 	}
-	sort.Slice(acknowledgements, func(i, j int) bool {
-		if acknowledgements[i].Identity.PostgresDatabaseName != acknowledgements[j].Identity.PostgresDatabaseName {
-			return acknowledgements[i].Identity.PostgresDatabaseName < acknowledgements[j].Identity.PostgresDatabaseName
-		}
-		if acknowledgements[i].Identity.PostgresDatabaseUID != acknowledgements[j].Identity.PostgresDatabaseUID {
-			return acknowledgements[i].Identity.PostgresDatabaseUID < acknowledgements[j].Identity.PostgresDatabaseUID
-		}
-		return acknowledgements[i].Identity.DatabaseName < acknowledgements[j].Identity.DatabaseName
+	slices.SortFunc(acknowledgements, func(a, b mtypes.DatabaseAcknowledgement) int {
+		return cmp.Or(
+			cmp.Compare(a.Identity.PostgresDatabaseName, b.Identity.PostgresDatabaseName),
+			cmp.Compare(a.Identity.PostgresDatabaseUID, b.Identity.PostgresDatabaseUID),
+			cmp.Compare(a.Identity.DatabaseName, b.Identity.DatabaseName),
+		)
 	})
 	status := &platformv1alpha1.CustomMetricsStatus{
 		DatabaseContributions: make([]platformv1alpha1.DatabaseCustomMetricsStatus, 0, len(acknowledgements)),

@@ -22,7 +22,6 @@ import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	"github.com/stretchr/testify/assert"
-	"k8s.io/utils/ptr"
 )
 
 func TestPredicateObservesBlueGreenFalseAllowGate(t *testing.T) {
@@ -34,15 +33,15 @@ func TestPredicateObservesBlueGreenFalseAllowGate(t *testing.T) {
 		{
 			name: "pgUpgrade false allow remains inactive",
 			spec: &platformv1alpha1.PostgresClusterSpec{PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-				Allow: ptr.To(false),
+				Allow: new(false),
 			}},
 			want: false,
 		},
 		{
 			name: "blueGreen false allow is observed for rearm",
 			spec: &platformv1alpha1.PostgresClusterSpec{PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-				Allow:    ptr.To(false),
-				Strategy: ptr.To(mvutypes.MajorUpgradeFlowBlueGreen),
+				Allow:    new(false),
+				Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen),
 			}},
 			want: true,
 		},

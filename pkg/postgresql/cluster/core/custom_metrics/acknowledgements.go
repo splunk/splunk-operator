@@ -17,7 +17,7 @@ limitations under the License.
 package custommetrics
 
 import (
-	"sort"
+	"slices"
 
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 )
@@ -122,8 +122,8 @@ func (f *acknowledgementFailure) addDetail(detail string) {
 }
 
 func (f acknowledgementFailure) message() string {
-	details := append([]string(nil), f.details...)
-	sort.Strings(details)
+	details := slices.Clone(f.details)
+	slices.Sort(details)
 	return joinDiagnostics(details)
 }
 

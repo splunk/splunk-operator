@@ -14,9 +14,10 @@
 package helpers
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -93,11 +94,8 @@ func WaitForNewCompletedSnapshotBackup(
 			}
 			candidates = append(candidates, *backup.DeepCopy())
 		}
-		sort.Slice(candidates, func(i, j int) bool {
-			if candidates[i].CreationTimestamp.Equal(&candidates[j].CreationTimestamp) {
-				return candidates[i].Name < candidates[j].Name
-			}
-			return candidates[i].CreationTimestamp.Before(&candidates[j].CreationTimestamp)
+		slices.SortFunc(candidates, func(a, b cnpgv1.Backup) int {
+			return cmp.Or(a.CreationTimestamp.Time.Compare(b.CreationTimestamp.Time), cmp.Compare(a.Name, b.Name))
 		})
 		g.Expect(candidates).NotTo(BeEmpty(), "waiting for a newly scheduled volumeSnapshot backup")
 		if len(candidates) == 0 {

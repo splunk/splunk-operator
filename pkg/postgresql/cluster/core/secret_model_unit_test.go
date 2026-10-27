@@ -52,13 +52,13 @@ func TestEnsureClusterSecret(t *testing.T) {
 		}
 
 		// Act
-		secret, err := ensureClusterSecret(context.Background(), c, scheme, cluster, "my-secret")
+		secret, err := ensureClusterSecret(t.Context(), c, scheme, cluster, "my-secret")
 
 		// Assert
 		require.NoError(t, err)
 		require.NotNil(t, secret)
 		fetched := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "my-secret", Namespace: "default"}, fetched))
+		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "my-secret", Namespace: "default"}, fetched))
 		assert.Equal(t, "my-secret", fetched.Name)
 		assert.Equal(t, "default", fetched.Namespace)
 		assert.Equal(t, corev1.SecretTypeOpaque, fetched.Type)
@@ -110,7 +110,7 @@ func TestClusterSecretExists(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
 			secret := &corev1.Secret{}
 
-			exists, err := clusterSecretExists(context.Background(), c, "default", tt.secretName, secret)
+			exists, err := clusterSecretExists(t.Context(), c, "default", tt.secretName, secret)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedExists, exists)
@@ -137,14 +137,14 @@ func TestSecretModelAdoptsOrphanedSecret(t *testing.T) {
 	model := newSecretModel(c, scheme, events, nil, cluster, "pg1-secret", contracts)
 
 	// Act
-	reconcileErr := model.Reconcile(context.Background())
-	health, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	// Assert
 	require.NoError(t, err)
 	assert.Equal(t, pgcconstants.Ready, health.State)
 	adopted := &corev1.Secret{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "pg1-secret", Namespace: "default"}, adopted))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "pg1-secret", Namespace: "default"}, adopted))
 	require.Len(t, adopted.OwnerReferences, 1)
 	assert.Equal(t, cluster.Name, adopted.OwnerReferences[0].Name)
 }
@@ -166,8 +166,8 @@ func TestSecretModelObserveFailsWhenPasswordKeyMissing(t *testing.T) {
 	model := newSecretModel(c, scheme, noopEventEmitter{}, nil, cluster, "pg1-secret", &reconcileContracts{})
 
 	// Act
-	reconcileErr := model.Reconcile(context.Background())
-	health, err := model.Observe(context.Background(), reconcileErr)
+	reconcileErr := model.Reconcile(t.Context())
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	// Assert
 	require.NoError(t, reconcileErr)
@@ -365,8 +365,8 @@ func TestSecretModel_ExternalSecretActuate(t *testing.T) {
 			"a non-conflict status error is not a pure conflict")
 		assert.ErrorIs(t, err, transient,
 			"the returned error must carry the status-write failure so controller-runtime retries")
-		var missingSecretErr secretReconcileError
-		assert.True(t, errors.As(err, &missingSecretErr),
+		_, isSecretError := errors.AsType[secretReconcileError](err)
+		assert.True(t, isSecretError,
 			"the joined error must still carry the missing-secret cause")
 		assert.Equal(t, pgcconstants.Failed, health.State)
 		assert.Equal(t, reasonExternalSecretMissing, health.Reason)
@@ -478,8 +478,8 @@ func TestSecretModel_ExternalSecretActuate(t *testing.T) {
 		health, err := s.Observe(t.Context(), reconcileErr)
 
 		require.Error(t, err)
-		var reconcileErrType secretReconcileError
-		assert.False(t, errors.As(err, &reconcileErrType),
+		_, isSecretError := errors.AsType[secretReconcileError](err)
+		assert.False(t, isSecretError,
 			"a non-NotFound/transient Get error must not be classified as secretReconcileError")
 		assert.False(t, errors.Is(err, reconcile.TerminalError(nil)),
 			"a transient API error must stay requeueable, never terminal")

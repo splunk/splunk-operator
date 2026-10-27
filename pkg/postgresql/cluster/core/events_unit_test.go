@@ -54,7 +54,7 @@ func TestEmitClusterPhaseTransitionEmitsReadyEvent(t *testing.T) {
 }
 
 func TestSetPhaseStatusCompletesReadinessCycleOnce(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "pg1",
@@ -112,7 +112,7 @@ func TestSetPhaseStatusCompletesReadinessCycleOnce(t *testing.T) {
 // touch the aggregate Ready condition at all — only the top-level reconciler (via
 // setPhaseStatus) is allowed to flip Ready to True.
 func TestSetStatusEmptyPhaseDoesNotTouchReady(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "pg1",
@@ -134,7 +134,7 @@ func TestSetStatusEmptyPhaseDoesNotTouchReady(t *testing.T) {
 }
 
 func TestStartReadinessCycleForActiveUseCase(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ready := string(readyClusterPhase)
 	generation := int64(1)
 	cluster := &platformv1alpha1.PostgresCluster{
@@ -166,7 +166,7 @@ func TestStartReadinessCycleForActiveUseCase(t *testing.T) {
 }
 
 func TestSetPhaseStatusDoesNotCompleteReadinessCycleWhenStatusWriteFails(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "pg1",

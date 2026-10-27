@@ -283,7 +283,7 @@ func currentOrNewEntry(entries []platformv1alpha1.PostgresMajorUpgradeStatus, in
 }
 
 func stateWithCurrentEntry(entries []platformv1alpha1.PostgresMajorUpgradeStatus, intent mvutypes.Intent, current platformv1alpha1.PostgresMajorUpgradeStatus) []platformv1alpha1.PostgresMajorUpgradeStatus {
-	next := append([]platformv1alpha1.PostgresMajorUpgradeStatus(nil), entries...)
+	next := slices.Clone(entries)
 	for i := len(next) - 1; i >= 0; i-- {
 		if mvutypes.MatchesIntent(next[i], intent) {
 			next[i] = current

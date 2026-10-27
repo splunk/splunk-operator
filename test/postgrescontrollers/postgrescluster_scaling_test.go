@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -55,7 +55,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 				ObjectMeta: metav1.ObjectMeta{Name: "storage-resize", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
+					ClusterDeletionPolicy: new("Delete"),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())
@@ -105,7 +105,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 				ObjectMeta: metav1.ObjectMeta{Name: "resources-change", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
+					ClusterDeletionPolicy: new("Delete"),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())
@@ -161,8 +161,8 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 				ObjectMeta: metav1.ObjectMeta{Name: "horiz-scale", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
-					Instances:             ptr.To(int32(1)),
+					ClusterDeletionPolicy: new("Delete"),
+					Instances:             new(int32(1)),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())
@@ -179,7 +179,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 
 			By("scaling instances to 3")
 			patch := client.MergeFrom(pgCluster.DeepCopy())
-			pgCluster.Spec.Instances = ptr.To(int32(3))
+			pgCluster.Spec.Instances = new(int32(3))
 			Expect(kubeClient.Patch(ctx, pgCluster, patch)).To(Succeed())
 
 			// Phase should hold Provisioning while replicas are being created. Asserting
@@ -215,7 +215,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-scaling", Label("ti
 
 			By("scaling instances back to 1")
 			patch = client.MergeFrom(pgCluster.DeepCopy())
-			pgCluster.Spec.Instances = ptr.To(int32(1))
+			pgCluster.Spec.Instances = new(int32(1))
 			Expect(kubeClient.Patch(ctx, pgCluster, patch)).To(Succeed())
 
 			By("waiting for 1-instance PostgresCluster to reach Ready")

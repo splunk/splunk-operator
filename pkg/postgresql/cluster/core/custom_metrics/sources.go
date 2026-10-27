@@ -17,10 +17,11 @@ limitations under the License.
 package custommetrics
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -126,20 +127,15 @@ func (m *Model) gatherSourceRefs(ctx context.Context, cluster *platformv1alpha1.
 // Older resources win; contributor identity breaks timestamp ties. Stable sort
 // preserves selector declaration order within one contribution.
 func sortDatabaseQuerySets(sets []mtypes.DatabaseQuerySet) {
-	sort.SliceStable(sets, func(i, j int) bool {
-		a, b := sets[i], sets[j]
-		if !a.CreationTimestamp.Equal(b.CreationTimestamp) {
-			return a.CreationTimestamp.Before(b.CreationTimestamp)
-		}
-		if a.DatabaseName != b.DatabaseName {
-			return a.DatabaseName < b.DatabaseName
-		}
+	slices.SortStableFunc(sets, func(a, b mtypes.DatabaseQuerySet) int {
 		an, auid := contributorSortIdentity(a.Contributor)
 		bn, buid := contributorSortIdentity(b.Contributor)
-		if an != bn {
-			return an < bn
-		}
-		return auid < buid
+		return cmp.Or(
+			a.CreationTimestamp.Compare(b.CreationTimestamp),
+			cmp.Compare(a.DatabaseName, b.DatabaseName),
+			cmp.Compare(an, bn),
+			cmp.Compare(auid, buid),
+		)
 	})
 }
 

@@ -197,15 +197,15 @@ func (o *objectStoreModel) buildObjectStore(name string, cfg *platformv1alpha1.C
 	obj.SetName(name)
 	obj.SetNamespace(o.cluster.Namespace)
 
-	spec := map[string]interface{}{
-		"configuration": map[string]interface{}{
+	spec := map[string]any{
+		"configuration": map[string]any{
 			"destinationPath": cfg.DestinationPath,
-			"s3Credentials": map[string]interface{}{
-				"accessKeyId": map[string]interface{}{
+			"s3Credentials": map[string]any{
+				"accessKeyId": map[string]any{
 					"name": cfg.S3Credentials.AccessKeyID.Name,
 					"key":  cfg.S3Credentials.AccessKeyID.Key,
 				},
-				"secretAccessKey": map[string]interface{}{
+				"secretAccessKey": map[string]any{
 					"name": cfg.S3Credentials.SecretAccessKey.Name,
 					"key":  cfg.S3Credentials.SecretAccessKey.Key,
 				},
@@ -214,14 +214,14 @@ func (o *objectStoreModel) buildObjectStore(name string, cfg *platformv1alpha1.C
 	}
 
 	if cfg.EndpointURL != nil {
-		config := spec["configuration"].(map[string]interface{})
+		config := spec["configuration"].(map[string]any)
 		config["endpointURL"] = *cfg.EndpointURL
 	}
 	if cfg.RetentionPolicy != nil {
 		spec["retentionPolicy"] = *cfg.RetentionPolicy
 	}
 	if cfg.WAL != nil {
-		wal := map[string]interface{}{}
+		wal := map[string]any{}
 		if cfg.WAL.Compression != nil {
 			wal["compression"] = *cfg.WAL.Compression
 		}
@@ -229,7 +229,7 @@ func (o *objectStoreModel) buildObjectStore(name string, cfg *platformv1alpha1.C
 			wal["encryption"] = *cfg.WAL.Encryption
 		}
 		if len(wal) > 0 {
-			config := spec["configuration"].(map[string]interface{})
+			config := spec["configuration"].(map[string]any)
 			config["wal"] = wal
 		}
 	}

@@ -140,7 +140,7 @@ func TestToEntries_Deterministic(t *testing.T) {
 	}
 	first, err := toEntries(cfg)
 	require.NoError(t, err)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		again, err := toEntries(cfg)
 		require.NoError(t, err)
 		assert.Equal(t, first, again)

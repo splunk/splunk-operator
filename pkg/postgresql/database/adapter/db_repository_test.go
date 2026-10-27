@@ -160,7 +160,7 @@ func TestPGDBRepositoryAssignRequiredPermissionsToRoleSuccess(t *testing.T) {
 	conn := &fakeConn{tx: tx}
 	repo := &pgDBRepository{conn: conn}
 
-	err := repo.AssignRequiredPermissionsToRole(context.Background(), "appdb", ports.DatabaseRoleNames{Admin: "appdb_admin", RW: "appdb_rw"})
+	err := repo.AssignRequiredPermissionsToRole(t.Context(), "appdb", ports.DatabaseRoleNames{Admin: "appdb_admin", RW: "appdb_rw"})
 
 	require.NoError(t, err)
 	assert.True(t, conn.closed)
@@ -182,7 +182,7 @@ func TestPGDBRepositoryAssignRequiredPermissionsToRoleUsesConfiguredRoleNames(t 
 	tx := &fakeTx{}
 	repo := &pgDBRepository{conn: &fakeConn{tx: tx}}
 
-	require.NoError(t, repo.AssignRequiredPermissionsToRole(context.Background(), "appdb", ports.DatabaseRoleNames{Admin: "Tenant_Owner", RW: "Tenant_RW"}))
+	require.NoError(t, repo.AssignRequiredPermissionsToRole(t.Context(), "appdb", ports.DatabaseRoleNames{Admin: "Tenant_Owner", RW: "Tenant_RW"}))
 
 	assert.Equal(t, `GRANT CONNECT ON DATABASE "appdb" TO "Tenant_RW"`, tx.stmts[0])
 	assert.Equal(t, `ALTER DEFAULT PRIVILEGES FOR ROLE "Tenant_Owner" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "Tenant_RW"`, tx.stmts[4])
@@ -193,7 +193,7 @@ func TestPGDBRepositoryAssignRequiredPermissionsToRoleEscapesDatabaseName(t *tes
 	conn := &fakeConn{tx: tx}
 	repo := &pgDBRepository{conn: conn}
 
-	err := repo.AssignRequiredPermissionsToRole(context.Background(), `app"db`, ports.DatabaseRoleNames{Admin: `app"db_admin`, RW: `app"db_rw`})
+	err := repo.AssignRequiredPermissionsToRole(t.Context(), `app"db`, ports.DatabaseRoleNames{Admin: `app"db_admin`, RW: `app"db_rw`})
 
 	require.NoError(t, err)
 	require.NotEmpty(t, tx.stmts)
@@ -249,7 +249,7 @@ func TestPGDBRepositoryAssignRequiredPermissionsToRoleErrors(t *testing.T) {
 		t.Run(tst.name, func(t *testing.T) {
 			repo := &pgDBRepository{conn: tst.conn}
 
-			err := repo.AssignRequiredPermissionsToRole(context.Background(), "appdb", ports.DatabaseRoleNames{Admin: "appdb_admin", RW: "appdb_rw"})
+			err := repo.AssignRequiredPermissionsToRole(t.Context(), "appdb", ports.DatabaseRoleNames{Admin: "appdb_admin", RW: "appdb_rw"})
 
 			require.Error(t, err)
 			assert.Equal(t, tst.wantTerminal, errors.Is(err, ports.ErrDBRepoTerminal))
@@ -268,7 +268,7 @@ func TestPGDBRepositoryAssignRequiredPermissionsToRoleExecFailureRollsBack(t *te
 	conn := &fakeConn{tx: tx}
 	repo := &pgDBRepository{conn: conn}
 
-	err := repo.AssignRequiredPermissionsToRole(context.Background(), "appdb", ports.DatabaseRoleNames{Admin: "appdb_admin", RW: "appdb_rw"})
+	err := repo.AssignRequiredPermissionsToRole(t.Context(), "appdb", ports.DatabaseRoleNames{Admin: "appdb_admin", RW: "appdb_rw"})
 
 	require.Error(t, err)
 	assert.False(t, tx.committed)
@@ -278,7 +278,7 @@ func TestPGDBRepositoryAssignRequiredPermissionsToRoleExecFailureRollsBack(t *te
 }
 
 func TestPGDBRepositoryAssignRequiredPermissionsToRoleRollsBackWithFreshBoundedContextAfterCancellation(t *testing.T) {
-	operationCtx, cancel := context.WithCancel(context.Background())
+	operationCtx, cancel := context.WithCancel(t.Context())
 	tx := &fakeTx{execErrAt: 1, execErr: errors.New("grant failed")}
 	tx.onExec = cancel
 	conn := &fakeConn{tx: tx}
@@ -319,7 +319,7 @@ func TestPGDBRepositoryClosesWithFreshBoundedContext(t *testing.T) {
 
 	for _, tst := range tests {
 		t.Run(tst.name, func(t *testing.T) {
-			operationCtx, cancel := context.WithCancel(context.Background())
+			operationCtx, cancel := context.WithCancel(t.Context())
 			cancel()
 			started := time.Now()
 
@@ -337,7 +337,7 @@ func TestPGDBRepositoryClosesWithFreshBoundedContext(t *testing.T) {
 
 func TestPGDBRepositoryCloseFailureIsLoggedWithoutMaskingPrimaryError(t *testing.T) {
 	var logs bytes.Buffer
-	ctx := logging.WithLogger(context.Background(), slog.New(slog.NewTextHandler(&logs, nil)))
+	ctx := logging.WithLogger(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
 	conn := &fakeConn{
 		beginErr: errors.New("primary operation failure"),
 		closeErr: errors.New("close failure must not escape"),
@@ -355,7 +355,7 @@ func TestPGDBRepositoryCloseFailureIsLoggedWithoutMaskingPrimaryError(t *testing
 
 func TestPGDBRepositorySweepCloseFailureIsLoggedWithoutMaskingSuccess(t *testing.T) {
 	var logs bytes.Buffer
-	ctx := logging.WithLogger(context.Background(), slog.New(slog.NewTextHandler(&logs, nil)))
+	ctx := logging.WithLogger(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
 	conn := &fakeConn{
 		tx:       &fakeTx{},
 		rows:     &fakeRows{},
@@ -384,7 +384,7 @@ func TestNewDBRepository(t *testing.T) {
 			return &fakeConn{}, nil
 		}
 
-		repo, err := NewDBRepository(context.Background(), "postgres.example.com", "appdb", "secret")
+		repo, err := NewDBRepository(t.Context(), "postgres.example.com", "appdb", "secret")
 
 		require.NoError(t, err)
 		require.NotNil(t, repo)
@@ -396,7 +396,7 @@ func TestNewDBRepository(t *testing.T) {
 			return nil, connectErr
 		}
 
-		repo, err := NewDBRepository(context.Background(), "postgres.example.com", "appdb", "secret")
+		repo, err := NewDBRepository(t.Context(), "postgres.example.com", "appdb", "secret")
 
 		require.Error(t, err)
 		assert.Nil(t, repo)
@@ -412,7 +412,7 @@ func TestNewDBRepository(t *testing.T) {
 			return nil, connectErr
 		}
 
-		repo, err := NewDBRepository(context.Background(), "postgres.example.com", "appdb", "secret")
+		repo, err := NewDBRepository(t.Context(), "postgres.example.com", "appdb", "secret")
 
 		require.Error(t, err)
 		assert.Nil(t, repo)
@@ -432,7 +432,7 @@ func TestNewRoleSweeper(t *testing.T) {
 			return &fakeConn{}, nil
 		}
 
-		sweeper, err := NewRoleSweeper(context.Background(), "postgres.example.com", "appdb", "secret")
+		sweeper, err := NewRoleSweeper(t.Context(), "postgres.example.com", "appdb", "secret")
 
 		require.NoError(t, err)
 		require.NotNil(t, sweeper)
@@ -444,7 +444,7 @@ func TestNewRoleSweeper(t *testing.T) {
 			return nil, connectErr
 		}
 
-		sweeper, err := NewRoleSweeper(context.Background(), "postgres.example.com", "appdb", "secret")
+		sweeper, err := NewRoleSweeper(t.Context(), "postgres.example.com", "appdb", "secret")
 
 		require.Error(t, err)
 		assert.Nil(t, sweeper)
@@ -459,7 +459,7 @@ func TestNewRoleSweeper(t *testing.T) {
 			return nil, connectErr
 		}
 
-		sweeper, err := NewRoleSweeper(context.Background(), "postgres.example.com", "appdb", "secret")
+		sweeper, err := NewRoleSweeper(t.Context(), "postgres.example.com", "appdb", "secret")
 
 		require.Error(t, err)
 		assert.Nil(t, sweeper)
@@ -477,7 +477,7 @@ func TestSweepUnmanagedRolesAfterRestoreSuccess(t *testing.T) {
 	}
 	repo := &pgDBRepository{conn: conn}
 
-	rolesSwept, err := repo.SweepUnmanagedRolesAfterRestore(context.Background())
+	rolesSwept, err := repo.SweepUnmanagedRolesAfterRestore(t.Context())
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, rolesSwept)
@@ -496,7 +496,7 @@ func TestSweepUnmanagedRolesAfterRestoreNoRoles(t *testing.T) {
 	conn := &fakeConn{tx: tx, rows: &fakeRows{}}
 	repo := &pgDBRepository{conn: conn}
 
-	rolesSwept, err := repo.SweepUnmanagedRolesAfterRestore(context.Background())
+	rolesSwept, err := repo.SweepUnmanagedRolesAfterRestore(t.Context())
 
 	require.NoError(t, err)
 	assert.Zero(t, rolesSwept)
@@ -509,7 +509,7 @@ func TestSweepUnmanagedRolesAfterRestoreErrors(t *testing.T) {
 		conn := &fakeConn{queryErr: errors.New("boom")}
 		repo := &pgDBRepository{conn: conn}
 
-		_, err := repo.SweepUnmanagedRolesAfterRestore(context.Background())
+		_, err := repo.SweepUnmanagedRolesAfterRestore(t.Context())
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "PostgreSQL role sweep query failed")
@@ -522,7 +522,7 @@ func TestSweepUnmanagedRolesAfterRestoreErrors(t *testing.T) {
 		conn := &fakeConn{tx: tx, rows: &fakeRows{names: []string{"app_user", "reporting"}}}
 		repo := &pgDBRepository{conn: conn}
 
-		_, err := repo.SweepUnmanagedRolesAfterRestore(context.Background())
+		_, err := repo.SweepUnmanagedRolesAfterRestore(t.Context())
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "PostgreSQL role sweep execution failed")
@@ -536,7 +536,7 @@ func TestSweepUnmanagedRolesAfterRestoreErrors(t *testing.T) {
 		conn := &fakeConn{tx: tx, rows: &fakeRows{names: []string{"app_user"}}}
 		repo := &pgDBRepository{conn: conn}
 
-		_, err := repo.SweepUnmanagedRolesAfterRestore(context.Background())
+		_, err := repo.SweepUnmanagedRolesAfterRestore(t.Context())
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "PostgreSQL role sweep transaction commit failed")
