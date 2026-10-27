@@ -39,7 +39,7 @@ type UseCase interface {
 	Act(context.Context) (reconciliationtypes.Report, error)
 }
 
-type Factory func() UseCase
+type Factory func() (UseCase, error)
 
 // Predicate checks whether a usecase has been triggered by the user, no i/o, pure.
 type Predicate func(spec *platformv1alpha1.PostgresClusterSpec) bool
@@ -81,33 +81,36 @@ func NewUseCaseReconciler(spec *platformv1alpha1.PostgresClusterSpec, factory ma
 // checks cache for previous entries, if not
 // check the minimum construction condition for usecase(predicate)
 // constructs the usecase using the provided factory method and stores
-func (r *Reconciler) get(name string) UseCase {
+func (r *Reconciler) get(name string) (UseCase, error) {
 	if uc, ok := r.cache[name]; ok {
-		return uc
+		return uc, nil
 	}
 	if p, ok := r.predicate[name]; ok && !p(r.spec) {
-		return nil
+		return nil, nil
 	}
 	factory, ok := r.factory[name]
 	if !ok || factory == nil {
-		return nil
+		return nil, nil
 	}
-	uc := factory()
-	if uc == nil {
-		return nil
+	uc, err := factory()
+	if err != nil || uc == nil {
+		return nil, err
 	}
 	if r.cache == nil {
 		r.cache = make(map[string]UseCase, len(r.factory))
 	}
 	r.cache[name] = uc
-	return uc
+	return uc, nil
 }
 
 func (r *Reconciler) Schedule(ctx context.Context) error {
 	r.scheduled = make(map[string]UseCase, len(r.factory))
 
 	for _, name := range r.order {
-		useCase := r.get(name)
+		useCase, err := r.get(name)
+		if err != nil {
+			return err
+		}
 		if useCase == nil {
 			continue
 		}
@@ -143,7 +146,10 @@ func (r *Reconciler) BlocksComponents() map[string]struct{} {
 
 func (r *Reconciler) CheckPrerequisites(ctx context.Context) error {
 	for _, name := range r.order {
-		useCase := r.get(name)
+		useCase, err := r.get(name)
+		if err != nil {
+			return err
+		}
 		if useCase == nil {
 			continue
 		}
