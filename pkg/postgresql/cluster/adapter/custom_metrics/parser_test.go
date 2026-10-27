@@ -24,7 +24,6 @@ import (
 	mtypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/monitoring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/utils/ptr"
 )
 
 func testSource() mtypes.QuerySource {
@@ -69,7 +68,7 @@ pg_scoped:
   query: "SELECT 1 AS value"
   value: value
 `)
-	got, err := NewParser().Parse(raw, testSource(), ptr.To("team-a-db"))
+	got, err := NewParser().Parse(raw, testSource(), new("team-a-db"))
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	require.NotNil(t, got[0].TargetDatabase)

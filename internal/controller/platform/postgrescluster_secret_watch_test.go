@@ -11,7 +11,6 @@ You may obtain a copy of the License at
 package controller
 
 import (
-	"context"
 	"testing"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -20,7 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -121,7 +120,7 @@ func TestEnqueueClustersForExternalSecret(t *testing.T) {
 	r := &PostgresClusterReconciler{Client: fakeClient}
 
 	t.Run("matching external secret enqueues the cluster", func(t *testing.T) {
-		reqs := r.enqueueClustersForExternalSecret(context.Background(),
+		reqs := r.enqueueClustersForExternalSecret(t.Context(),
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: extSecret, Namespace: ns}})
 		require.Len(t, reqs, 1)
 		assert.Equal(t, clusterRef, reqs[0].Name)
@@ -129,13 +128,13 @@ func TestEnqueueClustersForExternalSecret(t *testing.T) {
 	})
 
 	t.Run("namespace isolation: same name in a different namespace does not enqueue", func(t *testing.T) {
-		reqs := r.enqueueClustersForExternalSecret(context.Background(),
+		reqs := r.enqueueClustersForExternalSecret(t.Context(),
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: extSecret, Namespace: "another-ns"}})
 		assert.Empty(t, reqs)
 	})
 
 	t.Run("unrelated secret does not enqueue any cluster", func(t *testing.T) {
-		reqs := r.enqueueClustersForExternalSecret(context.Background(),
+		reqs := r.enqueueClustersForExternalSecret(t.Context(),
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: unrelated, Namespace: ns}})
 		assert.Empty(t, reqs)
 	})
@@ -148,12 +147,12 @@ func TestEnqueueClustersForExternalSecret(t *testing.T) {
 					APIVersion: platformv1alpha1.GroupVersion.String(),
 					Kind:       "PostgresCluster",
 					Name:       clusterRef,
-					Controller: ptr.To(true),
+					Controller: new(true),
 					UID:        "uid-owned",
 				}},
 			},
 		}
-		reqs := r.enqueueClustersForExternalSecret(context.Background(), owned)
+		reqs := r.enqueueClustersForExternalSecret(t.Context(), owned)
 		assert.Empty(t, reqs, "mapper must skip Secrets with a controller owner")
 	})
 
@@ -165,19 +164,19 @@ func TestEnqueueClustersForExternalSecret(t *testing.T) {
 					APIVersion: "external-secrets.io/v1",
 					Kind:       "ExternalSecret",
 					Name:       "ext-eso",
-					Controller: ptr.To(true),
+					Controller: new(true),
 					UID:        "uid-eso",
 				}},
 			},
 		}
-		reqs := r.enqueueClustersForExternalSecret(context.Background(), esoOwned)
+		reqs := r.enqueueClustersForExternalSecret(t.Context(), esoOwned)
 		require.Len(t, reqs, 1, "ESO-owned external secret must enqueue the referencing cluster")
 		assert.Equal(t, clusterRef, reqs[0].Name)
 		assert.Equal(t, ns, reqs[0].Namespace)
 	})
 
 	t.Run("non-Secret object yields nil", func(t *testing.T) {
-		reqs := r.enqueueClustersForExternalSecret(context.Background(), &corev1.ConfigMap{})
+		reqs := r.enqueueClustersForExternalSecret(t.Context(), &corev1.ConfigMap{})
 		assert.Nil(t, reqs)
 	})
 }

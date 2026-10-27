@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 type serverTLSManagerStub struct {
@@ -178,7 +177,7 @@ func TestCNPGDefaultServerTLSPlanAppliesPoolerIntentAndValidatesLeaf(t *testing.
 	enabled := true
 	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "payments"}}
 	config := &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{
-		ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(enabled)},
+		ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(enabled)},
 	}}
 	plan := newCNPGDefaultServerTLSPlan(cluster, config, cluster.Name)
 	spec := &cnpgv1.ClusterSpec{}
@@ -198,7 +197,7 @@ func TestCertManagerServerTLSPlanValidatesTheIssuedPoolerSANSet(t *testing.T) {
 	readOnly := false
 	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "payments"}}
 	config := &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{
-		ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(enabled), ReadOnly: ptr.To(readOnly)},
+		ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(enabled), ReadOnly: new(readOnly)},
 	}}
 	plan := newCertManagerServerTLSPlan(cluster, config, serverTLSIdentity(cluster), cluster.Name)
 	leaf := &x509.Certificate{DNSNames: certManagerPoolerSANs(cluster, config, cluster.Name)}
@@ -211,7 +210,7 @@ func TestServerTLSModelStopsPipelineOnTerminalError(t *testing.T) {
 	t.Parallel()
 	cluster := &platformv1alpha1.PostgresCluster{}
 	model := newServerTLSModel(nil, noopEventEmitter{}, nil, cluster, nil, nil, &reconcileContracts{})
-	health, err := model.Observe(context.Background(), errors.New("invalid TLS configuration"))
+	health, err := model.Observe(t.Context(), errors.New("invalid TLS configuration"))
 	assert.Equal(t, certificatesReady, health.Condition)
 	assert.Equal(t, reasonCertificateConfigError, health.Reason)
 	assert.Error(t, err)
@@ -235,17 +234,17 @@ func TestServerTLSModelEmitsEventsOnlyForCertificateConditionTransitions(t *test
 	}
 	model := newServerTLSModel(nil, events, updateStatus, cluster, class, nil, &reconcileContracts{})
 
-	_, err := model.Observe(context.Background(), nil)
+	_, err := model.Observe(t.Context(), nil)
 	require.NoError(t, err)
 	assert.Len(t, events.normals, 1)
-	_, err = model.Observe(context.Background(), nil)
+	_, err = model.Observe(t.Context(), nil)
 	require.NoError(t, err)
 	assert.Len(t, events.normals, 1)
 
-	_, err = model.Observe(context.Background(), tlsport.ErrCertificatePending)
+	_, err = model.Observe(t.Context(), tlsport.ErrCertificatePending)
 	require.NoError(t, err)
 	assert.Len(t, events.warnings, 1)
-	_, err = model.Observe(context.Background(), tlsport.ErrCertificatePending)
+	_, err = model.Observe(t.Context(), tlsport.ErrCertificatePending)
 	require.NoError(t, err)
 	assert.Len(t, events.warnings, 1)
 }

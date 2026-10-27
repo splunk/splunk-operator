@@ -30,7 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -73,18 +73,18 @@ var _ = Describe("postgrescontrollers, integration, postgres-snapshot-backup-res
 					Spec: platformv1alpha1.PostgresClusterClassSpec{
 						Provisioner: "postgresql.cnpg.io",
 						Config: &platformv1alpha1.PostgresClusterClassConfig{
-							Instances: ptr.To(int32(1)),
+							Instances: new(int32(1)),
 							Backup: &platformv1alpha1.BackupConfig{
-								Enabled:  ptr.To(true),
+								Enabled:  new(true),
 								Schedule: &schedule,
 							},
 						},
 						CNPG: &platformv1alpha1.CNPGConfig{Backup: &platformv1alpha1.CNPGBackupConfig{
-							Target: ptr.To("primary"),
+							Target: new("primary"),
 							VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{
 								ClassName:              &snapshotClassName,
-								SnapshotOwnerReference: ptr.To("cluster"),
-								Online:                 ptr.To(true),
+								SnapshotOwnerReference: new("cluster"),
+								Online:                 new(true),
 							},
 						}},
 					},
@@ -102,7 +102,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-snapshot-backup-res
 					ObjectMeta: metav1.ObjectMeta{Name: "snapshot-source", Namespace: namespace},
 					Spec: platformv1alpha1.PostgresClusterSpec{
 						Class:                 class.Name,
-						ClusterDeletionPolicy: ptr.To("Delete"),
+						ClusterDeletionPolicy: new("Delete"),
 					},
 				}
 				Expect(apiClient.Create(ctx, source)).To(Succeed())
@@ -279,7 +279,7 @@ ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value;`)
 				currentSource := &platformv1alpha1.PostgresCluster{}
 				Expect(apiClient.Get(ctx, sourceKey, currentSource)).To(Succeed())
 				patch := client.MergeFrom(currentSource.DeepCopy())
-				currentSource.Spec.Backup = &platformv1alpha1.BackupConfig{Enabled: ptr.To(false)}
+				currentSource.Spec.Backup = &platformv1alpha1.BackupConfig{Enabled: new(false)}
 				Expect(apiClient.Patch(ctx, currentSource, patch)).To(Succeed())
 				Eventually(func(g Gomega) {
 					current := &platformv1alpha1.PostgresCluster{}
@@ -306,8 +306,8 @@ ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value`)
 					ObjectMeta: metav1.ObjectMeta{Name: "snapshot-restored", Namespace: namespace},
 					Spec: platformv1alpha1.PostgresClusterSpec{
 						Class:                 class.Name,
-						ClusterDeletionPolicy: ptr.To("Delete"),
-						Backup:                &platformv1alpha1.BackupConfig{Enabled: ptr.To(false)},
+						ClusterDeletionPolicy: new("Delete"),
+						Backup:                &platformv1alpha1.BackupConfig{Enabled: new(false)},
 						BootstrapFrom: &platformv1alpha1.BootstrapFrom{
 							VolumeSnapshot: &platformv1alpha1.VolumeSnapshotSource{Storage: snapshotElement.Name},
 						},

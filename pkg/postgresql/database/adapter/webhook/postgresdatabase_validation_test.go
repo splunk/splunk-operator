@@ -17,13 +17,12 @@ limitations under the License.
 package webhook_test
 
 import (
-	"context"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -54,7 +53,7 @@ func TestValidatePostgresDatabaseCreate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), tt.obj, nil)
+			errs := webhook.ValidatePostgresDatabaseCreate(t.Context(), tt.obj, nil)
 			assert.Len(t, errs, tt.wantErrCount, "unexpected error count")
 		})
 	}
@@ -66,7 +65,7 @@ func TestValidatePostgresDatabaseRoleNames(t *testing.T) {
 	}
 
 	t.Run("accepts defaults and partial overrides", func(t *testing.T) {
-		errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), base(
+		errs := webhook.ValidatePostgresDatabaseCreate(t.Context(), base(
 			platformApi.DatabaseDefinition{Name: "defaultdb"},
 			platformApi.DatabaseDefinition{Name: "customdb", RWRoleName: "tenant_rw"},
 		), nil)
@@ -84,14 +83,14 @@ func TestValidatePostgresDatabaseRoleNames(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), base(tt.db), nil)
+			errs := webhook.ValidatePostgresDatabaseCreate(t.Context(), base(tt.db), nil)
 			require.NotEmpty(t, errs)
 			assert.Contains(t, errs[0].Detail, tt.want)
 		})
 	}
 
 	t.Run("rejects duplicate effective role names across databases", func(t *testing.T) {
-		errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), base(
+		errs := webhook.ValidatePostgresDatabaseCreate(t.Context(), base(
 			platformApi.DatabaseDefinition{Name: "first", AdminRoleName: "shared_owner"},
 			platformApi.DatabaseDefinition{Name: "second", RWRoleName: "shared_owner"},
 		), nil)
@@ -105,7 +104,7 @@ func TestValidatePostgresDatabaseRoleNames(t *testing.T) {
 		newObj := oldObj.DeepCopy()
 		newObj.Spec.Databases[0].AdminRoleName = "new_owner"
 
-		errs := webhook.ValidatePostgresDatabaseUpdate(context.Background(), newObj, oldObj, nil)
+		errs := webhook.ValidatePostgresDatabaseUpdate(t.Context(), newObj, oldObj, nil)
 		require.NotEmpty(t, errs)
 		assert.Contains(t, errs[len(errs)-1].Detail, "immutable")
 	})
@@ -123,7 +122,7 @@ func TestValidatePostgresDatabaseRoleNames(t *testing.T) {
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pgdb-mydb-admin", Namespace: "default"}},
 		).Build()
 
-		errs := webhook.ValidatePostgresDatabaseUpdate(context.Background(), newObj, oldObj, reader)
+		errs := webhook.ValidatePostgresDatabaseUpdate(t.Context(), newObj, oldObj, reader)
 		require.NotEmpty(t, errs)
 		assert.Contains(t, errs[len(errs)-1].Detail, "immutable")
 	})
@@ -138,7 +137,7 @@ func TestValidatePostgresDatabaseRoleNames(t *testing.T) {
 		require.NoError(t, corev1.AddToScheme(s))
 		reader := fake.NewClientBuilder().WithScheme(s).Build()
 
-		errs := webhook.ValidatePostgresDatabaseUpdate(context.Background(), newObj, oldObj, reader)
+		errs := webhook.ValidatePostgresDatabaseUpdate(t.Context(), newObj, oldObj, reader)
 		assert.Empty(t, errs)
 	})
 
@@ -162,7 +161,7 @@ func TestValidatePostgresDatabaseRoleNames(t *testing.T) {
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pgdb-mydb-admin", Namespace: "default"}},
 		).Build()
 
-		errs := webhook.ValidatePostgresDatabaseUpdate(context.Background(), newObj, oldObj, reader)
+		errs := webhook.ValidatePostgresDatabaseUpdate(t.Context(), newObj, oldObj, reader)
 		for _, e := range errs {
 			assert.NotContains(t, e.Detail, "immutable")
 		}
@@ -182,7 +181,7 @@ func TestValidatePostgresDatabaseCreateFeatureGateDisabled(t *testing.T) {
 		},
 	}
 
-	errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), obj, nil)
+	errs := webhook.ValidatePostgresDatabaseCreate(t.Context(), obj, nil)
 	assert.Len(t, errs, 1)
 	assert.Equal(t, "spec", errs[0].Field)
 	assert.Equal(t, "the PostgresController feature is not enabled; set --feature-gates=PostgresController=true to activate", errs[0].Detail)
@@ -202,7 +201,7 @@ func TestValidatePostgresDatabaseUpdateFeatureGateDisabled(t *testing.T) {
 	}
 	oldObj := obj.DeepCopy()
 
-	errs := webhook.ValidatePostgresDatabaseUpdate(context.Background(), obj, oldObj, nil)
+	errs := webhook.ValidatePostgresDatabaseUpdate(t.Context(), obj, oldObj, nil)
 	assert.Len(t, errs, 1)
 	assert.Equal(t, "spec", errs[0].Field)
 	assert.Equal(t, "the PostgresController feature is not enabled; set --feature-gates=PostgresController=true to activate", errs[0].Detail)
@@ -215,7 +214,7 @@ func TestValidatePostgresDatabaseUpdate(t *testing.T) {
 			Databases:  []platformApi.DatabaseDefinition{{Name: "mydb"}},
 		},
 	}
-	errs := webhook.ValidatePostgresDatabaseUpdate(context.Background(), obj, obj, nil)
+	errs := webhook.ValidatePostgresDatabaseUpdate(t.Context(), obj, obj, nil)
 	assert.Empty(t, errs)
 }
 
@@ -328,7 +327,7 @@ func TestValidatePostgresDatabaseExternalSecret(t *testing.T) {
 			}
 			reader := b.Build()
 
-			errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), dbWithRefs(), reader)
+			errs := webhook.ValidatePostgresDatabaseCreate(t.Context(), dbWithRefs(), reader)
 			require.Len(t, errs, tt.wantErrs, "unexpected error count: %v", errs)
 			for i, f := range tt.wantFields {
 				assert.Equal(t, f, errs[i].Field, "unexpected error field at index %d", i)
@@ -352,7 +351,7 @@ func TestValidatePostgresDatabaseExternalSecret(t *testing.T) {
 			).Build()
 		}()
 
-		assert.Empty(t, webhook.ValidatePostgresDatabaseCreate(context.Background(), obj, reader))
+		assert.Empty(t, webhook.ValidatePostgresDatabaseCreate(t.Context(), obj, reader))
 	})
 }
 
@@ -387,7 +386,7 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 	}
 
 	t.Run("nil monitoring - skipped", func(t *testing.T) {
-		errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), dbWith(nil), buildReader())
+		errs := webhook.ValidatePostgresDatabaseCreate(t.Context(), dbWith(nil), buildReader())
 		assert.Empty(t, errs)
 	})
 
@@ -395,7 +394,7 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 		obj := dbWith(&platformApi.DatabaseMonitoring{
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml"}},
 		})
-		errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), obj, buildReader(sourceCM))
+		errs := webhook.ValidatePostgresDatabaseCreate(t.Context(), obj, buildReader(sourceCM))
 		assert.Empty(t, errs)
 	})
 
@@ -403,7 +402,7 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 		obj := dbWith(&platformApi.DatabaseMonitoring{
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{LocalObjectReference: corev1.LocalObjectReference{Name: "absent"}, Key: "queries.yaml"}},
 		})
-		errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), obj, buildReader())
+		errs := webhook.ValidatePostgresDatabaseCreate(t.Context(), obj, buildReader())
 		require.Len(t, errs, 1)
 		assert.Equal(t, "spec.databases[0].monitoring.customQueriesConfigMap[0].name", errs[0].Field)
 		assert.Contains(t, errs[0].Detail, "does not exist")
@@ -417,7 +416,7 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 		now := metav1.Now()
 		obj.DeletionTimestamp = &now
 
-		errs := webhook.ValidatePostgresDatabaseUpdate(context.Background(), obj, oldObj, buildReader())
+		errs := webhook.ValidatePostgresDatabaseUpdate(t.Context(), obj, oldObj, buildReader())
 
 		assert.Empty(t, errs)
 	})
@@ -425,12 +424,12 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 	t.Run("every explicit optional field is rejected", func(t *testing.T) {
 		obj := dbWith(&platformApi.DatabaseMonitoring{
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{
-				{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: ptr.To(true)},
+				{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: new(true)},
 				{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml"},
-				{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: ptr.To(false)},
+				{LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"}, Key: "queries.yaml", Optional: new(false)},
 			},
 		})
-		errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), obj, buildReader(sourceCM))
+		errs := webhook.ValidatePostgresDatabaseCreate(t.Context(), obj, buildReader(sourceCM))
 
 		require.Len(t, errs, 2)
 		assert.Equal(t, "spec.databases[0].monitoring.customQueriesConfigMap[0].optional", errs[0].Field)
@@ -445,11 +444,11 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 			CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{{
 				LocalObjectReference: corev1.LocalObjectReference{Name: "metrics-src"},
 				Key:                  "queries.yaml",
-				Optional:             ptr.To(true),
+				Optional:             new(true),
 			}},
 		})
 
-		errs := webhook.ValidatePostgresDatabaseCreate(context.Background(), obj, nil)
+		errs := webhook.ValidatePostgresDatabaseCreate(t.Context(), obj, nil)
 
 		require.Len(t, errs, 1)
 		assert.Equal(t, "spec.databases[0].monitoring.customQueriesConfigMap[0].optional", errs[0].Field)
@@ -494,7 +493,7 @@ func TestValidatePostgresDatabaseCustomMetrics(t *testing.T) {
 		ref := corev1.ConfigMapKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{Name: "removed"},
 			Key:                  "queries.yaml",
-			Optional:             ptr.To(false),
+			Optional:             new(false),
 		}
 		oldObj := dbWith(&platformApi.DatabaseMonitoring{CustomQueriesConfigMap: []corev1.ConfigMapKeySelector{ref}})
 		obj := oldObj.DeepCopy()

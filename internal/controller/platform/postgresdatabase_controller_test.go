@@ -38,7 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/ptr"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -1567,7 +1567,7 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				Kind:       "Deployment",
 				Name:       "foreign-secret-controller",
 				UID:        types.UID("foreign-secret-controller"),
-				Controller: ptr.To(true),
+				Controller: new(true),
 			}}
 			Expect(k8sClient.Update(ctx, secret)).To(Succeed())
 
@@ -1881,11 +1881,11 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
 				Status: platformv1alpha1.PostgresClusterStatus{
 					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
-					ReadyInstances:         ptr.To(int32(2)),
+					ReadyInstances:         new(int32(2)),
 				},
 			}
 			newCluster := oldCluster.DeepCopy()
-			newCluster.Status.ReadyInstances = ptr.To(int32(1))
+			newCluster.Status.ReadyInstances = new(int32(1))
 			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeTrue())
 		})
 
@@ -1895,11 +1895,11 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
 				Status: platformv1alpha1.PostgresClusterStatus{
 					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
-					ReadyInstances:         ptr.To(int32(1)),
+					ReadyInstances:         new(int32(1)),
 				},
 			}
 			newCluster := oldCluster.DeepCopy()
-			newCluster.Status.ReadyInstances = ptr.To(int32(2))
+			newCluster.Status.ReadyInstances = new(int32(2))
 			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeTrue())
 		})
 
@@ -1909,11 +1909,11 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: "default"},
 				Status: platformv1alpha1.PostgresClusterStatus{
 					ConnectionPoolerStatus: &platformv1alpha1.ConnectionPoolerStatus{Enabled: true, ReadWriteEnabled: true, ReadOnlyEnabled: true},
-					ReadyInstances:         ptr.To(int32(2)),
+					ReadyInstances:         new(int32(2)),
 				},
 			}
 			newCluster := oldCluster.DeepCopy()
-			newCluster.Status.ReadyInstances = ptr.To(int32(3))
+			newCluster.Status.ReadyInstances = new(int32(3))
 			Expect(pred.Update(event.UpdateEvent{ObjectOld: oldCluster, ObjectNew: newCluster})).To(BeFalse())
 		})
 

@@ -20,7 +20,6 @@ import (
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
-	"k8s.io/utils/ptr"
 )
 
 func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
@@ -43,7 +42,7 @@ func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
 			name:    "enabled when class enables and cluster override is unset",
 			cluster: &platformv1alpha1.PostgresCluster{},
 			class: newClassWithMonitoring(
-				ptr.To(true),
+				new(true),
 				nil,
 				nil,
 			),
@@ -54,12 +53,12 @@ func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
 			cluster: &platformv1alpha1.PostgresCluster{
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Monitoring: &platformv1alpha1.PostgresClusterMonitoring{
-						PostgreSQLMetrics: ptr.To(false),
+						PostgreSQLMetrics: new(false),
 					},
 				},
 			},
 			class: newClassWithMonitoring(
-				ptr.To(true),
+				new(true),
 				nil,
 				nil,
 			),
@@ -70,12 +69,12 @@ func TestIsPostgreSQLMetricsEnabled(t *testing.T) {
 			cluster: &platformv1alpha1.PostgresCluster{
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Monitoring: &platformv1alpha1.PostgresClusterMonitoring{
-						PostgreSQLMetrics: ptr.To(true),
+						PostgreSQLMetrics: new(true),
 					},
 				},
 			},
 			class: newClassWithMonitoring(
-				ptr.To(false),
+				new(false),
 				nil,
 				nil,
 			),
@@ -135,8 +134,8 @@ func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 			cluster: &platformv1alpha1.PostgresCluster{},
 			class: newClassWithMonitoring(
 				nil,
-				ptr.To(true),
-				ptr.To(true),
+				new(true),
+				new(true),
 			),
 			want: true,
 		},
@@ -145,14 +144,14 @@ func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 			cluster: &platformv1alpha1.PostgresCluster{
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{
-						Enabled: ptr.To(false),
+						Enabled: new(false),
 					},
 				},
 			},
 			class: newClassWithMonitoring(
 				nil,
-				ptr.To(true),
-				ptr.To(true),
+				new(true),
+				new(true),
 			),
 			want: true,
 		},
@@ -161,14 +160,14 @@ func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 			cluster: &platformv1alpha1.PostgresCluster{
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Monitoring: &platformv1alpha1.PostgresClusterMonitoring{
-						ConnectionPoolerMetrics: ptr.To(false),
+						ConnectionPoolerMetrics: new(false),
 					},
 				},
 			},
 			class: newClassWithMonitoring(
 				nil,
-				ptr.To(true),
-				ptr.To(true),
+				new(true),
+				new(true),
 			),
 			want: false,
 		},
@@ -177,8 +176,8 @@ func TestIsConnectionPoolerMetricsEnabled(t *testing.T) {
 			cluster: &platformv1alpha1.PostgresCluster{},
 			class: newClassWithMonitoring(
 				nil,
-				ptr.To(true),
-				ptr.To(false),
+				new(true),
+				new(false),
 			),
 			want: false,
 		},

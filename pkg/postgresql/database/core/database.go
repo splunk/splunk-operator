@@ -70,8 +70,8 @@ func chooseSecretError(err error) *secretReconcileError {
 	var first *secretReconcileError
 	var managedMissing *secretReconcileError
 	for _, leaf := range leaves {
-		var se secretReconcileError
-		if !stderrors.As(leaf, &se) {
+		se, ok := stderrors.AsType[secretReconcileError](leaf)
+		if !ok {
 			continue
 		}
 		if se.reason == reasonExternalSecretMissing {

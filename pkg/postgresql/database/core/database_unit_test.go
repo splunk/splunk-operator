@@ -59,7 +59,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/ptr"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -148,17 +148,17 @@ func (r *stubDBRepo) AssignRequiredPermissionsToRole(_ context.Context, dbName s
 
 // boolPtr is a helper to get a pointer to a bool value, used for testing conditions with pointer fields.
 func boolPtr(v bool) *bool {
-	return ptr.To(v)
+	return new(v)
 }
 
 // strPtr is a helper to get a pointer to a string value, used for testing pointer string fields.
 func strPtr(s string) *string {
-	return ptr.To(s)
+	return new(s)
 }
 
 // int64Ptr is a helper to get a pointer to an int64 value, used for testing pointer integer fields.
 func int64Ptr(v int64) *int64 {
-	return ptr.To(v)
+	return new(v)
 }
 
 func databaseNames(defs []platformv1alpha1.DatabaseDefinition) []string {
@@ -220,14 +220,14 @@ func TestValidateAuthoritativeProviderUID(t *testing.T) {
 		UID:       "recorded-uid",
 	}}
 
-	err := validateAuthoritativeProviderUID(context.Background(), c, authoritative)
+	err := validateAuthoritativeProviderUID(t.Context(), c, authoritative)
 
 	require.ErrorContains(t, err, "UID \"replacement-uid\" does not match resolved provider identity UID \"recorded-uid\"")
 }
 
 func TestPostgresDatabaseServiceRejectsStaleProviderUIDBeforeClosingDatabases(t *testing.T) {
 	scheme := testScheme(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	closed := false
 	postgresDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{
@@ -381,10 +381,10 @@ func TestPostgresDatabaseServiceRequeuesOnConflict(t *testing.T) {
 			c := tst.build(tst.existing)
 
 			postgresDB := &platformv1alpha1.PostgresDatabase{}
-			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: tst.existing.Name, Namespace: tst.existing.Namespace}, postgresDB))
+			require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: tst.existing.Name, Namespace: tst.existing.Namespace}, postgresDB))
 
 			result, err := PostgresDatabaseService(
-				context.Background(),
+				t.Context(),
 				&ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), Metrics: &pgprometheus.NoopRecorder{}, ClusterReader: dbadapter.NewClusterReader(c), DatabaseProvisioner: testDatabaseProvisioner(c, scheme)},
 				postgresDB,
 				nil,
@@ -440,7 +440,7 @@ func TestPostgresDatabaseServiceInitialPhase(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 			scheme := testScheme(t)
 			postgresDB := &platformv1alpha1.PostgresDatabase{
 				ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs", Finalizers: tt.finalizers, CreationTimestamp: metav1.Now()},
@@ -480,7 +480,7 @@ func TestPostgresDatabaseServiceInitialPhase(t *testing.T) {
 }
 
 func TestPostgresDatabaseServiceRequeuesOnInitialPhaseConflict(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	scheme := testScheme(t)
 	postgresDB := &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs"},
@@ -510,7 +510,7 @@ func TestPostgresDatabaseServiceRequeuesOnInitialPhaseConflict(t *testing.T) {
 }
 
 func TestPostgresDatabaseServiceSkipsPendingPhaseDuringDeletion(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	scheme := testScheme(t)
 	deletionTimestamp := metav1.Now()
 	postgresDB := &platformv1alpha1.PostgresDatabase{
@@ -550,7 +550,7 @@ func TestPostgresDatabaseServiceSkipsPendingPhaseDuringDeletion(t *testing.T) {
 // external-Secret watch. controller-runtime must therefore stop requeueing.
 func TestPostgresDatabaseServiceTerminalOnMissingExternalSecret(t *testing.T) {
 	scheme := testScheme(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	const ns = "dbs"
 
 	postgresDB := &platformv1alpha1.PostgresDatabase{
@@ -612,7 +612,7 @@ func TestPostgresDatabaseServiceTerminalOnMissingExternalSecret(t *testing.T) {
 
 func TestDatabaseClusterNotReadyConditionReason(t *testing.T) {
 	scheme := testScheme(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	const ns = "dbs"
 
 	pendingPhase := "Pending"
@@ -732,7 +732,7 @@ func TestDatabaseClusterNotReadyConditionReason(t *testing.T) {
 // controller-runtime retry and leave the status stale until the next Secret event.
 func TestPostgresDatabaseServiceRequeuesWhenMissingSecretStatusWriteFailsTransiently(t *testing.T) {
 	scheme := testScheme(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	const ns = "dbs"
 
 	postgresDB := &platformv1alpha1.PostgresDatabase{
@@ -956,7 +956,7 @@ func TestReconcileRWRolePrivilegesUsesConfiguredRoleNames(t *testing.T) {
 		Roles:    ports.DatabaseRoleNames{Admin: "tenant_owner", RW: "tenant_rw"},
 	}}
 
-	require.NoError(t, reconcileRWRolePrivileges(context.Background(), "rw.example.internal", "supersecret", targets, newDBRepo))
+	require.NoError(t, reconcileRWRolePrivileges(t.Context(), "rw.example.internal", "supersecret", targets, newDBRepo))
 	assert.Equal(t, ports.DatabaseRoleNames{Admin: "tenant_owner", RW: "tenant_rw"}, repo.roleCalls["payments"])
 }
 
@@ -1043,7 +1043,7 @@ func TestReconcileRWRolePrivileges(t *testing.T) {
 			for _, dbName := range tst.dbNames {
 				targets = append(targets, databasePrivilegeTarget{Database: dbName, Roles: ports.DatabaseRoleNames{Admin: adminRoleName(dbName), RW: rwRoleName(dbName)}})
 			}
-			err := reconcileRWRolePrivileges(context.Background(), "rw.example.internal", "supersecret", targets, newDBRepo)
+			err := reconcileRWRolePrivileges(t.Context(), "rw.example.internal", "supersecret", targets, newDBRepo)
 
 			assert.Equal(t, tst.wantRepoCalls, repoCalls)
 			for dbName, wantCalls := range tst.wantExecCalls {
@@ -1065,7 +1065,7 @@ func TestReconcileRWRolePrivileges(t *testing.T) {
 
 func TestReconcileRWRolePrivilegesLogsCompleteOperationWithoutCredentials(t *testing.T) {
 	var logOutput bytes.Buffer
-	ctx := logging.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(&logOutput, nil)))
+	ctx := logging.WithLogger(t.Context(), slog.New(slog.NewJSONHandler(&logOutput, nil)))
 	terminalErr := fmt.Errorf("%w: authentication error containing supersecret", ErrTerminal)
 	retryableGrantErr := errors.New("grant failure containing supersecret")
 	newDBRepo := func(_ context.Context, _, dbName, _ string) (ports.DBRepo, error) {
@@ -1165,7 +1165,7 @@ func TestFetchCluster(t *testing.T) {
 			}
 
 			c := testClient(t, scheme, objs...)
-			cluster, err := fetchCluster(context.Background(), c, postgresDB)
+			cluster, err := fetchCluster(t.Context(), c, postgresDB)
 
 			if tst.wantAbsent {
 				require.Error(t, err)
@@ -1202,7 +1202,7 @@ func TestFetchCluster(t *testing.T) {
 			}).
 			Build()
 
-		cluster, err := fetchCluster(context.Background(), c, postgresDB)
+		cluster, err := fetchCluster(t.Context(), c, postgresDB)
 
 		require.Error(t, err)
 		assert.Nil(t, cluster)
@@ -1222,10 +1222,10 @@ func TestSetStatus(t *testing.T) {
 	}
 	c := testClient(t, scheme, existing)
 	postgresDB := &platformv1alpha1.PostgresDatabase{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, postgresDB))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, postgresDB))
 
 	err := persistStatus(
-		context.Background(),
+		t.Context(),
 		c,
 		&pgprometheus.NoopRecorder{},
 		postgresDB,
@@ -1255,7 +1255,7 @@ func TestSetStatus(t *testing.T) {
 	assert.Equal(t, "PostgresDatabase is in phase Provisioning", readyCond.Message)
 
 	got := &platformv1alpha1.PostgresDatabase{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: postgresDB.Name, Namespace: postgresDB.Namespace}, got))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: postgresDB.Name, Namespace: postgresDB.Namespace}, got))
 	require.NotNil(t, got.Status.Phase)
 	assert.Equal(t, *postgresDB.Status.Phase, *got.Status.Phase)
 	require.Len(t, got.Status.Conditions, 2)
@@ -1333,10 +1333,10 @@ func TestSetStatusReadyConditionPerPhase(t *testing.T) {
 			}
 			c := testClient(t, scheme, existing)
 			postgresDB := &platformv1alpha1.PostgresDatabase{}
-			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, postgresDB))
+			require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, postgresDB))
 
 			require.NoError(t, persistStatus(
-				context.Background(), c, &pgprometheus.NoopRecorder{}, postgresDB, false,
+				t.Context(), c, &pgprometheus.NoopRecorder{}, postgresDB, false,
 				tc.conditionType, tc.status, tc.reason, tc.message, tc.phase,
 			))
 
@@ -1716,9 +1716,9 @@ func TestPersistStatusStartsReadinessCycleOnce(t *testing.T) {
 	c := testClient(t, scheme, existing)
 
 	db := &platformv1alpha1.PostgresDatabase{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, db))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, db))
 	require.NoError(t, persistStatus(
-		context.Background(), c, &pgprometheus.NoopRecorder{}, db, true,
+		t.Context(), c, &pgprometheus.NoopRecorder{}, db, true,
 		clusterReady, metav1.ConditionFalse, reasonClusterProvisioning,
 		"Cluster is not in ready state yet", pendingDBPhase,
 	))
@@ -1729,12 +1729,12 @@ func TestPersistStatusStartsReadinessCycleOnce(t *testing.T) {
 	readyLastTransition := readyCond.LastTransitionTime
 
 	stored := &platformv1alpha1.PostgresDatabase{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, stored))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, stored))
 	require.NotNil(t, stored.Status.LastTransitionTime)
 	assert.Equal(t, lastTransitionTime, *stored.Status.LastTransitionTime)
 
 	require.NoError(t, persistStatus(
-		context.Background(), c, &pgprometheus.NoopRecorder{}, stored, false,
+		t.Context(), c, &pgprometheus.NoopRecorder{}, stored, false,
 		clusterReady, metav1.ConditionFalse, reasonClusterProvisioning,
 		"Cluster is not in ready state yet", pendingDBPhase,
 	))
@@ -1766,9 +1766,9 @@ func TestPersistStatusStartsReadinessCycleForProvisioningBlockerAfterRoutineUpda
 	c := testClient(t, scheme, existing)
 
 	db := &platformv1alpha1.PostgresDatabase{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, db))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: existing.Name, Namespace: existing.Namespace}, db))
 	require.NoError(t, persistStatus(
-		context.Background(), c, &pgprometheus.NoopRecorder{}, db, true,
+		t.Context(), c, &pgprometheus.NoopRecorder{}, db, true,
 		clusterReady, metav1.ConditionTrue, reasonClusterAvailable,
 		"Cluster is operational", provisioningDBPhase,
 	))
@@ -1779,7 +1779,7 @@ func TestPersistStatusStartsReadinessCycleForProvisioningBlockerAfterRoutineUpda
 	readyLastTransition := readyCond.LastTransitionTime
 
 	require.NoError(t, persistStatus(
-		context.Background(), c, &pgprometheus.NoopRecorder{}, db, true,
+		t.Context(), c, &pgprometheus.NoopRecorder{}, db, true,
 		secretsReady, metav1.ConditionFalse, reasonManagedSecretMissing,
 		"managed role secret drift detected", provisioningDBPhase,
 	))
@@ -1792,7 +1792,7 @@ func TestPersistStatusStartsReadinessCycleForProvisioningBlockerAfterRoutineUpda
 		"Ready stayed False across both calls, so its LastTransitionTime must not churn even though Reason/Message changed")
 
 	persisted := &platformv1alpha1.PostgresDatabase{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, persisted))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, persisted))
 	require.NotNil(t, persisted.Status.LastTransitionTime)
 	assert.Equal(t, *db.Status.LastTransitionTime, *persisted.Status.LastTransitionTime)
 }
@@ -1960,7 +1960,7 @@ func TestPersistDatabaseBootstrapCompletionMarksOnlyNewEntries(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "dbs", Generation: 3},
 		Spec: platformv1alpha1.PostgresDatabaseSpec{Databases: []platformv1alpha1.DatabaseDefinition{
 			{Name: "established"},
-			{Name: "newdb", AllowConnections: ptr.To(false)},
+			{Name: "newdb", AllowConnections: new(false)},
 		}},
 		Status: platformv1alpha1.PostgresDatabaseStatus{
 			Phase: &phase,
@@ -2011,7 +2011,7 @@ func TestGetSecret(t *testing.T) {
 		}
 		c := testClient(t, scheme, existing)
 
-		secret, err := getSecret(context.Background(), c, "dbs", "db-secret")
+		secret, err := getSecret(t.Context(), c, "dbs", "db-secret")
 
 		require.NoError(t, err)
 		require.NotNil(t, secret)
@@ -2022,7 +2022,7 @@ func TestGetSecret(t *testing.T) {
 	t.Run("returns nil nil when secret is absent", func(t *testing.T) {
 		c := testClient(t, scheme)
 
-		secret, err := getSecret(context.Background(), c, "dbs", "missing")
+		secret, err := getSecret(t.Context(), c, "dbs", "missing")
 
 		require.NoError(t, err)
 		assert.Nil(t, secret)
@@ -2052,12 +2052,12 @@ func TestAdoptResource(t *testing.T) {
 	}
 	c := testClient(t, scheme, postgresDB, configMap)
 
-	err := adoptResource(context.Background(), c, scheme, postgresDB, configMap)
+	err := adoptResource(t.Context(), c, scheme, postgresDB, configMap)
 
 	require.NoError(t, err)
 
 	updated := &corev1.ConfigMap{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, updated))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, updated))
 	assert.Equal(t, "true", updated.Annotations["keep"])
 	_, exists := updated.Annotations[annotationRetainedFrom]
 	assert.False(t, exists)
@@ -2087,11 +2087,11 @@ func TestAdoptResourceNilAnnotations(t *testing.T) {
 	}
 	c := testClient(t, scheme, postgresDB, configMap)
 
-	err := adoptResource(context.Background(), c, scheme, postgresDB, configMap)
+	err := adoptResource(t.Context(), c, scheme, postgresDB, configMap)
 
 	require.NoError(t, err)
 	updated := &corev1.ConfigMap{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, updated))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, updated))
 	require.Len(t, updated.OwnerReferences, 1)
 	assert.Equal(t, postgresDB.UID, updated.OwnerReferences[0].UID)
 }
@@ -2114,17 +2114,17 @@ func TestOrphanResourceHelpers(t *testing.T) {
 				Name:      "primary-payments",
 				Namespace: "dbs",
 				OwnerReferences: []metav1.OwnerReference{
-					{UID: postgresDB.UID, Name: postgresDB.Name, Controller: ptr.To(true)},
+					{UID: postgresDB.UID, Name: postgresDB.Name, Controller: new(true)},
 					{UID: types.UID("other"), Name: "other"},
 				},
 			},
 		}
 		c := testClient(t, scheme, db)
 
-		require.NoError(t, orphanCNPGDatabases(context.Background(), c, postgresDB, databases))
+		require.NoError(t, orphanCNPGDatabases(t.Context(), c, postgresDB, databases))
 
 		updated := &cnpgv1.Database{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, updated))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, updated))
 		assert.Equal(t, postgresDB.Name, updated.Annotations[annotationRetainedFrom])
 		require.Len(t, updated.OwnerReferences, 1)
 		assert.Equal(t, types.UID("other"), updated.OwnerReferences[0].UID)
@@ -2135,14 +2135,14 @@ func TestOrphanResourceHelpers(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            "primary-green-payments",
 				Namespace:       "dbs",
-				OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: ptr.To(true)}},
+				OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: new(true)}},
 			},
 		}
 		c := testClient(t, scheme, db)
 
-		require.NoError(t, orphanCNPGDatabases(context.Background(), c, postgresDB, databases, "green"))
+		require.NoError(t, orphanCNPGDatabases(t.Context(), c, postgresDB, databases, "green"))
 		updated := &cnpgv1.Database{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, updated))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, updated))
 		assert.Empty(t, updated.OwnerReferences)
 		assert.Equal(t, postgresDB.Name, updated.Annotations[annotationRetainedFrom])
 	})
@@ -2156,19 +2156,19 @@ func TestOrphanResourceHelpers(t *testing.T) {
 		blue := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
 			Name:            "primary-blue-payments",
 			Namespace:       "dbs",
-			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: ptr.To(true)}},
+			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: new(true)}},
 		}}
 		green := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
 			Name:            "primary-green-payments",
 			Namespace:       "dbs",
-			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: ptr.To(true)}},
+			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: new(true)}},
 		}}
 		c := testClient(t, scheme, blue, green)
 
-		require.NoError(t, orphanCNPGDatabases(context.Background(), c, scopedPostgresDB, databases, "blue", "green"))
+		require.NoError(t, orphanCNPGDatabases(t.Context(), c, scopedPostgresDB, databases, "blue", "green"))
 		for _, name := range []string{blue.Name, green.Name} {
 			updated := &cnpgv1.Database{}
-			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: name, Namespace: "dbs"}, updated))
+			require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: name, Namespace: "dbs"}, updated))
 			assert.Empty(t, updated.OwnerReferences)
 			assert.Equal(t, scopedPostgresDB.Name, updated.Annotations[annotationRetainedFrom])
 		}
@@ -2179,14 +2179,14 @@ func TestOrphanResourceHelpers(t *testing.T) {
 			Name:      "primary-green-payments",
 			Namespace: "dbs",
 			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: "other", UID: "other-uid", Controller: ptr.To(true),
+				APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: "other", UID: "other-uid", Controller: new(true),
 			}},
 		}}
 		c := testClient(t, scheme, foreign)
 
-		require.NoError(t, orphanCNPGDatabases(context.Background(), c, postgresDB, databases, "green"))
+		require.NoError(t, orphanCNPGDatabases(t.Context(), c, postgresDB, databases, "green"))
 		updated := &cnpgv1.Database{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: foreign.Name, Namespace: foreign.Namespace}, updated))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: foreign.Name, Namespace: foreign.Namespace}, updated))
 		assert.Equal(t, foreign.OwnerReferences, updated.OwnerReferences)
 		assert.NotContains(t, updated.Annotations, annotationRetainedFrom)
 	})
@@ -2205,16 +2205,16 @@ func TestOrphanResourceHelpers(t *testing.T) {
 		}
 		c := testClient(t, scheme, db)
 
-		require.NoError(t, orphanCNPGDatabases(context.Background(), c, postgresDB, databases))
+		require.NoError(t, orphanCNPGDatabases(t.Context(), c, postgresDB, databases))
 		updated := &cnpgv1.Database{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, updated))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, updated))
 		assert.Empty(t, updated.OwnerReferences)
 		assert.Equal(t, postgresDB.Name, updated.Annotations[annotationRetainedFrom])
 	})
 
 	t.Run("orphanConfigMaps skips not found", func(t *testing.T) {
 		c := testClient(t, scheme)
-		require.NoError(t, orphanConfigMaps(context.Background(), c, postgresDB, databases))
+		require.NoError(t, orphanConfigMaps(t.Context(), c, postgresDB, databases))
 	})
 
 	t.Run("orphanSecrets skips already retained secret", func(t *testing.T) {
@@ -2227,10 +2227,10 @@ func TestOrphanResourceHelpers(t *testing.T) {
 		}
 		c := testClient(t, scheme, secret)
 
-		require.NoError(t, orphanSecrets(context.Background(), c, postgresDB, databases))
+		require.NoError(t, orphanSecrets(t.Context(), c, postgresDB, databases))
 
 		updated := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, updated))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, updated))
 		assert.Equal(t, postgresDB.Name, updated.Annotations[annotationRetainedFrom])
 		assert.Empty(t, updated.OwnerReferences)
 		assert.Equal(t, secret, updated)
@@ -2257,10 +2257,10 @@ func TestOrphanResourceHelpers(t *testing.T) {
 			},
 		}}
 
-		require.NoError(t, orphanSecrets(context.Background(), c, postgresDB, externalDatabases))
+		require.NoError(t, orphanSecrets(t.Context(), c, postgresDB, externalDatabases))
 
 		updated := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: external.Name, Namespace: external.Namespace}, updated))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: external.Name, Namespace: external.Namespace}, updated))
 		assert.NotContains(t, updated.Annotations, annotationRetainedFrom, "external secret must not be annotated by retention")
 		assert.Equal(t, external, updated, "external secret must be left byte-for-byte untouched")
 	})
@@ -2277,20 +2277,20 @@ func TestDeleteResourceHelpers(t *testing.T) {
 	t.Run("deleteCNPGDatabases removes existing object", func(t *testing.T) {
 		db := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
 			Name: "primary-payments", Namespace: "dbs",
-			OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: ptr.To(true)}},
+			OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: new(true)}},
 		}}
 		c := testClient(t, scheme, db)
-		require.NoError(t, deleteCNPGDatabases(context.Background(), c, postgresDB, databases))
+		require.NoError(t, deleteCNPGDatabases(t.Context(), c, postgresDB, databases))
 	})
 
 	t.Run("deleteCNPGDatabases uses the active environment name", func(t *testing.T) {
 		db := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
 			Name: "primary-green-payments", Namespace: "dbs",
-			OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: ptr.To(true)}},
+			OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: new(true)}},
 		}}
 		c := testClient(t, scheme, db)
-		require.NoError(t, deleteCNPGDatabases(context.Background(), c, postgresDB, databases, "green"))
-		err := c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, &cnpgv1.Database{})
+		require.NoError(t, deleteCNPGDatabases(t.Context(), c, postgresDB, databases, "green"))
+		err := c.Get(t.Context(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, &cnpgv1.Database{})
 		assert.True(t, apierrors.IsNotFound(err))
 	})
 
@@ -2302,17 +2302,17 @@ func TestDeleteResourceHelpers(t *testing.T) {
 		}}
 		blue := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
 			Name: "primary-blue-payments", Namespace: "dbs",
-			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: ptr.To(true)}},
+			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: new(true)}},
 		}}
 		green := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
 			Name: "primary-green-payments", Namespace: "dbs",
-			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: ptr.To(true)}},
+			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: new(true)}},
 		}}
 		c := testClient(t, scheme, blue, green)
 
-		require.NoError(t, deleteCNPGDatabases(context.Background(), c, scopedPostgresDB, databases, "blue", "green"))
+		require.NoError(t, deleteCNPGDatabases(t.Context(), c, scopedPostgresDB, databases, "blue", "green"))
 		for _, name := range []string{blue.Name, green.Name} {
-			err := c.Get(context.Background(), types.NamespacedName{Name: name, Namespace: "dbs"}, &cnpgv1.Database{})
+			err := c.Get(t.Context(), types.NamespacedName{Name: name, Namespace: "dbs"}, &cnpgv1.Database{})
 			assert.True(t, apierrors.IsNotFound(err))
 		}
 	})
@@ -2322,14 +2322,14 @@ func TestDeleteResourceHelpers(t *testing.T) {
 			Name:      "primary-green-payments",
 			Namespace: "dbs",
 			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: "other", UID: "other-uid", Controller: ptr.To(true),
+				APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: "other", UID: "other-uid", Controller: new(true),
 			}},
 		}}
 		c := testClient(t, scheme, foreign)
 
-		require.NoError(t, deleteCNPGDatabases(context.Background(), c, postgresDB, databases, "green"))
+		require.NoError(t, deleteCNPGDatabases(t.Context(), c, postgresDB, databases, "green"))
 		updated := &cnpgv1.Database{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: foreign.Name, Namespace: foreign.Namespace}, updated))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: foreign.Name, Namespace: foreign.Namespace}, updated))
 		assert.Equal(t, foreign.OwnerReferences, updated.OwnerReferences)
 	})
 
@@ -2349,21 +2349,21 @@ func TestDeleteResourceHelpers(t *testing.T) {
 		}
 		c := testClient(t, scheme, db)
 
-		require.NoError(t, deleteCNPGDatabases(context.Background(), c, owner, databases))
-		err := c.Get(context.Background(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, &cnpgv1.Database{})
+		require.NoError(t, deleteCNPGDatabases(t.Context(), c, owner, databases))
+		err := c.Get(t.Context(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, &cnpgv1.Database{})
 		assert.True(t, apierrors.IsNotFound(err))
 	})
 
 	t.Run("deleteConfigMaps ignores missing objects", func(t *testing.T) {
 		c := testClient(t, scheme)
-		require.NoError(t, deleteConfigMaps(context.Background(), c, postgresDB, databases))
+		require.NoError(t, deleteConfigMaps(t.Context(), c, postgresDB, databases))
 	})
 
 	t.Run("deleteSecrets deletes admin and rw secrets", func(t *testing.T) {
 		admin := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "primary-payments-admin", Namespace: "dbs"}}
 		rw := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "primary-payments-rw", Namespace: "dbs"}}
 		c := testClient(t, scheme, admin, rw)
-		require.NoError(t, deleteSecrets(context.Background(), c, postgresDB, databases))
+		require.NoError(t, deleteSecrets(t.Context(), c, postgresDB, databases))
 	})
 
 	t.Run("deleteSecrets never deletes external secrets", func(t *testing.T) {
@@ -2382,10 +2382,10 @@ func TestDeleteResourceHelpers(t *testing.T) {
 			},
 		}}
 
-		require.NoError(t, deleteSecrets(context.Background(), c, postgresDB, externalDatabases))
+		require.NoError(t, deleteSecrets(t.Context(), c, postgresDB, externalDatabases))
 
 		survivor := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: external.Name, Namespace: external.Namespace}, survivor),
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: external.Name, Namespace: external.Namespace}, survivor),
 			"external secret must survive PostgresDatabase deletion")
 	})
 }
@@ -2438,12 +2438,12 @@ func TestCreateRoleSecret(t *testing.T) {
 		wantPasswordDigits := passwordDigits
 		c := testClient(t, scheme)
 
-		err := createRoleSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+		err := createRoleSecret(t.Context(), c, scheme, postgresDB, roleName, secretName)
 
 		require.NoError(t, err)
 
 		got := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
 		assert.Equal(t, secretName, got.Name)
 		assert.Equal(t, postgresDB.Namespace, got.Namespace)
 		assert.Equal(t, wantManagedBy, got.Labels[labelManagedBy])
@@ -2462,12 +2462,12 @@ func TestCreateRoleSecret(t *testing.T) {
 		existing := buildPasswordSecret(postgresDB, secretName, wantRolename, wantPassword)
 		c := testClient(t, scheme, existing)
 
-		err := createRoleSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+		err := createRoleSecret(t.Context(), c, scheme, postgresDB, roleName, secretName)
 
 		require.NoError(t, err)
 
 		got := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
 		assert.Equal(t, wantRolename, string(got.Data["username"]))
 		assert.Equal(t, wantPassword, string(got.Data[secretKeyPassword]))
 		assert.Empty(t, got.OwnerReferences)
@@ -2500,12 +2500,12 @@ func TestEnsureSecret(t *testing.T) {
 		wantPasswordDigits := passwordDigits
 		c := testClient(t, scheme)
 
-		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+		err := ensureSecret(t.Context(), c, scheme, postgresDB, roleName, secretName)
 
 		require.NoError(t, err)
 
 		got := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
 		assert.Equal(t, wantManagedBy, got.Labels[labelManagedBy])
 		assert.Equal(t, wantReload, got.Labels[labelCNPGReload])
 		assert.Equal(t, wantRolename, string(got.Data["username"]))
@@ -2540,12 +2540,12 @@ func TestEnsureSecret(t *testing.T) {
 		}
 		c := testClient(t, scheme, retained)
 
-		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+		err := ensureSecret(t.Context(), c, scheme, postgresDB, roleName, secretName)
 
 		require.NoError(t, err)
 
 		got := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
 		assert.Equal(t, wantKeep, got.Annotations["keep"])
 		_, hasRetainedAnnotation := got.Annotations[annotationRetainedFrom]
 		assert.False(t, hasRetainedAnnotation)
@@ -2593,12 +2593,12 @@ func TestEnsureSecret(t *testing.T) {
 		}
 		c := testClient(t, scheme, existing)
 
-		err := ensureSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+		err := ensureSecret(t.Context(), c, scheme, postgresDB, roleName, secretName)
 
 		require.NoError(t, err)
 
 		got := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
 		assert.Equal(t, wantKeep, got.Annotations["keep"])
 		assert.Equal(t, wantRolename, string(got.Data["username"]))
 		assert.Equal(t, wantPassword, string(got.Data[secretKeyPassword]))
@@ -2611,7 +2611,7 @@ func TestEnsureSecret(t *testing.T) {
 		secretName := "primary-payments-admin"
 		c := testClient(t, scheme)
 
-		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+		err := ensureProvisionedSecret(t.Context(), c, scheme, postgresDB, roleName, secretName)
 
 		require.Error(t, err)
 		var driftErr secretReconcileError
@@ -2641,12 +2641,12 @@ func TestEnsureSecret(t *testing.T) {
 		}
 		c := testClient(t, scheme, existing)
 
-		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+		err := ensureProvisionedSecret(t.Context(), c, scheme, postgresDB, roleName, secretName)
 
 		require.NoError(t, err)
 
 		got := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
 		assert.Equal(t, "true", got.Annotations["keep"])
 		require.Len(t, got.OwnerReferences, 1)
 		assert.Equal(t, postgresDB.UID, got.OwnerReferences[0].UID)
@@ -2671,12 +2671,12 @@ func TestEnsureSecret(t *testing.T) {
 		}
 		c := testClient(t, scheme, existing)
 
-		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+		err := ensureProvisionedSecret(t.Context(), c, scheme, postgresDB, roleName, secretName)
 
 		require.NoError(t, err)
 
 		got := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
 		assert.Equal(t, wantUsername, string(got.Data["username"]))
 		assert.Equal(t, "existing-password", string(got.Data[secretKeyPassword]))
 	})
@@ -2707,7 +2707,7 @@ func TestEnsureSecret(t *testing.T) {
 		}
 		c := testClient(t, scheme, existing)
 
-		err := ensureProvisionedSecret(context.Background(), c, scheme, postgresDB, roleName, secretName)
+		err := ensureProvisionedSecret(t.Context(), c, scheme, postgresDB, roleName, secretName)
 
 		require.Error(t, err)
 		var driftErr secretReconcileError
@@ -2793,12 +2793,12 @@ func TestReconcileRoleSecrets(t *testing.T) {
 			{name: "primary-analytics-rw", username: "analytics_rw"},
 		}
 
-		err := reconcileRoleSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
+		err := reconcileRoleSecrets(t.Context(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
 
 		require.NoError(t, err)
 		for _, want := range wantSecrets {
 			got := &corev1.Secret{}
-			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: want.name, Namespace: postgresDB.Namespace}, got))
+			require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: want.name, Namespace: postgresDB.Namespace}, got))
 			assert.Equal(t, want.username, string(got.Data["username"]))
 			assertGeneratedPassword(t, string(got.Data[secretKeyPassword]), passwordLength, passwordDigits)
 			require.Len(t, got.OwnerReferences, 1)
@@ -2815,31 +2815,31 @@ func TestReconcileRoleSecrets(t *testing.T) {
 		}}
 		c := testClient(t, scheme)
 
-		require.NoError(t, reconcileRoleSecrets(context.Background(), c, scheme, custom, nil))
+		require.NoError(t, reconcileRoleSecrets(t.Context(), c, scheme, custom, nil))
 
 		admin := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-admin", Namespace: custom.Namespace}, admin))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "primary-payments-admin", Namespace: custom.Namespace}, admin))
 		assert.Equal(t, "tenant_owner", string(admin.Data[secretKeyUsername]))
 		rw := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-rw", Namespace: custom.Namespace}, rw))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "primary-payments-rw", Namespace: custom.Namespace}, rw))
 		assert.Equal(t, "tenant_rw", string(rw.Data[secretKeyUsername]))
 	})
 
 	t.Run("is idempotent when secrets already exist", func(t *testing.T) {
 		c := testClient(t, scheme)
 
-		require.NoError(t, reconcileRoleSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB)))
+		require.NoError(t, reconcileRoleSecrets(t.Context(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB)))
 
 		before := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-admin", Namespace: postgresDB.Namespace}, before))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "primary-payments-admin", Namespace: postgresDB.Namespace}, before))
 		beforePassword := append([]byte(nil), before.Data[secretKeyPassword]...)
 
-		err := reconcileRoleSecrets(context.Background(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
+		err := reconcileRoleSecrets(t.Context(), c, scheme, postgresDB, existingDatabaseStatus(postgresDB))
 
 		require.NoError(t, err)
 
 		after := &corev1.Secret{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-admin", Namespace: postgresDB.Namespace}, after))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "primary-payments-admin", Namespace: postgresDB.Namespace}, after))
 		assert.Equal(t, beforePassword, after.Data[secretKeyPassword])
 		require.Len(t, after.OwnerReferences, 1)
 		assert.Equal(t, postgresDB.UID, after.OwnerReferences[0].UID)
@@ -2852,7 +2852,7 @@ func TestReconcileRoleSecrets(t *testing.T) {
 			existing.Status.Databases = []platformv1alpha1.DatabaseInfo{{Name: "payments"}}
 			c := testClient(t, scheme)
 
-			err := reconcileRoleSecrets(context.Background(), c, scheme, existing, existingDatabaseStatus(existing))
+			err := reconcileRoleSecrets(t.Context(), c, scheme, existing, existingDatabaseStatus(existing))
 
 			require.Error(t, err)
 			var driftErr secretReconcileError
@@ -2946,7 +2946,7 @@ func TestReconcileRoleSecrets(t *testing.T) {
 
 		for _, secretName := range externalSecretNames {
 			got := &corev1.Secret{}
-			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+			require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
 			assert.Contains(t, []string{"payments_admin", "payments_rw"}, string(got.Data[secretKeyUsername]))
 			assert.Equal(t, exampleDataValue, string(got.Data[secretKeyPassword]))
 			assert.Equal(t, "true", got.Labels["cnpg.io/reload"])
@@ -2984,7 +2984,7 @@ func TestReconcileRoleSecrets(t *testing.T) {
 		// The operator must not have added the label behind the user's back.
 		for _, secretName := range externalSecretNames {
 			got := &corev1.Secret{}
-			require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
+			require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
 			assert.NotContains(t, got.Labels, labelCNPGReload)
 		}
 	})
@@ -3078,19 +3078,19 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 		wantAnalyticsData := mustBuildDatabaseConfigMapData(t, "analytics", endpoints)
 		c := testClient(t, scheme)
 
-		err := reconcileRoleConfigMaps(context.Background(), c, scheme, postgresDB, endpoints)
+		err := reconcileRoleConfigMaps(t.Context(), c, scheme, postgresDB, endpoints)
 
 		require.NoError(t, err)
 
 		gotPayments := &corev1.ConfigMap{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: wantPaymentsName, Namespace: postgresDB.Namespace}, gotPayments))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: wantPaymentsName, Namespace: postgresDB.Namespace}, gotPayments))
 		assert.Equal(t, wantManagedBy, gotPayments.Labels[labelManagedBy])
 		assert.Equal(t, wantPaymentsData, gotPayments.Data)
 		require.Len(t, gotPayments.OwnerReferences, 1)
 		assert.Equal(t, wantOwnerUID, gotPayments.OwnerReferences[0].UID)
 
 		gotAnalytics := &corev1.ConfigMap{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: wantAnalyticsName, Namespace: postgresDB.Namespace}, gotAnalytics))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: wantAnalyticsName, Namespace: postgresDB.Namespace}, gotAnalytics))
 		assert.Equal(t, wantManagedBy, gotAnalytics.Labels[labelManagedBy])
 		assert.Equal(t, wantAnalyticsData, gotAnalytics.Data)
 		require.Len(t, gotAnalytics.OwnerReferences, 1)
@@ -3138,12 +3138,12 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 		}
 		c := testClient(t, scheme, retained)
 
-		err := reconcileRoleConfigMaps(context.Background(), c, scheme, postgresDB, endpoints)
+		err := reconcileRoleConfigMaps(t.Context(), c, scheme, postgresDB, endpoints)
 
 		require.NoError(t, err)
 
 		got := &corev1.ConfigMap{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: cmName, Namespace: postgresDB.Namespace}, got))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: cmName, Namespace: postgresDB.Namespace}, got))
 		assert.Equal(t, wantManagedBy, got.Labels[labelManagedBy])
 		assert.Equal(t, wantKeep, got.Annotations["keep"])
 		_, hasRetainedAnnotation := got.Annotations[annotationRetainedFrom]
@@ -3170,9 +3170,9 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 		}
 		c := testClient(t, scheme)
 
-		require.NoError(t, reconcileRoleConfigMaps(context.Background(), c, scheme, postgresDB, endpoints))
+		require.NoError(t, reconcileRoleConfigMaps(t.Context(), c, scheme, postgresDB, endpoints))
 		got := &corev1.ConfigMap{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "primary-payments-config", Namespace: postgresDB.Namespace}, got))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "primary-payments-config", Namespace: postgresDB.Namespace}, got))
 		assert.Equal(t, "tenant_owner", got.Data[ConfigMapKeyAdminUser])
 		assert.Equal(t, "tenant_rw", got.Data[ConfigMapKeyRWUser])
 	})
@@ -3206,12 +3206,12 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 		}
 		c := testClient(t, scheme, existing)
 
-		err := reconcileRoleConfigMaps(context.Background(), c, scheme, postgresDB, endpoints)
+		err := reconcileRoleConfigMaps(t.Context(), c, scheme, postgresDB, endpoints)
 
 		require.NoError(t, err)
 
 		got := &corev1.ConfigMap{}
-		require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: cmName, Namespace: postgresDB.Namespace}, got))
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: cmName, Namespace: postgresDB.Namespace}, got))
 		assert.Equal(t, "true", got.Annotations["keep"])
 		require.Len(t, got.OwnerReferences, 1)
 		assert.Equal(t, postgresDB.UID, got.OwnerReferences[0].UID)
@@ -3235,7 +3235,7 @@ func TestReconcileRoleConfigMaps(t *testing.T) {
 		}
 		c := testClient(t, scheme)
 
-		err := reconcileRoleConfigMaps(context.Background(), c, scheme, postgresDB, clusterEndpoints{
+		err := reconcileRoleConfigMaps(t.Context(), c, scheme, postgresDB, clusterEndpoints{
 			RWHost: "rw.default.svc.cluster.local",
 			ROHost: "ro.default.svc.cluster.local",
 		})
@@ -3667,7 +3667,7 @@ func TestPopulateDatabaseStatus(t *testing.T) {
 // and Roles and the bootstrap identity are never touched.
 func TestPersistDatabaseMessages(t *testing.T) {
 	scheme := testScheme(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	requestName := types.NamespacedName{Name: "primary", Namespace: "dbs"}
 
 	build := func() *platformv1alpha1.PostgresDatabase {
@@ -3745,7 +3745,7 @@ func TestPopulateDatabaseStatusPreservesMessage(t *testing.T) {
 // the flow where provider readiness recovers but privilege bootstrap then fails.
 func TestReconcileReplacesRecoveredMessageWhilePrivilegeBootstrapFails(t *testing.T) {
 	scheme := testScheme(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	requestName := types.NamespacedName{Name: "primary", Namespace: "dbs"}
 
 	postgresDB := &platformv1alpha1.PostgresDatabase{
@@ -3888,7 +3888,7 @@ func TestCNPGDatabaseEnvironmentNameUsesExplicitScope(t *testing.T) {
 
 func TestDeletionTakesPrecedenceOverCurrentTerminalPrivilegesFailure(t *testing.T) {
 	scheme := testScheme(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	deletionTime := metav1.Now()
 	generation := int64(7)
 	postgresDB := &platformv1alpha1.PostgresDatabase{
@@ -3950,7 +3950,7 @@ func TestDeletionTakesPrecedenceOverCurrentTerminalPrivilegesFailure(t *testing.
 
 func TestPrivilegesTerminalFailureState(t *testing.T) {
 	scheme := testScheme(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	requestName := types.NamespacedName{Name: "primary", Namespace: "dbs"}
 
 	failingGrantRepoFunc := func(dbName string) ports.NewDBRepoFunc {
@@ -4609,14 +4609,14 @@ func TestPrivilegesTerminalFailureState(t *testing.T) {
 		{
 			name:                          "terminal privileges error transitions to Failed",
 			generation:                    7,
-			databases:                     []platformv1alpha1.DatabaseDefinition{{Name: "payments", AllowConnections: ptr.To(false)}},
+			databases:                     []platformv1alpha1.DatabaseDefinition{{Name: "payments", AllowConnections: new(false)}},
 			statusPhase:                   strPtr(string(readyDBPhase)),
 			newDBRepo:                     failingTerminalRepoFunc("password authentication failed"),
 			wantFailureState:              true,
 			wantPhase:                     failedDBPhase,
 			wantConditionReason:           reasonPrivilegesTerminalFailure,
 			wantDatabasesReadyStatus:      metav1.ConditionFalse,
-			wantProviderAllowsConnections: ptr.To(false),
+			wantProviderAllowsConnections: new(false),
 			wantConditionMessageContains: []string{
 				"Manual intervention required",
 				"spec change",
@@ -4945,7 +4945,7 @@ func TestEvaluateRoleGateFailedIsDeterministicAcrossDatabases(t *testing.T) {
 			"payments_rw":     "permission denied",
 		},
 	}
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		decision := evaluateRoleGate(multiDB, status)
 		assert.Equal(t, roleGateFailed, decision.State)
 		assert.Equal(t, "payments_admin", decision.Role)
@@ -4961,7 +4961,7 @@ func TestEvaluateRoleGatePendingIsDeterministicAcrossDatabases(t *testing.T) {
 		}},
 	}
 	// No roles owned yet: the first-declared role must be reported every time.
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		decision := evaluateRoleGate(multiDB, &platformv1alpha1.ManagedRolesStatus{})
 		assert.Equal(t, roleGatePending, decision.State)
 		assert.Equal(t, "payments_admin", decision.Role)

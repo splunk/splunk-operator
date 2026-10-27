@@ -17,7 +17,6 @@ Unless required by applicable law or agreed to in writing, software
 package core
 
 import (
-	"context"
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -51,7 +50,7 @@ func TestResolveAuthoritativeCNPGCluster(t *testing.T) {
 	green := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "orders-green", Namespace: "postgres"}}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(green).Build()
 
-	got, conventionalFallback, err := resolveAuthoritativeCNPGCluster(context.Background(), client, cluster, testClusterCard(cluster, "orders-green", ""))
+	got, conventionalFallback, err := resolveAuthoritativeCNPGCluster(t.Context(), client, cluster, testClusterCard(cluster, "orders-green", ""))
 	require.NoError(t, err)
 	assert.False(t, conventionalFallback)
 	assert.Equal(t, "orders-green", got.Name)
@@ -71,7 +70,7 @@ func TestResolveAuthoritativeCNPGClusterDoesNotFallBackFromPresentReference(t *t
 	conventional := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "postgres"}}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(conventional).Build()
 
-	got, conventionalFallback, err := resolveAuthoritativeCNPGCluster(context.Background(), client, cluster, testClusterCard(cluster, "orders-green", ""))
+	got, conventionalFallback, err := resolveAuthoritativeCNPGCluster(t.Context(), client, cluster, testClusterCard(cluster, "orders-green", ""))
 	require.Error(t, err)
 	assert.Nil(t, got)
 	assert.False(t, conventionalFallback)
@@ -89,7 +88,7 @@ func TestResolveAuthoritativeCNPGClusterRejectsReusedName(t *testing.T) {
 	}
 	green := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "orders-green", Namespace: "postgres", UID: "reused-uid"}}
 
-	got, fallback, err := resolveAuthoritativeCNPGCluster(context.Background(), fake.NewClientBuilder().WithScheme(scheme).WithObjects(green).Build(), cluster, testClusterCard(cluster, "orders-green", "expected-uid"))
+	got, fallback, err := resolveAuthoritativeCNPGCluster(t.Context(), fake.NewClientBuilder().WithScheme(scheme).WithObjects(green).Build(), cluster, testClusterCard(cluster, "orders-green", "expected-uid"))
 
 	require.Error(t, err)
 	assert.Nil(t, got)
@@ -105,7 +104,7 @@ func TestValidateAuthoritativeCNPGEnvironmentRejectsReusedName(t *testing.T) {
 	green := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "orders-green", Namespace: "postgres", UID: "reused-uid"}}
 
 	err := validateAuthoritativeCNPGEnvironment(
-		context.Background(),
+		t.Context(),
 		fake.NewClientBuilder().WithScheme(scheme).WithObjects(green).Build(),
 		testClusterCard(cluster, "orders-green", "expected-uid"),
 	)

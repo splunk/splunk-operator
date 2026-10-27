@@ -187,7 +187,7 @@ func TestReconcileRejectsInvalidIssuerConfiguration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			manager := NewManager(serverTLSClient(t, tt.objects...))
-			err := manager.Reconcile(context.Background(), tt.request)
+			err := manager.Reconcile(t.Context(), tt.request)
 			assert.ErrorIs(t, err, tlsport.ErrConfiguration)
 			assert.ErrorContains(t, err, tt.wantMessage)
 		})
@@ -196,7 +196,7 @@ func TestReconcileRejectsInvalidIssuerConfiguration(t *testing.T) {
 
 func TestReconcileReturnsPendingUntilIssuerAndCertificateAreReady(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 	cluster := serverTLSCluster()
 
 	t.Run("issuer is not ready", func(t *testing.T) {
@@ -222,7 +222,7 @@ func TestReconcileReturnsPendingUntilIssuerAndCertificateAreReady(t *testing.T) 
 
 func TestReconcilePublishesCAOnlySecretForValidLeaf(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 	cluster := serverTLSCluster()
 	request := certManagerRequest(cluster, "orders-rw.payments.svc", "postgres.internal.example")
 	c := serverTLSClient(t, readyIssuer(cluster.Namespace))
@@ -260,19 +260,19 @@ func TestReconcileDoesNotAdoptForeignCertificate(t *testing.T) {
 	}
 	c := serverTLSClient(t, readyIssuer(cluster.Namespace), foreign)
 
-	err := NewManager(c).Reconcile(context.Background(), request)
+	err := NewManager(c).Reconcile(t.Context(), request)
 	assert.ErrorIs(t, err, tlsport.ErrConfiguration)
 	assert.ErrorContains(t, err, "not managed by this PostgresCluster")
 
 	actual := &cmapi.Certificate{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(foreign), actual))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(foreign), actual))
 	assert.Equal(t, "foreign-secret", actual.Spec.SecretName)
 	assert.Equal(t, map[string]string{"app": "foreign"}, actual.Labels)
 }
 
 func TestReconcileRejectsInvalidLeafMaterial(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 	cluster := serverTLSCluster()
 	request := certManagerRequest(cluster, "orders-rw.payments.svc")
 
@@ -330,7 +330,7 @@ func TestReconcileRejectsInvalidLeafMaterial(t *testing.T) {
 
 func TestReconcileRejectsForeignCASecret(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 	cluster := serverTLSCluster()
 	request := certManagerRequest(cluster, "orders-rw.payments.svc")
 	c := serverTLSClient(t, readyIssuer(cluster.Namespace))
@@ -354,7 +354,7 @@ func TestReconcileRejectsForeignCASecret(t *testing.T) {
 
 func TestReconcileRejectsIncompleteRequest(t *testing.T) {
 	t.Parallel()
-	err := NewManager(nil).Reconcile(context.Background(), tlsport.Request{})
+	err := NewManager(nil).Reconcile(t.Context(), tlsport.Request{})
 	assert.ErrorIs(t, err, tlsport.ErrConfiguration)
 }
 
@@ -378,8 +378,8 @@ func TestFinalizePreservesCASecretUnlessItIsManagedAndPolicyIsDelete(t *testing.
 			}}
 			c := serverTLSClient(t, secret)
 
-			require.NoError(t, NewManager(c).Finalize(context.Background(), tlsport.FinalizeRequest{Identity: identity}))
-			assert.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(secret), &corev1.Secret{}))
+			require.NoError(t, NewManager(c).Finalize(t.Context(), tlsport.FinalizeRequest{Identity: identity}))
+			assert.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(secret), &corev1.Secret{}))
 		})
 	}
 }
@@ -392,7 +392,7 @@ func TestRetainAllowsAnAlreadyOrphanedManagedCertificate(t *testing.T) {
 		Name: identity.CertificateName, Namespace: cluster.Namespace, Labels: identity.Labels(),
 	}}
 
-	err := NewManager(serverTLSClient(t, certificate)).Finalize(context.Background(), tlsport.FinalizeRequest{Identity: identity, Retain: true})
+	err := NewManager(serverTLSClient(t, certificate)).Finalize(t.Context(), tlsport.FinalizeRequest{Identity: identity, Retain: true})
 	assert.NoError(t, err)
 }
 
@@ -408,7 +408,7 @@ func TestRetainRejectsACertificateWithAForeignController(t *testing.T) {
 		}},
 	}}
 
-	err := NewManager(serverTLSClient(t, certificate)).Finalize(context.Background(), tlsport.FinalizeRequest{Identity: identity, Retain: true})
+	err := NewManager(serverTLSClient(t, certificate)).Finalize(t.Context(), tlsport.FinalizeRequest{Identity: identity, Retain: true})
 	assert.ErrorContains(t, err, "is not managed by this PostgresCluster")
 }
 
@@ -433,7 +433,7 @@ func TestExistingCertificateDNSNames(t *testing.T) {
 		}},
 	}
 	manager := NewManager(fake.NewClientBuilder().WithScheme(scheme).WithObjects(certificate).Build())
-	names, err := manager.ExistingCertificateDNSNames(context.Background(), tlsport.Identity{ClusterName: "orders", Namespace: "payments", CertificateName: "orders-server-tls"})
+	names, err := manager.ExistingCertificateDNSNames(t.Context(), tlsport.Identity{ClusterName: "orders", Namespace: "payments", CertificateName: "orders-server-tls"})
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"orders-rw.payments.svc", "orders-pooler-rw.payments.svc", "orders-pooler-ro.payments.svc"}, names)
 }
@@ -447,8 +447,8 @@ func TestCleanupDeletesOnlyVerifiedCertManagerCASecret(t *testing.T) {
 	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: identity.ServerCASecret, Namespace: "payments", Labels: identity.Labels()}}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build()
 	manager := NewManager(c)
-	require.NoError(t, manager.Finalize(context.Background(), tlsport.FinalizeRequest{Identity: identity, DeleteCASecret: true}))
-	assert.Error(t, c.Get(context.Background(), client.ObjectKeyFromObject(secret), &corev1.Secret{}))
+	require.NoError(t, manager.Finalize(t.Context(), tlsport.FinalizeRequest{Identity: identity, DeleteCASecret: true}))
+	assert.Error(t, c.Get(t.Context(), client.ObjectKeyFromObject(secret), &corev1.Secret{}))
 }
 
 func TestRetainOrphansOnlyTheManagedCertificate(t *testing.T) {
@@ -472,12 +472,12 @@ func TestRetainOrphansOnlyTheManagedCertificate(t *testing.T) {
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(certificate).Build()
 
-	require.NoError(t, NewManager(c).Finalize(context.Background(), tlsport.FinalizeRequest{Identity: identity, Retain: true}))
+	require.NoError(t, NewManager(c).Finalize(t.Context(), tlsport.FinalizeRequest{Identity: identity, Retain: true}))
 	actual := &cmapi.Certificate{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(certificate), actual))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(certificate), actual))
 	assert.Len(t, actual.OwnerReferences, 1)
 	assert.Equal(t, "Audit", actual.OwnerReferences[0].Kind)
-	require.NoError(t, NewManager(c).Finalize(context.Background(), tlsport.FinalizeRequest{Identity: identity, Retain: true}))
+	require.NoError(t, NewManager(c).Finalize(t.Context(), tlsport.FinalizeRequest{Identity: identity, Retain: true}))
 }
 
 func TestKeyUsagesConvertsResolvedUsages(t *testing.T) {

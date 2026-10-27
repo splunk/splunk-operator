@@ -29,7 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/ptr"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -139,10 +139,10 @@ var _ = Describe("PostgresCluster external Secret watch", Ordered, Label("postgr
 			Spec: platformv1alpha1.PostgresClusterClassSpec{
 				Provisioner: "postgresql.cnpg.io",
 				Config: &platformv1alpha1.PostgresClusterClassConfig{
-					Instances:        ptr.To(instances),
-					Storage:          ptr.To(resource.MustParse(storageAmount)),
-					PostgresVersion:  ptr.To(postgresVersion),
-					ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(false)},
+					Instances:        new(instances),
+					Storage:          new(resource.MustParse(storageAmount)),
+					PostgresVersion:  new(postgresVersion),
+					ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(false)},
 				},
 				CNPG: &platformv1alpha1.CNPGConfig{},
 			},
@@ -153,7 +153,7 @@ var _ = Describe("PostgresCluster external Secret watch", Ordered, Label("postgr
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: namespace},
 			Spec: platformv1alpha1.PostgresClusterSpec{
 				Class:                 className,
-				ClusterDeletionPolicy: ptr.To("Delete"),
+				ClusterDeletionPolicy: new("Delete"),
 				PasswordConfig: &platformv1alpha1.SuperuserPasswordConfig{
 					SuperuserExternalSecretRef: corev1.LocalObjectReference{Name: secretName},
 				},

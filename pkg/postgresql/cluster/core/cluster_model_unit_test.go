@@ -22,6 +22,7 @@ import (
 	"errors"
 	"log/slog"
 	"maps"
+	"slices"
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -43,7 +44,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -110,9 +111,7 @@ func fakeClientWithPostgreSQLParameterApply(t *testing.T, scheme *runtime.Scheme
 						delete(nextParams, param)
 					}
 				}
-				for param, value := range desiredParams {
-					nextParams[param] = value
-				}
+				maps.Copy(nextParams, desiredParams)
 
 				nextOwnedParams := make(map[string]struct{}, len(desiredParams))
 				for param := range desiredParams {
@@ -228,13 +227,13 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	model := newClusterModel(c, scheme, events, nil, cluster, clusterClass, desiredConfig, contracts)
 
 	// Act
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	// Assert
 	require.True(t, model.cnpgPatch.requiresPhaseGate())
 	assert.False(t, model.cnpgCreated)
 	updated := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, cnpgv1.PrimaryUpdateMethodSwitchover, updated.Spec.PrimaryUpdateMethod)
 	assert.Contains(t, events.normals, EventClusterUpdateStarted+":CNPG cluster spec updated for PostgresCluster pg1, waiting for healthy state")
 }
@@ -253,7 +252,7 @@ func TestClusterModelReconcilesNonconventionalAuthoritativeEnvironmentIdempotent
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: "default"},
@@ -333,7 +332,7 @@ func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	desiredConfig := &MergedConfig{
 		Spec: &platformv1alpha1.PostgresClusterSpec{
@@ -344,7 +343,7 @@ func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	existingCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
@@ -365,13 +364,13 @@ func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
 		&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}},
 	)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	updated := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:15.10", updated.Spec.ImageName)
 
-	health, err := model.Observe(context.Background(), nil)
+	health, err := model.Observe(t.Context(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, pgcconstants.Pending, health.State)
 	assert.Equal(t, pendingClusterPhase, health.Phase)
@@ -395,7 +394,7 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 		Spec: platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: &requestedVersion,
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-				Allow: ptr.To(true),
+				Allow: new(true),
 			},
 		},
 	}
@@ -411,7 +410,7 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	desiredConfig := &MergedConfig{
 		Spec: &platformv1alpha1.PostgresClusterSpec{
@@ -422,7 +421,7 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	existingCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
@@ -443,13 +442,13 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 		&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}},
 	)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	updated := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18", updated.Spec.ImageName)
 
-	health, err := model.Observe(context.Background(), nil)
+	health, err := model.Observe(t.Context(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, pgcconstants.Pending, health.State)
 	assert.Equal(t, pendingClusterPhase, health.Phase)
@@ -485,7 +484,7 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 		Spec: platformv1alpha1.PostgresClusterSpec{
 			PostgresVersion: &requestedVersion,
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
-				Allow: ptr.To(true),
+				Allow: new(true),
 			},
 		},
 	}
@@ -501,7 +500,7 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	desiredConfig := &MergedConfig{
 		Spec: &platformv1alpha1.PostgresClusterSpec{
@@ -512,7 +511,7 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	existingCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
@@ -538,14 +537,14 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 		&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}},
 	)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	updated := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:15.10", updated.Spec.ImageName,
 		"allow=true must not let the provisioner patch the major bump itself")
 
-	health, err := model.Observe(context.Background(), nil)
+	health, err := model.Observe(t.Context(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, pgcconstants.Pending, health.State)
 	assert.Equal(t, pendingClusterPhase, health.Phase)
@@ -567,13 +566,13 @@ func TestBlueGreenWaitsForSourceComponentsWithoutPatchingTargetImage(t *testing.
 	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "default"},
 		Spec: platformv1alpha1.PostgresClusterSpec{PostgresVersion: &targetVersion,
-			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: ptr.To(true), Strategy: &strategy}},
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: new(true), Strategy: &strategy}},
 	}
 	config := func(version string, storage *resource.Quantity) *MergedConfig {
 		return &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{
 			Instances: &instances, PostgresVersion: &version, Storage: storage,
 			Resources: &corev1.ResourceRequirements{}, PostgreSQLConfig: map[string]string{}, PgHBA: []string{},
-		}, CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")}}
+		}, CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")}}
 	}
 	source := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
@@ -602,7 +601,7 @@ func TestClusterModelHoldsMajorVersionUpgradeForImageTagVariants(t *testing.T) {
 	targetImage := "registry.example.com/team/postgresql:18-bookworm"
 	cluster := &platformv1alpha1.PostgresCluster{
 		Spec: platformv1alpha1.PostgresClusterSpec{
-			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: ptr.To(true)},
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: new(true)},
 		},
 	}
 	model := &clusterModel{
@@ -649,11 +648,11 @@ func TestClusterModelAppliesPostgreSQLParametersWithSSAOwnership(t *testing.T) {
 
 	currentConfig := &MergedConfig{
 		Spec: currentSpec,
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	desiredConfig := &MergedConfig{
 		Spec: desiredSpec,
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 
 	cluster := &platformv1alpha1.PostgresCluster{
@@ -679,10 +678,10 @@ func TestClusterModelAppliesPostgreSQLParametersWithSSAOwnership(t *testing.T) {
 	contracts := &reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}}
 	model := newClusterModel(c, scheme, &captureEventEmitter{}, nil, cluster, clusterClass, desiredConfig, contracts)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	updated := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, map[string]string{
 		"shared_buffers": "256MB",
 		"cnpg_injected":  "keep-me",
@@ -716,11 +715,11 @@ func TestClusterModelAdoptsAndPrunesLegacyPostgreSQLParameters(t *testing.T) {
 
 	currentConfig := &MergedConfig{
 		Spec: currentSpec,
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	desiredConfig := &MergedConfig{
 		Spec: desiredSpec,
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 
 	cluster := &platformv1alpha1.PostgresCluster{
@@ -766,10 +765,10 @@ func TestClusterModelAdoptsAndPrunesLegacyPostgreSQLParameters(t *testing.T) {
 	contracts := &reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret", Namespace: "default"}}}
 	model := newClusterModel(c, scheme, events, nil, cluster, clusterClass, desiredConfig, contracts)
 
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	updated := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.Equal(t, map[string]string{
 		"shared_buffers":   "256MB",
 		"application_name": "keep-me",
@@ -794,7 +793,7 @@ func TestGetMergedConfig(t *testing.T) {
 				PostgreSQLConfig: map[string]string{"shared_buffers": "128MB"},
 				PgHBA:            []string{"host all all 0.0.0.0/0 md5"},
 			},
-			CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("switchover")},
+			CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("switchover")},
 		},
 	}
 
@@ -826,6 +825,31 @@ func TestGetMergedConfig(t *testing.T) {
 		assert.Equal(t, "100Gi", cfg.Spec.Storage.String())
 		assert.Equal(t, "200", cfg.Spec.PostgreSQLConfig["max_connections"])
 		assert.Equal(t, "hostssl all all 0.0.0.0/0 scram-sha-256", cfg.Spec.PgHBA[0])
+	})
+
+	t.Run("explicit zero and false pointers override class defaults", func(t *testing.T) {
+		class := baseClass.DeepCopy()
+		class.Spec.Config.Backup = &platformv1alpha1.BackupConfig{
+			Enabled: new(true), Schedule: new("0 2 * * *"),
+		}
+		cluster := &platformv1alpha1.PostgresCluster{
+			Spec: platformv1alpha1.PostgresClusterSpec{
+				Instances: new(int32(0)),
+				Backup: &platformv1alpha1.BackupConfig{
+					Enabled: new(false), Schedule: new(""),
+				},
+			},
+		}
+
+		cfg := GetMergedConfig(class, cluster)
+
+		require.NotNil(t, cfg.Spec.Instances)
+		assert.Zero(t, *cfg.Spec.Instances)
+		require.NotNil(t, cfg.Spec.Backup)
+		require.NotNil(t, cfg.Spec.Backup.Enabled)
+		assert.False(t, *cfg.Spec.Backup.Enabled)
+		require.NotNil(t, cfg.Spec.Backup.Schedule)
+		assert.Empty(t, *cfg.Spec.Backup.Schedule)
 	})
 
 	t.Run("class defaults fill in nil cluster fields", func(t *testing.T) {
@@ -1240,7 +1264,7 @@ func TestBuildCNPGCluster(t *testing.T) {
 			Resources:        &corev1.ResourceRequirements{},
 		},
 		CNPG: &platformv1alpha1.CNPGConfig{
-			PrimaryUpdateMethod: ptr.To("restart"),
+			PrimaryUpdateMethod: new("restart"),
 		},
 	}
 
@@ -1629,7 +1653,7 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 				Bootstrap: &cnpgv1.BootstrapConfiguration{
 					Recovery: &cnpgv1.BootstrapRecovery{
 						Source:         recoveryExternalClusterName,
-						RecoveryTarget: &cnpgv1.RecoveryTarget{TargetTime: "2026-05-01T13:30:00Z", Exclusive: ptr.To(true)},
+						RecoveryTarget: &cnpgv1.RecoveryTarget{TargetTime: "2026-05-01T13:30:00Z", Exclusive: new(true)},
 					},
 				},
 				ExternalClusters: []cnpgv1.ExternalCluster{
@@ -1657,7 +1681,7 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 					},
 					Target: &normalizedRecoveryTarget{
 						TargetTime: "2026-05-01T13:30:00Z",
-						Exclusive:  ptr.To(true),
+						Exclusive:  new(true),
 					},
 				},
 			},
@@ -1695,7 +1719,7 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 				ImageName: "img:18",
 				Instances: 1,
 				Plugins: []cnpgv1.PluginConfiguration{
-					{Name: barmanCloudPluginName, IsWALArchiver: ptr.To(true)},
+					{Name: barmanCloudPluginName, IsWALArchiver: new(true)},
 				},
 			},
 			expected: normalizedCNPGClusterSpec{
@@ -1713,7 +1737,7 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 				ImageName: "img:18",
 				Instances: 1,
 				Plugins: []cnpgv1.PluginConfiguration{
-					{Name: barmanCloudPluginName, Enabled: ptr.To(false), IsWALArchiver: ptr.To(true)},
+					{Name: barmanCloudPluginName, Enabled: new(false), IsWALArchiver: new(true)},
 				},
 			},
 			expected: normalizedCNPGClusterSpec{
@@ -1731,7 +1755,7 @@ func TestNormalizeCNPGClusterSpec(t *testing.T) {
 				ImageName: "img:18",
 				Instances: 1,
 				Plugins: []cnpgv1.PluginConfiguration{
-					{Name: barmanCloudPluginName, Enabled: ptr.To(true), IsWALArchiver: ptr.To(true)},
+					{Name: barmanCloudPluginName, Enabled: new(true), IsWALArchiver: new(true)},
 				},
 			},
 			expected: normalizedCNPGClusterSpec{
@@ -1772,7 +1796,7 @@ func TestClusterModelAdoptsOrphanedCNPGCluster(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 	clusterClass := &platformv1alpha1.PostgresClusterClass{ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"}}
@@ -1786,14 +1810,14 @@ func TestClusterModelAdoptsOrphanedCNPGCluster(t *testing.T) {
 	model := newClusterModel(c, scheme, events, nil, cluster, clusterClass, cfg, contracts)
 
 	// Act
-	err := model.Reconcile(context.Background())
+	err := model.Reconcile(t.Context())
 
 	// Assert
 	require.NoError(t, err)
 	assert.Equal(t, cnpgPatchMetadata, model.cnpgPatch, "adoption patches only owner reference — metadata, no phase gate needed")
 	assert.False(t, model.cnpgCreated)
 	adopted := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(orphanedCNPG), adopted))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(orphanedCNPG), adopted))
 	require.Len(t, adopted.OwnerReferences, 1, "owner reference must be set after adoption")
 	assert.Equal(t, cluster.Name, adopted.OwnerReferences[0].Name)
 	assert.Contains(t, events.normals, EventClusterAdopted+":Adopted existing CNPG cluster for PostgresCluster pg1")
@@ -1814,7 +1838,7 @@ func TestClusterModelContractsNotReadyIsUpstreamPending(t *testing.T) {
 
 	// Act
 	reconcileErr := model.CheckContracts()
-	health, err := model.Observe(context.Background(), reconcileErr)
+	health, err := model.Observe(t.Context(), reconcileErr)
 
 	// Assert
 	require.ErrorIs(t, reconcileErr, errContractsNotReady)
@@ -1834,7 +1858,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class", Namespace: "default"},
 		Spec: platformv1alpha1.PostgresClusterClassSpec{
 			Config: &platformv1alpha1.PostgresClusterClassConfig{
-				ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
+				ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(true)},
 			},
 		},
 	}
@@ -1881,7 +1905,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 
 	// makeContracts builds a contracts object with a healthy CNPG cluster pre-populated,
@@ -2088,7 +2112,7 @@ func TestRunComponentsStopsOnObserveError(t *testing.T) {
 	components := []component{firstComponent, secondComponent}
 
 	// Act
-	result, err := runComponents(context.Background(), slog.Default(), components, nil)
+	result, err := runComponents(t.Context(), slog.Default(), components, nil)
 
 	// Assert: runComponents returns the error from the first component and does not proceed.
 	require.Error(t, err)
@@ -2114,7 +2138,7 @@ func TestRunComponentsSkipsReconcileWhenCheckContractsFails(t *testing.T) {
 	model := newConfigMapModel(fake.NewClientBuilder().WithScheme(scheme).Build(), scheme, noopEventEmitter{}, nil, cluster, contracts)
 
 	// Act — runComponents must not panic, and must return an intermediate result (Pending)
-	result, err := runComponents(context.Background(), slog.Default(), []component{model}, nil)
+	result, err := runComponents(t.Context(), slog.Default(), []component{model}, nil)
 
 	// Assert
 	require.NoError(t, err)
@@ -2326,7 +2350,7 @@ func TestClusterModelActuatePreservesManagedRoles(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 
 	cluster := &platformv1alpha1.PostgresCluster{
@@ -2357,18 +2381,18 @@ func TestClusterModelActuatePreservesManagedRoles(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 
 	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, existingCNPG)
 	contracts := &reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}}}
 	model := newClusterModel(c, scheme, &captureEventEmitter{}, nil, cluster, clusterClass, driftedCfg, contracts)
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	require.True(t, model.cnpgPatch.requiresPhaseGate())
 
 	updated := &cnpgv1.Cluster{}
-	require.NoError(t, c.Get(context.Background(), client.ObjectKeyFromObject(existingCNPG), updated))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
 	assert.NotNil(t, updated.Spec.Managed)
 	assert.Equal(t, &roleConfig, updated.Spec.Managed)
 }
@@ -2390,9 +2414,9 @@ func TestClusterModelReconcilePatchesPoolerSANDrift(t *testing.T) {
 			Resources:        &corev1.ResourceRequirements{},
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
-			ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)},
+			ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(true)},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
@@ -2409,17 +2433,17 @@ func TestClusterModelReconcilePatchesPoolerSANDrift(t *testing.T) {
 	clusterClass := &platformv1alpha1.PostgresClusterClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 		Spec: platformv1alpha1.PostgresClusterClassSpec{
-			Config: &platformv1alpha1.PostgresClusterClassConfig{ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true)}},
+			Config: &platformv1alpha1.PostgresClusterClassConfig{ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(true)}},
 		},
 	}
 	model := newClusterModel(c, scheme, noopEventEmitter{}, nil, cluster, clusterClass, mergedConfig, contracts)
 
 	// Act
-	require.NoError(t, model.Reconcile(context.Background()))
+	require.NoError(t, model.Reconcile(t.Context()))
 
 	// Assert: CNPG cluster in store now has pooler SANs
 	var got cnpgv1.Cluster
-	require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "pg1", Namespace: "default"}, &got))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "pg1", Namespace: "default"}, &got))
 	expectedSANs := computeDesiredPoolerSANSet(true, nil, "pg1", "default")
 	assert.ElementsMatch(t, expectedSANs, got.Spec.Certificates.ServerAltDNSNames,
 		"Reconcile must patch pooler SANs into CNPG cluster spec when drift is detected")
@@ -2439,7 +2463,7 @@ func TestClusterModelEnsureSANPolicy(t *testing.T) {
 	assert.Contains(t, spec.Certificates.ServerAltDNSNames, "pg1-pooler-rw.default"+poolerSANSuffix)
 	assert.Contains(t, spec.Certificates.ServerAltDNSNames, "pg1-pooler-ro.default"+poolerSANSuffix)
 
-	sansBefore := append([]string(nil), spec.Certificates.ServerAltDNSNames...)
+	sansBefore := slices.Clone(spec.Certificates.ServerAltDNSNames)
 	applyPoolerSANs(&spec, true, "pg1", "default")
 	assert.Equal(t, sansBefore, spec.Certificates.ServerAltDNSNames, "second applyPoolerSANs call must be a no-op")
 }
@@ -2456,7 +2480,7 @@ func TestClusterModelSANPolicyPoolerDisabledRetainsPoolerSANs(t *testing.T) {
 	}
 	spec := cnpgv1.ClusterSpec{
 		Certificates: &cnpgv1.CertificatesConfiguration{
-			ServerAltDNSNames: append([]string(nil), initial...),
+			ServerAltDNSNames: slices.Clone(initial),
 		},
 	}
 	applyPoolerSANs(&spec, false, "pg1", "default")
@@ -2506,7 +2530,7 @@ func TestClusterModelSANPolicyPoolerDisabledIsStrictNoOp(t *testing.T) {
 	unsorted := []string{"zebra.internal", "alpha.internal"}
 	spec := cnpgv1.ClusterSpec{
 		Certificates: &cnpgv1.CertificatesConfiguration{
-			ServerAltDNSNames: append([]string(nil), unsorted...),
+			ServerAltDNSNames: slices.Clone(unsorted),
 		},
 	}
 
@@ -2526,7 +2550,7 @@ func TestClusterModelIsServerTLSLeafAlignedWithPlan(t *testing.T) {
 
 	t.Run("missing_secret", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
+		ok, err := isServerTLSLeafAlignedWithPlan(t.Context(), c, "default", "pg1-server-tls", plan)
 		require.NoError(t, err)
 		assert.False(t, ok)
 	})
@@ -2539,7 +2563,7 @@ func TestClusterModelIsServerTLSLeafAlignedWithPlan(t *testing.T) {
 			},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sec).Build()
-		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
+		ok, err := isServerTLSLeafAlignedWithPlan(t.Context(), c, "default", "pg1-server-tls", plan)
 		require.NoError(t, err)
 		assert.False(t, ok)
 	})
@@ -2552,7 +2576,7 @@ func TestClusterModelIsServerTLSLeafAlignedWithPlan(t *testing.T) {
 			},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sec).Build()
-		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
+		ok, err := isServerTLSLeafAlignedWithPlan(t.Context(), c, "default", "pg1-server-tls", plan)
 		require.NoError(t, err)
 		assert.True(t, ok)
 	})
@@ -2563,7 +2587,7 @@ func TestClusterModelIsServerTLSLeafAlignedWithPlan(t *testing.T) {
 			Data:       map[string][]byte{corev1.TLSCertKey: []byte("this is not a PEM block")},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sec).Build()
-		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
+		ok, err := isServerTLSLeafAlignedWithPlan(t.Context(), c, "default", "pg1-server-tls", plan)
 		require.Error(t, err, "malformed PEM must escalate via the sentinel so callers can route to Failed")
 		assert.True(t, errors.Is(err, errServerTLSLeafInvalid))
 		assert.Contains(t, err.Error(), "PEM decode failed")
@@ -2578,7 +2602,7 @@ func TestClusterModelIsServerTLSLeafAlignedWithPlan(t *testing.T) {
 			Data:       map[string][]byte{corev1.TLSCertKey: badDER},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sec).Build()
-		ok, err := isServerTLSLeafAlignedWithPlan(context.Background(), c, "default", "pg1-server-tls", plan)
+		ok, err := isServerTLSLeafAlignedWithPlan(t.Context(), c, "default", "pg1-server-tls", plan)
 		require.Error(t, err, "x509.ParseCertificate failure must escalate via the sentinel")
 		assert.True(t, errors.Is(err, errServerTLSLeafInvalid))
 		assert.Contains(t, err.Error(), "x509 parse failed")
@@ -2692,9 +2716,9 @@ func defaultRoundTripFixture() roundTripFixture {
 func (f roundTripFixture) mergedConfig() *MergedConfig {
 	cfg := &MergedConfig{
 		Spec: &platformv1alpha1.PostgresClusterSpec{
-			Instances:        ptr.To(f.instances),
-			PostgresVersion:  ptr.To(f.postgresVersion),
-			Storage:          ptr.To(f.storage),
+			Instances:        new(f.instances),
+			PostgresVersion:  new(f.postgresVersion),
+			Storage:          new(f.storage),
 			Resources:        f.resources.DeepCopy(),
 			PostgreSQLConfig: f.postgresqlConfig,
 			PgHBA:            f.pgHBA,
@@ -2720,7 +2744,7 @@ func TestBuildCNPGClusterSpec_RoundTripUnderCRDDefaulting(t *testing.T) {
 			name: "primaryUpdateMethod_explicit_restart",
 			fixture: func() roundTripFixture {
 				f := defaultRoundTripFixture()
-				f.primaryUpdateMethod = ptr.To("restart")
+				f.primaryUpdateMethod = new("restart")
 				return f
 			}(),
 		},
@@ -2728,7 +2752,7 @@ func TestBuildCNPGClusterSpec_RoundTripUnderCRDDefaulting(t *testing.T) {
 			name: "primaryUpdateMethod_explicit_switchover",
 			fixture: func() roundTripFixture {
 				f := defaultRoundTripFixture()
-				f.primaryUpdateMethod = ptr.To("switchover")
+				f.primaryUpdateMethod = new("switchover")
 				return f
 			}(),
 		},
@@ -2778,7 +2802,7 @@ func TestBuildCNPGClusterSpec_RoundTripUnderCRDDefaulting(t *testing.T) {
 				postgresqlConfig:    map[string]string{"shared_buffers": "256MB"},
 				pgHBA:               []string{"hostssl all all 0.0.0.0/0 scram-sha-256"},
 				resources:           corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("250m")}},
-				primaryUpdateMethod: ptr.To("switchover"),
+				primaryUpdateMethod: new("switchover"),
 				metricsEnabled:      true,
 			},
 		},
@@ -2864,7 +2888,7 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 			PostgreSQLConfig: map[string]string{},
 			PgHBA:            []string{},
 		},
-		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("restart")},
+		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 
 	// makeModel builds a clusterModel with cnpgPatch and cnpgCluster already set,
@@ -2970,7 +2994,7 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 
 			model := makeModel(tt.patchKind, tt.cnpgPhase, tt.specImage, tt.statusImage, tt.pgDataImage)
 
-			health, err := model.Observe(context.Background(), nil)
+			health, err := model.Observe(t.Context(), nil)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedState, health.State)
@@ -2997,7 +3021,7 @@ func TestClusterModelObserve_AdoptedClusterDoesNotStallAtProvisioning(t *testing
 	model.cnpgPatch = cnpgPatchMetadata
 
 	// Act
-	health, err := model.Observe(context.Background(), nil)
+	health, err := model.Observe(t.Context(), nil)
 
 	// Assert: metadata-only patch must not trigger phase gate — adopted healthy cluster reaches Ready.
 	require.NoError(t, err)
@@ -3170,7 +3194,7 @@ func TestValidateCrossResourceScalingGuardrails(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "switchover-class"},
 			Spec: platformv1alpha1.PostgresClusterClassSpec{
 				Config: &platformv1alpha1.PostgresClusterClassConfig{Instances: classInstances},
-				CNPG:   &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: ptr.To("switchover")},
+				CNPG:   &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("switchover")},
 			},
 		}
 	}
@@ -3192,34 +3216,34 @@ func TestValidateCrossResourceScalingGuardrails(t *testing.T) {
 	}{
 		{
 			name:      "switchover with cluster instances=1 rejected",
-			class:     switchoverClass(ptr.To(int32(3))),
-			cluster:   &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Instances: ptr.To(int32(1))}},
+			class:     switchoverClass(new(int32(3))),
+			cluster:   &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Instances: new(int32(1))}},
 			wantField: "spec.instances",
 		},
 		{
 			name:      "switchover inheriting class default 1 rejected (cluster silent)",
-			class:     switchoverClass(ptr.To(int32(1))),
+			class:     switchoverClass(new(int32(1))),
 			cluster:   &platformv1alpha1.PostgresCluster{},
 			wantField: "spec.instances",
 		},
 		{
 			name:    "switchover with cluster instances=2 accepted",
-			class:   switchoverClass(ptr.To(int32(1))),
-			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Instances: ptr.To(int32(2))}},
+			class:   switchoverClass(new(int32(1))),
+			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Instances: new(int32(2))}},
 		},
 		{
 			name:  "readOnly pooler at instances=1 NOT rejected (runtime suppresses RO)",
-			class: poolerClass(ptr.To(int32(1))),
+			class: poolerClass(new(int32(1))),
 			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{
-				ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(true)},
+				ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(true), ReadOnly: new(true)},
 			}},
 		},
 		{
 			name:  "readOnly pooler with cluster instances=2 accepted",
-			class: poolerClass(ptr.To(int32(1))),
+			class: poolerClass(new(int32(1))),
 			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{
-				Instances:        ptr.To(int32(2)),
-				ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: ptr.To(true), ReadOnly: ptr.To(true)},
+				Instances:        new(int32(2)),
+				ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(true), ReadOnly: new(true)},
 			}},
 		},
 	}

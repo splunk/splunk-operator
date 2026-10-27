@@ -16,7 +16,6 @@ limitations under the License.
 package cnpg
 
 import (
-	"context"
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -29,7 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -64,7 +63,7 @@ func ownedByCluster(cluster *platformv1alpha1.PostgresCluster) []metav1.OwnerRef
 		Kind:       "PostgresCluster",
 		Name:       cluster.Name,
 		UID:        cluster.UID,
-		Controller: ptr.To(true),
+		Controller: new(true),
 	}}
 }
 
@@ -85,12 +84,12 @@ func TestCNPGBackupBackend_EnsureScheduled_Creates(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 	backend := NewBackupBackend(c, scheme)
 
-	created, err := backend.EnsureScheduled(context.Background(), cluster, volumeSnapshotScheduleSpec())
+	created, err := backend.EnsureScheduled(t.Context(), cluster, volumeSnapshotScheduleSpec())
 	require.NoError(t, err)
 	assert.True(t, created)
 
 	sb := &cnpgv1.ScheduledBackup{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, sb))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, sb))
 	assert.Equal(t, "0 0 2 * * *", sb.Spec.Schedule)
 	assert.Equal(t, cnpgv1.BackupMethodVolumeSnapshot, sb.Spec.Method)
 	assert.Equal(t, cnpgv1.BackupTarget("prefer-standby"), sb.Spec.Target)
@@ -112,11 +111,11 @@ func TestCNPGBackupBackend_EnsureScheduled_PluginMethod(t *testing.T) {
 	spec.Method = backuptypes.BackupMethodPlugin
 	spec.PluginName = barmanCloudPluginName
 
-	_, err := backend.EnsureScheduled(context.Background(), cluster, spec)
+	_, err := backend.EnsureScheduled(t.Context(), cluster, spec)
 	require.NoError(t, err)
 
 	sb := &cnpgv1.ScheduledBackup{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup-objectstore", Namespace: "ns1"}, sb))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "c1-backup-objectstore", Namespace: "ns1"}, sb))
 	assert.Equal(t, cnpgv1.BackupMethodPlugin, sb.Spec.Method)
 	require.NotNil(t, sb.Spec.PluginConfiguration)
 	assert.Equal(t, barmanCloudPluginName, sb.Spec.PluginConfiguration.Name)
@@ -136,12 +135,12 @@ func TestCNPGBackupBackend_EnsureScheduled_UpdatesSpec(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
 	backend := NewBackupBackend(c, scheme)
 
-	created, err := backend.EnsureScheduled(context.Background(), cluster, volumeSnapshotScheduleSpec())
+	created, err := backend.EnsureScheduled(t.Context(), cluster, volumeSnapshotScheduleSpec())
 	require.NoError(t, err)
 	assert.False(t, created)
 
 	sb := &cnpgv1.ScheduledBackup{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, sb))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, sb))
 	assert.Equal(t, "0 0 2 * * *", sb.Spec.Schedule)
 }
 
@@ -162,12 +161,12 @@ func TestCNPGBackupBackend_EnsureScheduled_NoOpWhenAlreadyCorrect(t *testing.T) 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
 	backend := NewBackupBackend(c, scheme)
 
-	created, err := backend.EnsureScheduled(context.Background(), cluster, volumeSnapshotScheduleSpec())
+	created, err := backend.EnsureScheduled(t.Context(), cluster, volumeSnapshotScheduleSpec())
 	require.NoError(t, err)
 	assert.False(t, created)
 
 	sb := &cnpgv1.ScheduledBackup{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, sb))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, sb))
 	// Spec must not have drifted.
 	assert.Equal(t, "0 0 2 * * *", sb.Spec.Schedule)
 	assert.Equal(t, cnpgv1.BackupMethodVolumeSnapshot, sb.Spec.Method)
@@ -186,7 +185,7 @@ func TestCNPGBackupBackend_EnsureScheduled_ForeignOwnerIsError(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(foreign).Build()
 	backend := NewBackupBackend(c, scheme)
 
-	_, err := backend.EnsureScheduled(context.Background(), cluster, volumeSnapshotScheduleSpec())
+	_, err := backend.EnsureScheduled(t.Context(), cluster, volumeSnapshotScheduleSpec())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not controlled by this owner")
 }
@@ -200,11 +199,11 @@ func TestCNPGBackupBackend_DeleteScheduled_OwnedIsDeleted(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
 	backend := NewBackupBackend(c, scheme)
 
-	deleted, err := backend.DeleteScheduled(context.Background(), cluster, "c1-backup", "ns1")
+	deleted, err := backend.DeleteScheduled(t.Context(), cluster, "c1-backup", "ns1")
 	require.NoError(t, err)
 	assert.True(t, deleted)
 
-	getErr := c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, &cnpgv1.ScheduledBackup{})
+	getErr := c.Get(t.Context(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, &cnpgv1.ScheduledBackup{})
 	assert.True(t, apierrors.IsNotFound(getErr))
 }
 
@@ -218,12 +217,12 @@ func TestCNPGBackupBackend_DeleteScheduled_ForeignIsPreserved(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(foreign).Build()
 	backend := NewBackupBackend(c, scheme)
 
-	deleted, err := backend.DeleteScheduled(context.Background(), cluster, "c1-backup", "ns1")
+	deleted, err := backend.DeleteScheduled(t.Context(), cluster, "c1-backup", "ns1")
 	require.NoError(t, err)
 	assert.False(t, deleted)
 
 	// Still present — not ours to delete.
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, &cnpgv1.ScheduledBackup{}))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "c1-backup", Namespace: "ns1"}, &cnpgv1.ScheduledBackup{}))
 }
 
 func TestCNPGBackupBackend_DeleteScheduled_AbsentIsNoOp(t *testing.T) {
@@ -232,7 +231,7 @@ func TestCNPGBackupBackend_DeleteScheduled_AbsentIsNoOp(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 	backend := NewBackupBackend(c, scheme)
 
-	deleted, err := backend.DeleteScheduled(context.Background(), cluster, "missing", "ns1")
+	deleted, err := backend.DeleteScheduled(t.Context(), cluster, "missing", "ns1")
 	require.NoError(t, err)
 	assert.False(t, deleted)
 }
@@ -248,7 +247,7 @@ func TestCNPGBackupBackend_GetSchedule(t *testing.T) {
 	backend := NewBackupBackend(c, scheme)
 
 	t.Run("present", func(t *testing.T) {
-		res, err := backend.GetSchedule(context.Background(), "c1-backup", "ns1")
+		res, err := backend.GetSchedule(t.Context(), "c1-backup", "ns1")
 		require.NoError(t, err)
 		assert.True(t, res.Exists)
 		require.NotNil(t, res.LastScheduleTime)
@@ -256,7 +255,7 @@ func TestCNPGBackupBackend_GetSchedule(t *testing.T) {
 	})
 
 	t.Run("absent", func(t *testing.T) {
-		res, err := backend.GetSchedule(context.Background(), "missing", "ns1")
+		res, err := backend.GetSchedule(t.Context(), "missing", "ns1")
 		require.NoError(t, err)
 		assert.False(t, res.Exists)
 	})
@@ -278,12 +277,12 @@ func TestCNPGBackupBackend_BackupNow_Creates(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 	backend := NewBackupBackend(c, scheme)
 
-	created, err := backend.BackupNow(context.Background(), cluster, volumeSnapshotBackupRequest())
+	created, err := backend.BackupNow(t.Context(), cluster, volumeSnapshotBackupRequest())
 	require.NoError(t, err)
 	assert.True(t, created)
 
 	backup := &cnpgv1.Backup{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-ondemand", Namespace: "ns1"}, backup))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "c1-ondemand", Namespace: "ns1"}, backup))
 	assert.Equal(t, cnpgv1.BackupMethodVolumeSnapshot, backup.Spec.Method)
 	assert.Equal(t, cnpgv1.BackupTarget("prefer-standby"), backup.Spec.Target)
 	assert.Equal(t, "c1", backup.Spec.Cluster.Name)
@@ -303,11 +302,11 @@ func TestCNPGBackupBackend_BackupNow_PluginMethod(t *testing.T) {
 	req.Method = backuptypes.BackupMethodPlugin
 	req.PluginName = barmanCloudPluginName
 
-	_, err := backend.BackupNow(context.Background(), cluster, req)
+	_, err := backend.BackupNow(t.Context(), cluster, req)
 	require.NoError(t, err)
 
 	backup := &cnpgv1.Backup{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-ondemand-objectstore", Namespace: "ns1"}, backup))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "c1-ondemand-objectstore", Namespace: "ns1"}, backup))
 	assert.Equal(t, cnpgv1.BackupMethodPlugin, backup.Spec.Method)
 	require.NotNil(t, backup.Spec.PluginConfiguration)
 	assert.Equal(t, barmanCloudPluginName, backup.Spec.PluginConfiguration.Name)
@@ -333,12 +332,12 @@ func TestCNPGBackupBackend_BackupNow_IdempotentOnName(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
 	backend := NewBackupBackend(c, scheme)
 
-	created, err := backend.BackupNow(context.Background(), cluster, volumeSnapshotBackupRequest())
+	created, err := backend.BackupNow(t.Context(), cluster, volumeSnapshotBackupRequest())
 	require.NoError(t, err)
 	assert.False(t, created)
 
 	backup := &cnpgv1.Backup{}
-	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: "c1-ondemand", Namespace: "ns1"}, backup))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "c1-ondemand", Namespace: "ns1"}, backup))
 	// Original target preserved, not overwritten with the request's value.
 	assert.Equal(t, cnpgv1.BackupTarget("primary"), backup.Spec.Target)
 }
@@ -354,7 +353,7 @@ func TestCNPGBackupBackend_BackupNow_ForeignCollisionIsError(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(foreign).Build()
 	backend := NewBackupBackend(c, scheme)
 
-	_, err := backend.BackupNow(context.Background(), cluster, volumeSnapshotBackupRequest())
+	_, err := backend.BackupNow(t.Context(), cluster, volumeSnapshotBackupRequest())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not controlled by this owner")
 }
@@ -382,7 +381,7 @@ func TestCNPGBackupBackend_GetBackup(t *testing.T) {
 	backend := NewBackupBackend(c, scheme)
 
 	t.Run("present", func(t *testing.T) {
-		res, found, err := backend.GetBackup(context.Background(), cluster, "c1-ondemand", "ns1")
+		res, found, err := backend.GetBackup(t.Context(), cluster, "c1-ondemand", "ns1")
 		require.NoError(t, err)
 		require.True(t, found)
 		assert.Equal(t, "c1-ondemand", res.Name)
@@ -397,7 +396,7 @@ func TestCNPGBackupBackend_GetBackup(t *testing.T) {
 	})
 
 	t.Run("absent", func(t *testing.T) {
-		_, found, err := backend.GetBackup(context.Background(), cluster, "missing", "ns1")
+		_, found, err := backend.GetBackup(t.Context(), cluster, "missing", "ns1")
 		require.NoError(t, err)
 		assert.False(t, found)
 	})
@@ -406,7 +405,7 @@ func TestCNPGBackupBackend_GetBackup(t *testing.T) {
 		// Use a distinct UID — newTestCluster always returns the same UID so override it.
 		otherCluster := newTestCluster("c2", "ns1")
 		otherCluster.UID = "other-uid-456"
-		_, found, err := backend.GetBackup(context.Background(), otherCluster, "c1-ondemand", "ns1")
+		_, found, err := backend.GetBackup(t.Context(), otherCluster, "c1-ondemand", "ns1")
 		require.NoError(t, err)
 		assert.False(t, found)
 	})
@@ -426,7 +425,7 @@ func TestCNPGBackupBackend_GetBackup_FailedPhase(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(failed).Build()
 	backend := NewBackupBackend(c, scheme)
 
-	res, found, err := backend.GetBackup(context.Background(), cluster, "c1-failed", "ns1")
+	res, found, err := backend.GetBackup(t.Context(), cluster, "c1-failed", "ns1")
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.True(t, res.Failed)
@@ -462,7 +461,7 @@ func TestCNPGBackupBackend_ListBackups(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(c1Old, c1New, otherCluster, foreignOwner).Build()
 	backend := NewBackupBackend(c, scheme)
 
-	results, err := backend.ListBackups(context.Background(), cluster, "c1", "ns1")
+	results, err := backend.ListBackups(t.Context(), cluster, "c1", "ns1")
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 	// Most recent first.
@@ -487,7 +486,7 @@ func TestCNPGBackupBackend_ListBackups_NilStartedAtSortStable(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(pending1, pending2).Build()
 	backend := NewBackupBackend(c, scheme)
 
-	results, err := backend.ListBackups(context.Background(), cluster, "c1", "ns1")
+	results, err := backend.ListBackups(t.Context(), cluster, "c1", "ns1")
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 	// Both have nil StartedAt (epoch 0); secondary tiebreaker is name ascending.

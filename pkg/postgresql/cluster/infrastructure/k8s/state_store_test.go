@@ -17,7 +17,6 @@ limitations under the License.
 package k8s
 
 import (
-	"context"
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -35,7 +34,7 @@ import (
 // (PGDataImageInfo.MajorVersion), not the provisioner's status.CurrentPgVersion
 // projection — decoupling the major-upgrade use case from the provisioner.
 func TestGetSourcePgVersionReadsLiveCNPGMajorVersion(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	key := client.ObjectKey{Name: "pg1", Namespace: "default"}
 	c := newCNPGTestClient(t, &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace},
@@ -55,7 +54,7 @@ func TestGetSourcePgVersionReadsLiveCNPGMajorVersion(t *testing.T) {
 // A not-yet-created CNPG cluster reports no source version (not an error): the
 // upgrade simply has nothing to act on yet and Prerequisites defers it.
 func TestGetSourcePgVersionReturnsEmptyWhenCNPGMissing(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	key := client.ObjectKey{Name: "pg1", Namespace: "default"}
 	c := newCNPGTestClient(t)
 
@@ -67,7 +66,7 @@ func TestGetSourcePgVersionReturnsEmptyWhenCNPGMissing(t *testing.T) {
 // A CNPG cluster that has not yet published PGDataImageInfo reports no source
 // version rather than a spurious "0".
 func TestGetSourcePgVersionReturnsEmptyWhenImageInfoUnset(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	key := client.ObjectKey{Name: "pg1", Namespace: "default"}
 	c := newCNPGTestClient(t, &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace},

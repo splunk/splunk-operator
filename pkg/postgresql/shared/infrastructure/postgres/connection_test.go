@@ -46,7 +46,7 @@ func TestConnect(t *testing.T) {
 			return nil, nil
 		}
 
-		conn, err := Connect(context.Background(), "postgres.example.com", "appdb", "secret")
+		conn, err := Connect(t.Context(), "postgres.example.com", "appdb", "secret")
 
 		require.NoError(t, err)
 		require.NotNil(t, conn)
@@ -64,7 +64,7 @@ func TestConnect(t *testing.T) {
 			return nil, dialErr
 		}
 
-		conn, err := Connect(context.Background(), "postgres.example.com", "appdb", "secret")
+		conn, err := Connect(t.Context(), "postgres.example.com", "appdb", "secret")
 
 		require.ErrorIs(t, err, dialErr)
 		assert.Nil(t, conn)

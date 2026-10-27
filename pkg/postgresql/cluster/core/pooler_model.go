@@ -17,6 +17,7 @@ limitations under the License.
 package core
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -443,10 +444,7 @@ func createAndUpdateConnectionPooler(ctx context.Context, c client.Client, schem
 func normalizeCNPGPoolerSpec(spec cnpgv1.PoolerSpec) normalizedCNPGPoolerSpec {
 	normalized := normalizedCNPGPoolerSpec{
 		ClusterName: spec.Cluster.Name,
-		Type:        string(spec.Type),
-	}
-	if normalized.Type == "" {
-		normalized.Type = string(cnpgv1.PoolerTypeRW)
+		Type:        string(cmp.Or(spec.Type, cnpgv1.PoolerTypeRW)),
 	}
 	if spec.Instances != nil {
 		normalized.Instances = *spec.Instances
@@ -454,10 +452,7 @@ func normalizeCNPGPoolerSpec(spec cnpgv1.PoolerSpec) normalizedCNPGPoolerSpec {
 		normalized.Instances = 1
 	}
 	if spec.PgBouncer != nil {
-		normalized.PoolMode = string(spec.PgBouncer.PoolMode)
-		if normalized.PoolMode == "" {
-			normalized.PoolMode = string(cnpgv1.PgBouncerPoolModeSession)
-		}
+		normalized.PoolMode = string(cmp.Or(spec.PgBouncer.PoolMode, cnpgv1.PgBouncerPoolModeSession))
 		if len(spec.PgBouncer.Parameters) > 0 {
 			normalized.Parameters = spec.PgBouncer.Parameters
 		}

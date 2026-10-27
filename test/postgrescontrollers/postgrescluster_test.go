@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -57,7 +57,7 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 				ObjectMeta: metav1.ObjectMeta{Name: "test-cluster", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
+					ClusterDeletionPolicy: new("Delete"),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())
@@ -97,7 +97,7 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 				ObjectMeta: metav1.ObjectMeta{Name: "delete-cluster", Namespace: ns},
 				Spec: platformv1alpha1.PostgresClusterSpec{
 					Class:                 pgClass.Name,
-					ClusterDeletionPolicy: ptr.To("Delete"),
+					ClusterDeletionPolicy: new("Delete"),
 				},
 			}
 			Expect(kubeClient.Create(ctx, pgCluster)).To(Succeed())
@@ -212,10 +212,10 @@ func createPGClass(ctx SpecContext, kubeClient client.Client, ns string) *platfo
 // An empty version retains the API default used by general scenarios.
 func createPGClassAtVersion(ctx SpecContext, kubeClient client.Client, ns, postgresVersion string) *platformv1alpha1.PostgresClusterClass {
 	config := &platformv1alpha1.PostgresClusterClassConfig{
-		Instances: ptr.To(int32(1)),
+		Instances: new(int32(1)),
 	}
 	if postgresVersion != "" {
-		config.PostgresVersion = ptr.To(postgresVersion)
+		config.PostgresVersion = new(postgresVersion)
 	}
 
 	pgClass := &platformv1alpha1.PostgresClusterClass{

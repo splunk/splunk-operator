@@ -31,7 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -97,7 +97,7 @@ func TestCredentialSecretOperationsTranslatesSecretSnapshot(t *testing.T) {
 		Labels:      map[string]string{"cnpg.io/reload": "true"},
 		Annotations: map[string]string{"platform.splunk.com/retained-from": "orders"},
 		OwnerReferences: []metav1.OwnerReference{{
-			APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster", Name: "primary", UID: types.UID("primary-uid"), Controller: ptr.To(true),
+			APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresCluster", Name: "primary", UID: types.UID("primary-uid"), Controller: new(true),
 		}},
 	}, Data: map[string][]byte{
 		"username": []byte("orders_admin"),

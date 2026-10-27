@@ -83,7 +83,7 @@ func TestRun_DatabaseOrderAllowsPrivilegeBootstrapBetweenSteadyStateSteps(t *tes
 
 	var statusActions []reconciliationtypes.Outcome
 	outcome, err := Run(
-		context.Background(),
+		t.Context(),
 		[]Step{databases, privileges, customMetrics, readyFlush},
 		func(_ context.Context, o reconciliationtypes.Outcome) error {
 			statusActions = append(statusActions, o)

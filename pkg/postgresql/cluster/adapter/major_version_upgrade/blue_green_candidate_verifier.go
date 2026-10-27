@@ -31,7 +31,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -103,9 +103,9 @@ func (v *postgresCandidateVerifier) VerifyAndGuard(ctx context.Context, target *
 			conn.Close(ctx)
 			return fmt.Errorf("verifying green DML guards for %q: %w", database.name, err)
 		}
-		replication.TargetSchemaFingerprint = ptr.To(schema)
-		replication.TargetAccessPolicyFingerprint = ptr.To(access)
-		replication.SchemaImported = ptr.To(true)
+		replication.TargetSchemaFingerprint = new(schema)
+		replication.TargetAccessPolicyFingerprint = new(access)
+		replication.SchemaImported = new(true)
 		// Preserve each completed installation receipt if a later database
 		// fails, so a retry verifies these guards instead of recreating them.
 		if err := conn.Close(ctx); err != nil {
@@ -212,7 +212,7 @@ func (v *postgresCandidateVerifier) VerifyReplication(ctx context.Context, sourc
 	// surviving primary while an intended failover target is unavailable.
 	if !sourceReadyForFailover(source) {
 		for i := range status.DatabaseReplication {
-			status.DatabaseReplication[i].SlotHealthy = ptr.To(false)
+			status.DatabaseReplication[i].SlotHealthy = new(false)
 			status.DatabaseReplication[i].ReplicaSlots = nil
 		}
 		return false, nil
@@ -248,9 +248,9 @@ func (v *postgresCandidateVerifier) VerifyReplication(ctx context.Context, sourc
 		if err != nil {
 			return false, err
 		}
-		status.DatabaseReplication[index].SubscriptionHealthy = ptr.To(subscriptionReady)
-		status.DatabaseReplication[index].InitialCopyComplete = ptr.To(copyComplete)
-		status.DatabaseReplication[index].SlotHealthy = ptr.To(slotsReady)
+		status.DatabaseReplication[index].SubscriptionHealthy = new(subscriptionReady)
+		status.DatabaseReplication[index].InitialCopyComplete = new(copyComplete)
+		status.DatabaseReplication[index].SlotHealthy = new(slotsReady)
 		status.DatabaseReplication[index].ReplicaSlots = slots
 		ready = ready && subscriptionReady && copyComplete && slotsReady
 	}
@@ -406,7 +406,7 @@ func (v *postgresCandidateVerifier) slotState(ctx context.Context, source *cnpgv
 		}
 		valid := logicalSlotReady(state, instance == source.Status.CurrentPrimary)
 		now := metav1.Now()
-		replica := platformv1alpha1.BlueGreenReplicaSlotStatus{ReplicaName: instance, ReplicaUID: string(pod.UID), SlotName: slotName, Valid: ptr.To(valid), VerifiedAt: &now}
+		replica := platformv1alpha1.BlueGreenReplicaSlotStatus{ReplicaName: instance, ReplicaUID: string(pod.UID), SlotName: slotName, Valid: new(valid), VerifiedAt: &now}
 		if !valid {
 			failure := "logical slot is not yet synchronized and caught up on the standby"
 			if instance == source.Status.CurrentPrimary {

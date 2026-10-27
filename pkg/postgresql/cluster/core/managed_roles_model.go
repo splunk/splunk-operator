@@ -17,10 +17,12 @@ limitations under the License.
 package core
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -80,9 +82,7 @@ func (m *managedRolesModel) Reconcile(ctx context.Context) error {
 	}
 	currentOwners := map[string]platformv1alpha1.RoleOwnerReference{}
 	if m.cluster.Status.ManagedRolesStatus != nil {
-		for role, owner := range m.cluster.Status.ManagedRolesStatus.RoleOwners {
-			currentOwners[role] = owner
-		}
+		maps.Copy(currentOwners, m.cluster.Status.ManagedRolesStatus.RoleOwners)
 	}
 	currentRoles := currentManagedRolesFromCNPG(m.contracts.CNPGCluster)
 	decision := computeDesiredRoles(databases, currentOwners, currentRoles, reconciledAbsentRoles(m.contracts.CNPGCluster, currentRoles))
@@ -438,12 +438,9 @@ func computeDesiredRoles(databases []platformv1alpha1.PostgresDatabase, ownerMap
 	for _, role := range rolesByName {
 		roles = append(roles, role)
 	}
-	sort.Slice(roles, func(i, j int) bool { return roles[i].Name < roles[j].Name })
-	sort.Slice(conflicts, func(i, j int) bool {
-		if conflicts[i].Role != conflicts[j].Role {
-			return conflicts[i].Role < conflicts[j].Role
-		}
-		return conflicts[i].AttemptedBy.Name < conflicts[j].AttemptedBy.Name
+	slices.SortFunc(roles, func(a, b managedRole) int { return cmp.Compare(a.Name, b.Name) })
+	slices.SortFunc(conflicts, func(a, b platformv1alpha1.RoleConflict) int {
+		return cmp.Or(cmp.Compare(a.Role, b.Role), cmp.Compare(a.AttemptedBy.Name, b.AttemptedBy.Name))
 	})
 	if len(newOwners) == 0 {
 		newOwners = nil
@@ -497,7 +494,7 @@ func retainCurrentOwnedRoles(owners map[string]platformv1alpha1.RoleOwnerReferen
 			roles = append(roles, role)
 		}
 	}
-	sort.Slice(roles, func(i, j int) bool { return roles[i].Name < roles[j].Name })
+	slices.SortFunc(roles, func(a, b managedRole) int { return cmp.Compare(a.Name, b.Name) })
 	return roles
 }
 
@@ -506,7 +503,7 @@ func retainAllCurrentRoles(currentRoles map[string]managedRole) []managedRole {
 	for _, role := range currentRoles {
 		roles = append(roles, role)
 	}
-	sort.Slice(roles, func(i, j int) bool { return roles[i].Name < roles[j].Name })
+	slices.SortFunc(roles, func(a, b managedRole) int { return cmp.Compare(a.Name, b.Name) })
 	return roles
 }
 
@@ -589,8 +586,8 @@ func syncManagedRolesStatusFromCNPG(cluster *platformv1alpha1.PostgresCluster, c
 		pending = append(pending, roleName)
 	}
 
-	sort.Strings(reconciled)
-	sort.Strings(pending)
+	slices.Sort(reconciled)
+	slices.Sort(pending)
 	if len(reconciled) == 0 {
 		reconciled = nil
 	}
