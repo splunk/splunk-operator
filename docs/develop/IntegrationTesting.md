@@ -27,6 +27,17 @@ Use the lowest level that can prove the behavior:
 `make test` is the combined package and controller test set. Do not use
 in-cluster E2E to prove behavior that unit or envtest coverage can establish.
 
+## PostgreSQL CI image inputs
+
+The PostgreSQL EKS jobs share `TEST_PG17_IMAGE`, `TEST_PG18_IMAGE`, and
+`TEST_PGBOUNCER_IMAGE` variables in `.runtime-postgres-suite-job` in
+[`gitlab-ci/includes/runtime.yml`](../../gitlab-ci/includes/runtime.yml). These
+pin public CloudNativePG GHCR images by tag and multi-architecture index digest.
+Workload nodes pull the images directly. The workflow checks that the inputs are
+present before provisioning a cluster. GitLab CI/CD variables can override the
+default references; switching to public Splunk-built images requires updating
+these shared references.
+
 ## What E2E Tests Exist
 
 The Ginkgo suites live in `test/`. Most feature directories are one suite;
