@@ -14,7 +14,10 @@
 
 package v4
 
-import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+import (
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
@@ -24,6 +27,22 @@ const (
 	// an immediate requeue)
 	KVServicePausedAnnotation = "kvservice.enterprise.splunk.com/paused"
 )
+
+// KVServicePostgresSpec configures the Postgres resources used by KVService.
+type KVServicePostgresSpec struct {
+	// Reference to an existing PostgresDatabase resource in this namespace.
+	// When omitted, the controller selects the existing kvstore-database resource.
+	// KVService never creates or modifies the referenced PostgresDatabase.
+	// +optional
+	DatabaseRef *corev1.LocalObjectReference `json:"databaseRef,omitempty"`
+
+	// Logical PostgreSQL database name used by KVService.
+	// When omitted, the controller selects kvstore.
+	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9]*$`
+	// +kubebuilder:validation:MaxLength=30
+	// +optional
+	DatabaseName string `json:"databaseName,omitempty"`
+}
 
 // KVServiceSpec defines the desired state of KVService.
 type KVServiceSpec struct {
@@ -48,6 +67,10 @@ type KVServiceSpec struct {
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:default=1
 	Replicas int32 `json:"replicas,omitempty"`
+
+	// Postgres config used by KVService.
+	// +optional
+	Postgres *KVServicePostgresSpec `json:"postgres,omitempty"`
 }
 
 // KVServiceStatus defines the observed state of KVService

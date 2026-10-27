@@ -25,6 +25,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -79,20 +80,39 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	result.RequeueAfter = 5 * time.Second
 	cr.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("KVService"))
 	cr.Status.Phase = enterpriseApi.PhaseError
+	var statusMessage string
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
 	publisher := k8sops.NewK8EventPublisherWithEventsRecorder(recorder, cr)
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, publisher)
 	defer func() {
-		message := ""
+		message := statusMessage
+		terminalMessage, terminal := splcommon.TerminalMessage(err)
 		if err != nil {
 			message = err.Error()
 		}
+		if terminal {
+			message = terminalMessage
+		}
 		setConditions(cr, false, message)
+		if terminal {
+			reason, _ := splcommon.TerminalReason(err)
+			cr.Status.Phase = enterpriseApi.PhaseError
+			cr.Status.Conditions = splcommon.UpsertStalledCondition(cr.Status.Conditions, reason, terminalMessage, cr.Generation)
+			result = reconcile.Result{}
+		} else {
+			cr.Status.Conditions = splcommon.ClearStalledCondition(cr.Status.Conditions, cr.Generation)
+		}
 		statusErr := k8sops.UpdateKVServiceStatus(ctx, c, cr)
 		if statusErr != nil && !(apierrors.IsNotFound(statusErr) && cr.DeletionTimestamp != nil) {
-			err = errors.Join(err, fmt.Errorf("update KVService status: %w", statusErr))
+			if terminal {
+				// Retry a failed status write even when the spec error itself is terminal.
+				logger.ErrorContext(ctx, "could not persist terminal KVService condition", "error", err)
+				err = fmt.Errorf("update KVService status: %w", statusErr)
+			} else {
+				err = errors.Join(err, fmt.Errorf("update KVService status: %w", statusErr))
+			}
 		}
 		if statusErr == nil && previousPhase != cr.Status.Phase {
 			logger.InfoContext(ctx, "KVService phase changed", "previousPhase", previousPhase, "phase", cr.Status.Phase, "readyReplicas", cr.Status.ReadyReplicas)
@@ -117,6 +137,19 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 		publisher.Warning(ctx, splcommon.EventReasonValidateSpecFailed, "KVService spec validation failed")
 		return result, fmt.Errorf("validate KVService spec: %w", err)
 	}
+	if cr.Spec.Postgres != nil {
+		if _, err = splutil.ApplyNamespaceScopedSecretObject(ctx, c, cr.Namespace); err != nil {
+			return result, fmt.Errorf("ensure KVService namespace authentication Secret: %w", err)
+		}
+	}
+	postgresDependencies, postgresReady, postgresMessage, postgresErr := ensurePostgresReady(ctx, c, cr)
+	statusMessage = postgresMessage
+	if postgresErr != nil {
+		return result, fmt.Errorf("prepare KVService PostgreSQL dependency: %w", postgresErr)
+	}
+	if !postgresReady {
+		return result, nil
+	}
 	cr.Status.Replicas = cr.Spec.Replicas
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-kvservice", cr.Name)
 	if err = k8sops.ApplyService(ctx, c, resources.GetKVServiceService(cr, &cr.Spec)); err != nil {
@@ -127,7 +160,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	if certErr != nil {
 		return result, certErr
 	}
-	deployment, err := k8sops.GetKVServiceDeployment(ctx, c, cr, extraEnv)
+	deployment, err := k8sops.GetKVServiceDeploymentWithPostgresDependencies(ctx, c, cr, postgresDependencies, extraEnv)
 	if err != nil {
 		return result, fmt.Errorf("configure KVService Deployment: %w", err)
 	}
