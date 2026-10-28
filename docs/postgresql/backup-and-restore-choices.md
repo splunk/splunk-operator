@@ -4,6 +4,12 @@ parent: PostgreSQL
 nav_order: 0
 ---
 
+Image references below are template variables. Set them to approved complete
+`tag@sha256` references and render standalone YAML with `envsubst` before applying.
+See [image configuration](quickstart.md#3-create-a-postgresql-cluster) for the
+required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
+
+
 # Backup and Restore Choices
 
 This page helps platform administrators choose a PostgreSQL backup method, configure the platform, and select a restore path. It covers the supported choices at a practical level. The detailed provider and recovery procedures are linked at the [end](#detailed-procedures).
@@ -143,6 +149,13 @@ metadata:
   name: my-app-db
   namespace: team-alpha
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: production
 ```
 
@@ -179,6 +192,13 @@ metadata:
   name: mydb-restored
   namespace: <namespace>
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: production
   bootstrapFrom:
     volumeSnapshot:

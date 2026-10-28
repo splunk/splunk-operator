@@ -14,6 +14,7 @@
 package postgrescontrollers
 
 import (
+	pgtesthelpers "github.com/splunk/splunk-operator/test/postgrescontrollers/helpers"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -57,9 +58,11 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 			// Provision a ready PostgresCluster first.
 			pgClass := createPGClass(ctx, kubeClient, ns)
 
+			pgClusterImages, imageErr := pgtesthelpers.PostgresImages()
+			Expect(imageErr).To(Succeed())
 			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "db-cluster", Namespace: ns},
-				Spec: platformv1alpha1.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{Images: pgClusterImages,
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: new("Delete"),
 				},
@@ -123,9 +126,11 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
 
+			pgClusterImages, imageErr := pgtesthelpers.PostgresImages()
+			Expect(imageErr).To(Succeed())
 			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "db-cluster-del", Namespace: ns},
-				Spec: platformv1alpha1.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{Images: pgClusterImages,
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: new("Delete"),
 				},
@@ -237,9 +242,11 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
+			pgClusterImages, imageErr := pgtesthelpers.PostgresImages()
+			Expect(imageErr).To(Succeed())
 			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "retain-db-cluster", Namespace: ns},
-				Spec: platformv1alpha1.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{Images: pgClusterImages,
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: new("Delete"),
 				},
@@ -313,9 +320,11 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
+			pgClusterImages, imageErr := pgtesthelpers.PostgresImages()
+			Expect(imageErr).To(Succeed())
 			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "multi-db-cluster", Namespace: ns},
-				Spec: platformv1alpha1.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{Images: pgClusterImages,
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: new("Delete"),
 				},
@@ -385,9 +394,11 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
+			pgClusterImages, imageErr := pgtesthelpers.PostgresImages()
+			Expect(imageErr).To(Succeed())
 			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "addremove-cluster", Namespace: ns},
-				Spec: platformv1alpha1.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{Images: pgClusterImages,
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: new("Delete"),
 				},
@@ -510,9 +521,11 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 
 			By("creating the referenced PostgresCluster")
 			pgClass := createPGClass(ctx, kubeClient, ns)
+			pgClusterImages, imageErr := pgtesthelpers.PostgresImages()
+			Expect(imageErr).To(Succeed())
 			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "does-not-exist", Namespace: ns},
-				Spec: platformv1alpha1.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{Images: pgClusterImages,
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: new("Delete"),
 				},

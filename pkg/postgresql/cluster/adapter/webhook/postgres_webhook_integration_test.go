@@ -23,6 +23,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	pgtestfixture "github.com/splunk/splunk-operator/internal/testutil/postgres"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -165,7 +166,7 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 				},
 			},
@@ -182,7 +183,7 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{
 						"hostnossl all all 0.0.0.0/0 reject",
@@ -204,7 +205,7 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{
 						"hostx all all 0.0.0.0/0 md5",
@@ -225,7 +226,7 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{
 						"host all all 192.168.0.0/33 md5",
@@ -246,7 +247,7 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{
 						"host all all 0.0.0.0/0 bogus",
@@ -267,7 +268,7 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{
 						"host all all",
@@ -288,7 +289,7 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{
 						"hostssl all all 0.0.0.0/0 scram-sha-256",
@@ -311,7 +312,7 @@ func TestPostgresClusterPgHBAIntegration(t *testing.T) {
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{
 						"host all all 0.0.0.0/0 ldap ldapserver=ldap.example.com ldapport=389",
@@ -360,7 +361,7 @@ func TestPostgresClusterPgHBAUpdateIntegration(t *testing.T) {
 			Name:      "test-cluster",
 			Namespace: "default",
 		},
-		Spec: platformApi.PostgresClusterSpec{
+		Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Class: "dev",
 			PgHBA: []string{
 				"host all all 0.0.0.0/0 scram-sha-256",
@@ -622,7 +623,7 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec:       platformApi.PostgresClusterSpec{Class: "prod"},
+				Spec:       platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "prod"},
 			},
 			wantAllowed: true,
 		},
@@ -631,7 +632,7 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec:       platformApi.PostgresClusterSpec{Class: "nonexistent"},
+				Spec:       platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "nonexistent"},
 			},
 			wantAllowed: false,
 			wantMessage: "PostgresClusterClass not found",
@@ -641,7 +642,7 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod",
 					PostgresVersion: new("16"),
 				},
@@ -654,7 +655,7 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "prod",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled: new(true),
@@ -669,7 +670,7 @@ func TestCrossResourceValidationIntegration(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod",
 					PostgresVersion: new("18"),
 				},
@@ -718,7 +719,7 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 	oldObj := &platformApi.PostgresCluster{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-		Spec: platformApi.PostgresClusterSpec{
+		Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Class:           "prod",
 			PostgresVersion: new("17"),
 		},
@@ -735,7 +736,7 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 			newObj: &platformApi.PostgresCluster{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod",
 					PostgresVersion: new("18"),
 				},
@@ -747,7 +748,7 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 			newObj: &platformApi.PostgresCluster{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod",
 					PostgresVersion: new("16"),
 				},
@@ -760,7 +761,7 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 			newObj: &platformApi.PostgresCluster{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "prod",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled: new(true),
@@ -775,7 +776,7 @@ func TestCrossResourceValidationUpdateIntegration(t *testing.T) {
 			newObj: &platformApi.PostgresCluster{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod",
 					PostgresVersion: new("17"),
 				},
@@ -852,7 +853,7 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "single",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled:  new(true),
@@ -869,7 +870,7 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "single",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled:  new(true),
@@ -885,7 +886,7 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "ha",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled:  new(true),
@@ -901,7 +902,7 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 			oldObj: &platformApi.PostgresCluster{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "single",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled:  new(true),
@@ -912,7 +913,7 @@ func TestPoolerEndpointAdmissionIntegration(t *testing.T) {
 			obj: &platformApi.PostgresCluster{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "single",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled:  new(true),
@@ -984,7 +985,7 @@ func TestBootstrapFromPITRAdmissionIntegration(t *testing.T) {
 		return &platformApi.PostgresCluster{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-			Spec:       platformApi.PostgresClusterSpec{Class: class, BootstrapFrom: b},
+			Spec:       platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: class, BootstrapFrom: b},
 		}
 	}
 
@@ -1178,7 +1179,7 @@ func TestCrossResourceValidationDisabledWithoutClient(t *testing.T) {
 	obj := &platformApi.PostgresCluster{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresCluster"},
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
-		Spec:       platformApi.PostgresClusterSpec{Class: "nonexistent"},
+		Spec:       platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "nonexistent"},
 	}
 
 	ar := newPostgresClusterAdmissionReview(t, "uid-no-client", admissionv1.Create, obj, nil)

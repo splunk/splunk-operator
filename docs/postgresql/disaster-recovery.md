@@ -4,6 +4,12 @@ parent: PostgreSQL
 nav_order: 2.5
 ---
 
+Image references below are template variables. Set them to approved complete
+`tag@sha256` references and render standalone YAML with `envsubst` before applying.
+See [image configuration](quickstart.md#3-create-a-postgresql-cluster) for the
+required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
+
+
 # PostgreSQL Disaster Recovery Runbook
 
 This runbook is for **operators and on-call engineers** who need to recover a
@@ -156,6 +162,13 @@ acceptable. **RPO** = snapshot interval. **RTO** = fastest (~36 s measured on a
      name: mydb-restored          # NEW, unused name
      namespace: <namespace>
    spec:
+     images:
+       postgresql:
+         "17": ${TEST_PG17_IMAGE}
+       pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+       # Optional Secrets must exist in this PostgresCluster's namespace.
+       # imagePullSecrets:
+       #   - name: registry-reader
      class: <your-class>
      clusterDeletionPolicy: Delete
      bootstrapFrom:
@@ -204,6 +217,13 @@ moderate (~83 s measured on a 1 GiB DB).
      name: mydb-restored          # NEW, unused name
      namespace: <namespace>
    spec:
+     images:
+       postgresql:
+         "17": ${TEST_PG17_IMAGE}
+       pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+       # Optional Secrets must exist in this PostgresCluster's namespace.
+       # imagePullSecrets:
+       #   - name: registry-reader
      class: <your-class>          # must define cnpg.backup.barmanObjectStore
      clusterDeletionPolicy: Delete
      bootstrapFrom:
@@ -240,6 +260,13 @@ instant. **RTO** = slowest of the three (~105 s measured on a 1 GiB DB).
      name: mydb-restored          # NEW, unused name
      namespace: <namespace>
    spec:
+     images:
+       postgresql:
+         "17": ${TEST_PG17_IMAGE}
+       pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+       # Optional Secrets must exist in this PostgresCluster's namespace.
+       # imagePullSecrets:
+       #   - name: registry-reader
      class: <your-class>          # must define cnpg.backup.barmanObjectStore
      clusterDeletionPolicy: Delete
      bootstrapFrom:

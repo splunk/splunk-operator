@@ -73,13 +73,6 @@ func ValidatePostgresClusterClassCreateWithContext(ctx context.Context, obj *pla
 				re.Message))
 		}
 	}
-	if obj.Spec.Config != nil {
-		allErrs = append(allErrs, toFieldErrors(core.ValidatePostgresImage(
-			obj.Spec.Config.PostgresImage,
-			obj.Spec.Config.PostgresVersion,
-			"spec.config.postgresImage",
-		))...)
-	}
 	allErrs = append(allErrs, validateCertificateConfig(ctx, obj, reader)...)
 
 	return allErrs

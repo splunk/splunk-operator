@@ -22,6 +22,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	pgtestfixture "github.com/splunk/splunk-operator/internal/testutil/postgres"
 	custommetrics "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/custom_metrics"
 	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
@@ -52,10 +53,10 @@ func TestReconcileErrorPassdownToObserve(t *testing.T) {
 	scheme := newTestScheme()
 
 	instances := int32(1)
-	version := "16"
+	version := platformv1alpha1.PostgresMajorVersion17
 	storageSize := resource.MustParse("10Gi")
 	mergedConfig := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -258,10 +259,10 @@ func TestReconcileFailureEmitsWarningFromObserveNotReconcile(t *testing.T) {
 	scheme := newTestScheme()
 
 	instances := int32(1)
-	version := "16"
+	version := platformv1alpha1.PostgresMajorVersion17
 	storageSize := resource.MustParse("10Gi")
 	mergedConfig := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -396,10 +397,10 @@ func TestClusterModelStorageResizeInProgress(t *testing.T) {
 	require.NoError(t, corev1.AddToScheme(scheme))
 
 	instances := int32(3)
-	version := "15.13"
+	version := platformv1alpha1.PostgresMajorVersion17 + ".13"
 	storageSize := resource.MustParse("10Gi")
 	cfg := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -553,7 +554,7 @@ func TestPhaseWaitingForInstancesToBeActive(t *testing.T) {
 			scheme := newTestScheme()
 			cluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-				Spec:       platformv1alpha1.PostgresClusterSpec{},
+				Spec:       platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()},
 				Status: platformv1alpha1.PostgresClusterStatus{
 					Phase: tt.clusterPhase,
 					Conditions: []metav1.Condition{{
@@ -602,7 +603,7 @@ func TestPhaseWaitingForInstancesToBeActive(t *testing.T) {
 				updateStatus,
 				cluster,
 				&platformv1alpha1.PostgresClusterClass{},
-				&MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{Instances: &instances}},
+				&MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), Instances: &instances}},
 				&reconcileContracts{Secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg1-secret"}}},
 			)
 			model.cnpgCluster = cnpg
@@ -931,7 +932,7 @@ func TestHandleFinalizerUnknownDeletionPolicy(t *testing.T) {
 			DeletionTimestamp: &now,
 			Finalizers:        []string{PostgresClusterFinalizerName},
 		},
-		Spec: platformv1alpha1.PostgresClusterSpec{
+		Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			ClusterDeletionPolicy: &unknownPolicy,
 		},
 	}
@@ -1020,7 +1021,7 @@ func TestHandleFinalizerRetainStripsBarmanPlugin(t *testing.T) {
 			DeletionTimestamp: &now,
 			Finalizers:        []string{PostgresClusterFinalizerName},
 		},
-		Spec: platformv1alpha1.PostgresClusterSpec{
+		Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			ClusterDeletionPolicy: &retain,
 		},
 	}
@@ -1073,7 +1074,7 @@ func TestHandleFinalizerDeletesConventionalPoolersOnce(t *testing.T) {
 			DeletionTimestamp: &now,
 			Finalizers:        []string{PostgresClusterFinalizerName},
 		},
-		Spec: platformv1alpha1.PostgresClusterSpec{ClusterDeletionPolicy: &retain},
+		Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), ClusterDeletionPolicy: &retain},
 		Status: platformv1alpha1.PostgresClusterStatus{
 			ProvisionerRef: &corev1.ObjectReference{Name: "primary-green", Namespace: "default"},
 		},
@@ -1122,7 +1123,7 @@ func TestHandleFinalizerCleansScheduledBackupsForEveryManagedEnvironment(t *test
 			DeletionTimestamp: &now,
 			Finalizers:        []string{PostgresClusterFinalizerName},
 		},
-		Spec: platformv1alpha1.PostgresClusterSpec{ClusterDeletionPolicy: &retain},
+		Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), ClusterDeletionPolicy: &retain},
 	}
 	ownerRef := metav1.OwnerReference{
 		APIVersion: platformv1alpha1.GroupVersion.String(),
@@ -1177,7 +1178,7 @@ func TestHandleFinalizerLeavesUnvalidatedCNPGClusters(t *testing.T) {
 					DeletionTimestamp: &now,
 					Finalizers:        []string{PostgresClusterFinalizerName},
 				},
-				Spec: platformv1alpha1.PostgresClusterSpec{ClusterDeletionPolicy: &tt.policy},
+				Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), ClusterDeletionPolicy: &tt.policy},
 			}
 			green := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{
 				Name:      "primary-green",
@@ -1239,7 +1240,7 @@ func TestHandleFinalizerRetainsConventionalAndCurrentEnvironments(t *testing.T) 
 			DeletionTimestamp: &now,
 			Finalizers:        []string{PostgresClusterFinalizerName},
 		},
-		Spec: platformv1alpha1.PostgresClusterSpec{ClusterDeletionPolicy: &retain},
+		Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), ClusterDeletionPolicy: &retain},
 		Status: platformv1alpha1.PostgresClusterStatus{
 			ProvisionerRef: &corev1.ObjectReference{Name: "primary-green", Namespace: "default"},
 		},
@@ -1278,7 +1279,7 @@ func TestHandleFinalizerDeletesConventionalAndCurrentEnvironments(t *testing.T) 
 			DeletionTimestamp: &now,
 			Finalizers:        []string{PostgresClusterFinalizerName},
 		},
-		Spec: platformv1alpha1.PostgresClusterSpec{ClusterDeletionPolicy: &deletePolicy},
+		Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), ClusterDeletionPolicy: &deletePolicy},
 		Status: platformv1alpha1.PostgresClusterStatus{
 			ProvisionerRef: &corev1.ObjectReference{Name: "primary-green", Namespace: "default"},
 		},
@@ -1491,7 +1492,7 @@ func TestValidateCrossResource_VersionFloor(t *testing.T) {
 	makeCluster := func(version string) *platformv1alpha1.PostgresCluster {
 		return &platformv1alpha1.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "pg"},
-			Spec:       platformv1alpha1.PostgresClusterSpec{PostgresVersion: new(version)},
+			Spec:       platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), PostgresVersion: new(version)},
 		}
 	}
 

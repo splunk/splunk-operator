@@ -4,6 +4,12 @@ parent: PostgreSQL
 nav_order: 2
 ---
 
+Image references below are template variables. Set them to approved complete
+`tag@sha256` references and render standalone YAML with `envsubst` before applying.
+See [image configuration](quickstart.md#3-create-a-postgresql-cluster) for the
+required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
+
+
 # Automated Backups via Object Storage (Barman)
 
 This guide is for **platform teams** configuring automated PostgreSQL backups to S3-compatible object storage and **users** who need to understand backup status on their **`PostgresCluster`** instances.
@@ -116,6 +122,13 @@ metadata:
   name: my-app-db
   namespace: <namespace>
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: production
   # Override: run backups at 3:30 AM instead of class default (2:00 AM)
   backup:

@@ -27,16 +27,35 @@ Use the lowest level that can prove the behavior:
 `make test` is the combined package and controller test set. Do not use
 in-cluster E2E to prove behavior that unit or envtest coverage can establish.
 
-## PostgreSQL CI image inputs
+## PostgreSQL image inputs
 
-The PostgreSQL EKS jobs share `TEST_PG17_IMAGE`, `TEST_PG18_IMAGE`, and
-`TEST_PGBOUNCER_IMAGE` variables in `.runtime-postgres-suite-job` in
-[`gitlab-ci/includes/runtime.yml`](../../gitlab-ci/includes/runtime.yml). These
-pin public CloudNativePG GHCR images by tag and multi-architecture index digest.
-Workload nodes pull the images directly. The workflow checks that the inputs are
-present before provisioning a cluster. GitLab CI/CD variables can override the
-default references; switching to public Splunk-built images requires updating
-these shared references.
+`test/postgrescontrollers` reads image inputs when a selected spec executes; compilation
+and Ginkgo dry-run do not need registry credentials. Set `TEST_PG17_IMAGE` for the
+default class, `TEST_PG18_IMAGE` for PG18 scenarios, and both for the PG17-to-PG18
+upgrade scenarios. Set `TEST_PGBOUNCER_IMAGE` for pooling scenarios. Each value is a
+complete approved `tag@sha256` reference. PostgreSQL tags must start with the mapped
+numeric major; no public default is supplied. Upgrade versions default to the API's
+supported 17/18 constants and can be selected through `TEST_PG_SOURCE_VERSION` and
+`TEST_PG_TARGET_VERSION` within that supported pair. The image helper returns
+configuration errors to the spec, which asserts before creating a PostgresCluster. Image syntax is
+validated by the CRD schema; Go checks class-dependent image requirements.
+
+`TEST_PG_IMAGE_PULL_SECRETS` is an optional comma-separated list of Secret names.
+Provision those registry Secrets in every workload namespace through the authorized
+test deployment setup; the test helper names them but never copies credentials from
+another namespace. The mapping propagates the same references to PostgreSQL and
+Pooler pods. Synthetic unit/envtest fixture images
+are intentionally not published and must never be used for live tests.
+
+The GitLab EKS PostgreSQL lanes supply these inputs through the shared
+`.runtime-postgres-suite-job` configuration in
+[`gitlab-ci/includes/runtime.yml`](../../gitlab-ci/includes/runtime.yml). They use
+public CloudNativePG GHCR images pinned by tag and multi-architecture index
+digest, pulled directly by workload nodes without registry credentials or a
+PostgreSQL ECR mirror. CI checks for missing inputs before provisioning the
+cluster. See the [CI image inputs](../../gitlab-ci/README.md#merge-request-lane)
+for overrides and switching to public Splunk-built images. Direct private-registry
+runs still need the namespace-local credentials described above.
 
 ## What E2E Tests Exist
 

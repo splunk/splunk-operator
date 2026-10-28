@@ -4,6 +4,12 @@ parent: PostgreSQL
 nav_order: 6
 ---
 
+Image references below are template variables. Set them to approved complete
+`tag@sha256` references and render standalone YAML with `envsubst` before applying.
+See [image configuration](quickstart.md#3-create-a-postgresql-cluster) for the
+required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
+
+
 # Restoring a PostgresCluster
 
 This guide covers restoring a PostgreSQL cluster from a backup. It is intended for **users** who need to recover a `PostgresCluster`. Three restore modes are supported:
@@ -67,6 +73,13 @@ metadata:
   name: mydb-restored
   namespace: <namespace>
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: <your-class>
   clusterDeletionPolicy: Delete
   bootstrapFrom:
@@ -222,6 +235,13 @@ metadata:
   name: mydb-restored
   namespace: <namespace>
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: <your-class>          # must define cnpg.backup.barmanObjectStore
   bootstrapFrom:
     volumeSnapshot:
@@ -304,6 +324,13 @@ metadata:
   name: mydb-restored
   namespace: <namespace>
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: <your-class>          # must define cnpg.backup.barmanObjectStore
   bootstrapFrom:
     objectStorage:

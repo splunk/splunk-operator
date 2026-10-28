@@ -24,11 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPostgresImageNameFormatsVersion(t *testing.T) {
-	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18", PostgresImageName("18"))
-	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18.1", PostgresImageName("18.1"))
-}
-
 func TestClusterReadyRequiresHealthyReadyInstancesAndPrimary(t *testing.T) {
 	cluster := &cnpgv1.Cluster{
 		Status: cnpgv1.ClusterStatus{

@@ -16,6 +16,7 @@ package postgrescontrollers
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	pgtesthelpers "github.com/splunk/splunk-operator/test/postgrescontrollers/helpers"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/test/testenv"
@@ -49,9 +50,11 @@ var _ = Describe("postgrescontrollers, integration, postgres-validation", Label(
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
+			pgClusterImages, imageErr := pgtesthelpers.PostgresImages()
+			Expect(imageErr).To(Succeed())
 			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "validate-class", Namespace: ns},
-				Spec: platformv1alpha1.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{Images: pgClusterImages,
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: new("Delete"),
 				},
@@ -76,9 +79,11 @@ var _ = Describe("postgrescontrollers, integration, postgres-validation", Label(
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
 			initialStorage := resource.MustParse("10Gi")
+			pgClusterImages, imageErr := pgtesthelpers.PostgresImages()
+			Expect(imageErr).To(Succeed())
 			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "validate-storage", Namespace: ns},
-				Spec: platformv1alpha1.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{Images: pgClusterImages,
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: new("Delete"),
 					Storage:               &initialStorage,
@@ -109,9 +114,11 @@ var _ = Describe("postgrescontrollers, integration, postgres-validation", Label(
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClass(ctx, kubeClient, ns)
+			pgClusterImages, imageErr := pgtesthelpers.PostgresImages(platformv1alpha1.PostgresMajorVersion17, platformv1alpha1.PostgresMajorVersion18)
+			Expect(imageErr).To(Succeed())
 			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "validate-pgversion", Namespace: ns},
-				Spec: platformv1alpha1.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{Images: pgClusterImages,
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: new("Delete"),
 					PostgresVersion:       new("18"),

@@ -33,11 +33,10 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	cnpgpostgres "github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
-	"github.com/distribution/reference"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
-	clusterCnpg "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
+	cnpgadapter "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -134,7 +133,10 @@ func (p *clusterModel) Reconcile(ctx context.Context) error {
 }
 
 func (p *clusterModel) reconcileExistingCNPGCluster(ctx context.Context, existingCNPG *cnpgv1.Cluster) error {
-	desiredSpec := buildCNPGClusterSpec(*existingCNPG.Spec.DeepCopy(), p.mergedConfig, existingCNPG.Name, p.contracts.Secret.Name, p.metricsEnabled)
+	desiredSpec, err := buildCNPGClusterSpec(*existingCNPG.Spec.DeepCopy(), p.mergedConfig, existingCNPG.Name, p.contracts.Secret.Name, p.metricsEnabled)
+	if err != nil {
+		return newReconcileFailure(reasonClusterBuildFailed, err)
+	}
 	desiredSpec.PostgresConfiguration.Parameters = maps.Clone(existingCNPG.Spec.PostgresConfiguration.Parameters)
 	p.contracts.ServerTLS.ApplyToCNPG(&desiredSpec, existingCNPG.Name, p.cluster.Namespace)
 
@@ -451,18 +453,11 @@ func (p *clusterModel) storageResizeInProgress() (pending, total int, resizing b
 // Returns the merged config without validation — call ValidateMergedConfig separately.
 func GetMergedConfig(class *platformv1alpha1.PostgresClusterClass, cluster *platformv1alpha1.PostgresCluster) *MergedConfig {
 	result := cluster.Spec.DeepCopy()
-	if result.PostgresImage != nil && strings.TrimSpace(*result.PostgresImage) == "" {
-		result.PostgresImage = nil
-	}
 
 	// Config is optional on the class — apply defaults only when provided.
 	if defaults := class.Spec.Config; defaults != nil {
 		result.Instances = cmp.Or(result.Instances, defaults.Instances)
 		result.PostgresVersion = cmp.Or(result.PostgresVersion, defaults.PostgresVersion)
-		result.PostgresImage = cmp.Or(result.PostgresImage, defaults.PostgresImage)
-		if cluster.Spec.ImagePullSecrets == nil {
-			result.ImagePullSecrets = defaults.ImagePullSecrets
-		}
 		result.Resources = cmp.Or(result.Resources, defaults.Resources)
 		result.Storage = cmp.Or(result.Storage, defaults.Storage)
 		if len(result.PostgreSQLConfig) == 0 {
@@ -545,7 +540,7 @@ func ValidateCrossResource(class *platformv1alpha1.PostgresClusterClass, cluster
 		classPooler = class.Spec.Config.ConnectionPooler
 	}
 	mergedPooler := mergeConnectionPoolerEnable(cluster.Spec.ConnectionPooler, classPooler)
-	poolerEnabled := isPoolerEnabled(mergedPooler)
+	poolerEnabled := PoolerEnabled(mergedPooler)
 	if poolerEnabled && (class.Spec.CNPG == nil || class.Spec.CNPG.ConnectionPooler == nil) {
 		errs = append(errs, ConfigValidationError{
 			Field:   "spec.connectionPooler.enabled",
@@ -726,101 +721,9 @@ func ValidateMergedConfig(merged *MergedConfig, className string) []ConfigValida
 	if err := validatePostgreSQLConfigNoCNPGFixedKeys(merged.Spec.PostgreSQLConfig); err != nil {
 		errs = append(errs, ConfigValidationError{Field: "spec.postgresqlConfig", Message: err.Error()})
 	}
-	errs = append(errs, ValidatePostgresImage(merged.Spec.PostgresImage, merged.Spec.PostgresVersion, "spec.postgresImage")...)
-	errs = append(errs, validateImagePullSecrets(merged.Spec.ImagePullSecrets, "spec.imagePullSecrets")...)
+	errs = append(errs, ValidateEffectiveImages(merged.Spec.Images, merged.Spec.PostgresVersion, PoolerEnabled(merged.Spec.ConnectionPooler))...)
 
 	return errs
-}
-
-func validateImagePullSecrets(refs []corev1.LocalObjectReference, fieldName string) []ConfigValidationError {
-	var errs []ConfigValidationError
-	for i, ref := range refs {
-		if ref.Name == "" {
-			errs = append(errs, ConfigValidationError{
-				Field:   fmt.Sprintf("%s[%d].name", fieldName, i),
-				Message: "imagePullSecrets.name must not be empty",
-			})
-		}
-	}
-	return errs
-}
-
-// ValidatePostgresImage enforces the image policy shared by admission and
-// reconcile fallback: explicit images must be tagged, cannot use latest or a
-// digest-only reference, and the tag's leading major version must match the
-// effective postgresVersion.
-func ValidatePostgresImage(postgresImage, postgresVersion *string, fieldName string) []ConfigValidationError {
-	if postgresImage == nil || *postgresImage == "" {
-		return nil
-	}
-	image := strings.TrimSpace(*postgresImage)
-	if image != *postgresImage || strings.ContainsAny(image, " \t\r\n") {
-		return []ConfigValidationError{{
-			Field:   fieldName,
-			Value:   *postgresImage,
-			Message: "postgresImage must be a valid image reference without whitespace",
-		}}
-	}
-	ref, err := parsePostgresImageReference(image)
-	if err != nil {
-		return []ConfigValidationError{{
-			Field:   fieldName,
-			Value:   *postgresImage,
-			Message: err.Error(),
-		}}
-	}
-	if ref.tag == "latest" {
-		return []ConfigValidationError{{
-			Field:   fieldName,
-			Value:   *postgresImage,
-			Message: "postgresImage must not use the latest tag",
-		}}
-	}
-	if postgresVersion == nil {
-		return nil
-	}
-	imageMajor := leadingMajor(ref.tag)
-	versionMajor, _ := parseVersion(*postgresVersion)
-	if imageMajor <= 0 {
-		return []ConfigValidationError{{
-			Field:   fieldName,
-			Value:   *postgresImage,
-			Message: "postgresImage tag must start with the PostgreSQL major version",
-		}}
-	}
-	if versionMajor > 0 && imageMajor != versionMajor {
-		return []ConfigValidationError{{
-			Field:   fieldName,
-			Value:   *postgresImage,
-			Message: fmt.Sprintf("postgresImage tag major version %d must match postgresVersion major version %d", imageMajor, versionMajor),
-		}}
-	}
-	return nil
-}
-
-type postgresImageReference struct {
-	tag string
-}
-
-func parsePostgresImageReference(image string) (postgresImageReference, error) {
-	if strings.Contains(image, "://") {
-		return postgresImageReference{}, fmt.Errorf("postgresImage must be an image reference, not a URL")
-	}
-	if strings.Contains(image, "@") {
-		_, digest, _ := strings.Cut(image, "@")
-		if digest == "" {
-			return postgresImageReference{}, fmt.Errorf("postgresImage digest suffix must not be empty")
-		}
-	}
-	named, err := reference.ParseNormalizedNamed(image)
-	if err != nil {
-		return postgresImageReference{}, fmt.Errorf("postgresImage must be a valid image reference: %w", err)
-	}
-	tagged, ok := named.(reference.NamedTagged)
-	if !ok {
-		return postgresImageReference{}, fmt.Errorf("postgresImage must include a tag; digest-only references are not supported")
-	}
-	return postgresImageReference{tag: tagged.Tag()}, nil
 }
 
 func leadingMajor(tag string) int {
@@ -861,9 +764,14 @@ func validatePostgreSQLConfigNoCNPGFixedKeys(params map[string]string) error {
 // otherwise external changes to those fields on the CNPG cluster will be silently ignored.
 // Operator-controlled invariants (e.g. SuperuserSecret, EnableSuperuserAccess) are exempt — they
 // are always the same value and are never exposed in the PostgresCluster CRD.
-func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, clusterName, secretName string, postgresMetricsEnabled bool) cnpgv1.ClusterSpec {
-	live.ImageName = EffectivePostgresImage(specCfg)
-	live.ImagePullSecrets = EffectiveCNPGImagePullSecrets(specCfg)
+func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, clusterName, secretName string, postgresMetricsEnabled bool) (cnpgv1.ClusterSpec, error) {
+	image, err := EffectivePostgresImage(specCfg)
+	if err != nil {
+		return cnpgv1.ClusterSpec{}, err
+	}
+	live.ImageName = image
+	live.ImageCatalogRef = nil
+	live.ImagePullSecrets = cnpgadapter.ImagePullSecrets(specCfg.Spec.Images.ImagePullSecrets)
 	live.Instances = int(*specCfg.Spec.Instances)
 	live.PostgresConfiguration = cnpgv1.PostgresConfiguration{
 		Parameters: maps.Clone(specCfg.Spec.PostgreSQLConfig),
@@ -913,21 +821,15 @@ func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, cluste
 		}
 	}
 	live.ExternalClusters = append(filteredExt, buildRecoveryExternalClusters(specCfg, clusterName)...)
-	return live
+	return live, nil
 }
 
-func EffectivePostgresImage(cfg *MergedConfig) string {
-	if cfg != nil && cfg.Spec != nil && cfg.Spec.PostgresImage != nil && strings.TrimSpace(*cfg.Spec.PostgresImage) != "" {
-		return *cfg.Spec.PostgresImage
+// EffectivePostgresImage resolves the configured major without any registry fallback.
+func EffectivePostgresImage(cfg *MergedConfig) (string, error) {
+	if cfg == nil || cfg.Spec == nil || cfg.Spec.PostgresVersion == nil {
+		return "", fmt.Errorf("postgresVersion is required to resolve an image")
 	}
-	return clusterCnpg.PostgresImageName(*cfg.Spec.PostgresVersion)
-}
-
-func EffectiveCNPGImagePullSecrets(cfg *MergedConfig) []cnpgv1.LocalObjectReference {
-	if cfg == nil || cfg.Spec == nil {
-		return nil
-	}
-	return clusterCnpg.ImagePullSecrets(cfg.Spec.ImagePullSecrets)
+	return ResolvePostgresImage(cfg.Spec.Images, *cfg.Spec.PostgresVersion)
 }
 
 func buildCNPGPlugins(cfg *MergedConfig, clusterName string) []cnpgv1.PluginConfiguration {
@@ -1150,9 +1052,13 @@ func buildRecoveryExternalClusters(cfg *MergedConfig, clusterName string) []cnpg
 }
 
 func buildCNPGCluster(scheme *runtime.Scheme, cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig, secretName string, postgresMetricsEnabled bool) (*cnpgv1.Cluster, error) {
+	spec, err := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, cluster.Name, secretName, postgresMetricsEnabled)
+	if err != nil {
+		return nil, err
+	}
 	cnpg := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, cluster.Name, secretName, postgresMetricsEnabled),
+		Spec:       spec,
 	}
 	if err := ctrl.SetControllerReference(cluster, cnpg, scheme); err != nil {
 		return nil, fmt.Errorf("setting controller reference on CNPG cluster: %w", err)
@@ -1163,6 +1069,7 @@ func buildCNPGCluster(scheme *runtime.Scheme, cluster *platformv1alpha1.Postgres
 func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec) normalizedCNPGClusterSpec {
 	normalized := normalizedCNPGClusterSpec{
 		ImageName:           strings.TrimSpace(spec.ImageName),
+		ImageCatalogRef:     spec.ImageCatalogRef,
 		ImagePullSecrets:    coreImagePullSecrets(spec.ImagePullSecrets),
 		Instances:           spec.Instances,
 		PrimaryUpdateMethod: string(spec.PrimaryUpdateMethod),

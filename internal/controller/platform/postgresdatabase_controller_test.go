@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	pgtestfixture "github.com/splunk/splunk-operator/internal/testutil/postgres"
 	dbcore "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 	pgprometheus "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/prometheus"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
@@ -216,7 +217,7 @@ func createPostgresClusterResource(ctx context.Context, namespace, clusterName s
 			Name:      clusterName,
 			Namespace: namespace,
 		},
-		Spec: platformv1alpha1.PostgresClusterSpec{
+		Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Class: "dev",
 		},
 	}
