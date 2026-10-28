@@ -292,7 +292,7 @@ spec:
     instances: 1
     # Why: set an explicit small PVC size instead of relying on the class default.
     storage: 10Gi
-    postgresVersion: "18"
+    postgresVersion: "17"
     # Resource requests and limits apply to the single PostgreSQL pod.
     resources:
       requests:
@@ -322,6 +322,38 @@ use the platform-approved class rather than creating or changing one yourself.
 Apply a `PostgresCluster` to ask the Postgres Operator to provision and manage the PostgreSQL
 cluster through the class policy selected in step 2:
 
+PostgreSQL 17 is the default major for class configuration. PostgreSQL 18 remains
+available when explicitly selected and supplied in the cluster's image mapping.
+
+Before creating a PostgresCluster, set `TEST_PG17_IMAGE` to your approved PostgreSQL
+17 `tag@sha256` reference and `TEST_PGBOUNCER_IMAGE` to your pinned PgBouncer reference
+when pooling is enabled. PostgreSQL tags must start with their mapped numeric major;
+`rel-17-...` build tags require a published numeric-leading alias before use here.
+The `sok/postgresok-build` project owns publishing compliant tags, promoting images
+to production, supplying complete release references, and preserving scan and
+signing evidence. Use those supplied references as the variable values; SOK does
+not publish images or discover release references.
+
+There is no public-image fallback. `spec.images.imagePullSecrets` is optional;
+SOK does not select a default Secret. Supplied references must name Secrets in
+the cluster namespace and are passed to both PostgreSQL and PgBouncer pods.
+Secret names must be lowercase DNS subdomains of at most 253 characters.
+The CRD checks image structure, tags, digest shape and Secret-name presence/length.
+The admission webhook and reconciler check the image mapping and PgBouncer
+requirements after applying class defaults. Supply compatible images and valid
+registry Secret names; SOK does not check image availability or compatibility.
+Images are supplied on each cluster, not inherited
+from a class. Inline shell heredocs below expand these variables; standalone YAML
+samples require `envsubst` first:
+
+```bash
+: "${TEST_PG17_IMAGE:?Set the approved PostgreSQL 17 tag@sha256 reference}"
+: "${TEST_PGBOUNCER_IMAGE:?Set the approved PgBouncer tag@sha256 reference}"
+envsubst '${TEST_PG17_IMAGE} ${TEST_PGBOUNCER_IMAGE}' \
+  < config/samples/platform_v1alpha1_postgrescluster_dev.yaml > /tmp/postgrescluster.yaml
+# Review the rendered file before applying it to your authorized namespace.
+```
+
 ```bash
 cat <<EOF | kubectl apply -f -
 apiVersion: platform.splunk.com/v1alpha1
@@ -330,6 +362,13 @@ metadata:
   name: quickstart-postgres
   namespace: $NAMESPACE
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   # The class name is immutable after the cluster is created.
   class: $CLASS
   # Why: a throwaway quickstart should clean up its managed backend when deleted.
@@ -410,7 +449,7 @@ spec:
   restartPolicy: Never
   containers:
     - name: psql
-      image: postgres:18
+      image: postgres:17
       command: ["psql"]
       args: ["-c", "select current_database(), current_user;"]
       env:
@@ -558,7 +597,7 @@ kubectl get configmap "$DATABASE_CONFIG" -n "$NAMESPACE"
 kubectl get secret "$RW_SECRET" -n "$NAMESPACE"
 ```
 
-`ImagePullBackOff` means the node cannot obtain `postgres:18`. Missing ConfigMap or Secret errors
+`ImagePullBackOff` means the node cannot obtain `postgres:17`. Missing ConfigMap or Secret errors
 mean the `PostgresDatabase` has not finished reconciling or the names do not match the documented
 contract. Connection timeouts can also indicate a NetworkPolicy blocking access to the published
 endpoint. Resolve the reported condition, delete the failed Pod, and apply the client manifest
@@ -601,11 +640,11 @@ class to `instances: 1`.
 
 This is an adapted quickstart profile, not a verbatim copy of the repository's
 [`postgresql-prod` sample](../../config/samples/platform_v1alpha1_postgresclusterclass_prod.yaml): it
-uses PostgreSQL `18` rather than the sample's pinned `18.1`, omits its workload-specific OLTP
+uses PostgreSQL `17` like the sample, omits its workload-specific OLTP
 `postgresqlConfig` tuning, and explicitly enables both PgBouncer endpoints rather than relying on
 their `true` defaults. It adds the backup configuration from the
 [`postgresql-backup` sample](../../config/samples/platform_v1alpha1_postgresclusterclass_backup.yaml).
-Use the production sample as the baseline when its version pin and tuning match the workload.
+Use the production sample as the baseline when its version and tuning match the workload.
 
 ```yaml
 apiVersion: platform.splunk.com/v1alpha1
@@ -618,7 +657,7 @@ spec:
     # Why: three instances provide a primary and replicas for HA.
     instances: 3
     storage: 100Gi
-    postgresVersion: "18"
+    postgresVersion: "17"
     resources:
       requests:
         cpu: "2"
@@ -684,7 +723,7 @@ spec:
     # Why: a shared failure domain should have replicas.
     instances: 3
     storage: 100Gi
-    postgresVersion: "18"
+    postgresVersion: "17"
     resources:
       requests:
         cpu: "2"
@@ -712,6 +751,13 @@ metadata:
   name: shared-postgres
   namespace: shared-ns
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: postgresql-shared
   # Why: deleting the CR should not immediately delete data shared by several teams.
   clusterDeletionPolicy: Retain
@@ -768,7 +814,7 @@ spec:
     # Why: production dedicated workloads need a replica for HA.
     instances: 3
     storage: 200Gi
-    postgresVersion: "18"
+    postgresVersion: "17"
     resources:
       requests:
         cpu: "4"
@@ -789,6 +835,13 @@ metadata:
   name: orders-postgres
   namespace: orders
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: postgresql-dedicated
   # Why: preserve the independently managed cluster if this CR is removed.
   clusterDeletionPolicy: Retain
@@ -830,7 +883,7 @@ spec:
     # Why: pooler replicas and a switchover policy need database replicas.
     instances: 3
     storage: 100Gi
-    postgresVersion: "18"
+    postgresVersion: "17"
     resources:
       requests:
         cpu: "2"

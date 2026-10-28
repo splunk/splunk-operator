@@ -43,8 +43,8 @@ import (
 // that exists in the cluster. The shared snapshot E2E setup installs one and
 // exports the matching POSTGRES_E2E_VOLUME_SNAPSHOT_CLASS.
 var (
-	pgUpgradeSourceVersion = testenv.GetEnvWithDefault("TEST_PG_SOURCE_VERSION", "15")
-	pgUpgradeTargetVersion = testenv.GetEnvWithDefault("TEST_PG_TARGET_VERSION", "16")
+	pgUpgradeSourceVersion = testenv.GetEnvWithDefault("TEST_PG_SOURCE_VERSION", platformv1alpha1.PostgresMajorVersion17)
+	pgUpgradeTargetVersion = testenv.GetEnvWithDefault("TEST_PG_TARGET_VERSION", platformv1alpha1.PostgresMajorVersion18)
 	pgVolumeSnapshotClass  = testenv.GetEnvWithDefault("POSTGRES_E2E_VOLUME_SNAPSHOT_CLASS", "sok-postgres-ebs-csi")
 )
 
@@ -78,9 +78,11 @@ var _ = Describe("postgrescontrollers, integration, postgres-upgrade", Label("ti
 			pgtesthelpers.RegisterSnapshotFailureDump(kubeClient, snapshots, ns)
 
 			pgClass := createPGClassWithSnapshotBackup(ctx, kubeClient, ns, pgUpgradeSourceVersion)
+			pgClusterImages, imageErr := pgtesthelpers.PostgresImages(pgUpgradeSourceVersion, pgUpgradeTargetVersion)
+			Expect(imageErr).To(Succeed())
 			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "major-upgrade", Namespace: ns},
-				Spec: platformv1alpha1.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{Images: pgClusterImages,
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: new("Delete"),
 					PostgresVersion:       new(pgUpgradeSourceVersion),
@@ -199,7 +201,7 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 				cnpg := &cnpgv1.Cluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, cnpg)).To(Succeed())
 				g.Expect(cnpg.Status.Phase).To(Equal(cnpgv1.PhaseHealthy))
-				g.Expect(cnpg.Spec.ImageName).To(HaveSuffix(":" + pgUpgradeTargetVersion))
+				g.Expect(cnpg.Spec.ImageName).To(Equal(string(pgCluster.Spec.Images.PostgreSQL[majorOf(pgUpgradeTargetVersion)])))
 				g.Expect(cnpg.Status.PGDataImageInfo).NotTo(BeNil())
 				g.Expect(fmt.Sprintf("%d", cnpg.Status.PGDataImageInfo.MajorVersion)).To(Equal(majorOf(pgUpgradeTargetVersion)))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
@@ -249,9 +251,11 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 			// createPGClassAtVersion configures no backup provider, so the upgrade workflow's
 			// rollback baseline can never be established.
 			pgClass := createPGClassAtVersion(ctx, kubeClient, ns, pgUpgradeSourceVersion)
+			pgClusterImages, imageErr := pgtesthelpers.PostgresImages(pgUpgradeSourceVersion, pgUpgradeTargetVersion)
+			Expect(imageErr).To(Succeed())
 			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-no-backup", Namespace: ns},
-				Spec: platformv1alpha1.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{Images: pgClusterImages,
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: new("Delete"),
 					PostgresVersion:       new(pgUpgradeSourceVersion),
@@ -311,9 +315,11 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
 			pgClass := createPGClassAtVersion(ctx, kubeClient, ns, pgUpgradeSourceVersion)
+			pgClusterImages, imageErr := pgtesthelpers.PostgresImages(pgUpgradeSourceVersion, pgUpgradeTargetVersion)
+			Expect(imageErr).To(Succeed())
 			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-not-allowed", Namespace: ns},
-				Spec: platformv1alpha1.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{Images: pgClusterImages,
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: new("Delete"),
 					PostgresVersion:       new(pgUpgradeSourceVersion),
@@ -467,7 +473,7 @@ func upgradeBackupSummary(ctx SpecContext, kubeClient client.Client, clusterKey 
 	return strings.Join(parts, "; ")
 }
 
-// majorOf reduces a spec.postgresVersion ("15" or "15.10") to its major
+// majorOf reduces a spec.postgresVersion ("17" or "17.10") to its major
 // component, which is what status.currentPgVersion reports.
 func majorOf(version string) string {
 	major, _, _ := strings.Cut(version, ".")

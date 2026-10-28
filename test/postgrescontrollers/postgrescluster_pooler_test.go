@@ -16,6 +16,7 @@ package postgrescontrollers
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	pgtesthelpers "github.com/splunk/splunk-operator/test/postgrescontrollers/helpers"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -53,9 +54,12 @@ var _ = Describe("postgrescontrollers, integration, postgres-pooler", Label("tie
 			// set (CRD validation requires it when config.connectionPooler.enabled=true).
 			pgClass := createPGClassWithPooler(ctx, kubeClient, ns)
 
+			pgClusterImages, imageErr := pgtesthelpers.PostgresImages()
+			Expect(imageErr).To(Succeed())
+			Expect(pgClusterImages.PgBouncer).NotTo(BeEmpty(), "TEST_PGBOUNCER_IMAGE is required for pooling")
 			pgCluster := &platformv1alpha1.PostgresCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "pooler-cluster", Namespace: ns},
-				Spec: platformv1alpha1.PostgresClusterSpec{
+				Spec: platformv1alpha1.PostgresClusterSpec{Images: pgClusterImages,
 					Class:                 pgClass.Name,
 					ClusterDeletionPolicy: new("Delete"),
 					Instances:             new(int32(2)),

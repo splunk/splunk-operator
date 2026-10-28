@@ -102,6 +102,7 @@ type UseCaseRegistryProvider func(types.NamespacedName, *platformv1alpha1.Postgr
 // Only fields we set in buildCNPGClusterSpec are included — CNPG-injected defaults are excluded
 // to avoid false-positive drift on every reconcile.
 type normalizedCNPGClusterSpec struct {
+	ImageCatalogRef      *cnpgv1.ImageCatalogRef
 	ImageName            string
 	ImagePullSecrets     []corev1.LocalObjectReference
 	Instances            int
@@ -195,6 +196,8 @@ type normalizedPluginSpec struct {
 // Only fields we set in buildCNPGPooler are included — CNPG/Kubernetes-injected defaults are
 // excluded to avoid false-positive drift on every reconcile.
 type normalizedCNPGPoolerSpec struct {
+	Image               string
+	ImagePullSecrets    []corev1.LocalObjectReference
 	ClusterName         string
 	Type                string
 	Instances           int32

@@ -68,7 +68,7 @@ func newPoolerModel(c client.Client, scheme *runtime.Scheme, events poolerEmitte
 
 func (p *poolerModel) poolerEnabled() bool {
 	return p.mergedConfig != nil && p.mergedConfig.Spec != nil &&
-		isPoolerEnabled(p.mergedConfig.Spec.ConnectionPooler)
+		PoolerEnabled(p.mergedConfig.Spec.ConnectionPooler)
 }
 
 func (p *poolerModel) poolerConfigPresent() bool {
@@ -102,15 +102,15 @@ func (p *poolerModel) rwPoolerWanted() bool {
 	return poolerReadWriteWanted(p.mergedConfig.Spec.ConnectionPooler)
 }
 
-// isPoolerEnabled reports whether the connection pooler is enabled by the
+// PoolerEnabled reports whether the connection pooler is enabled by the
 // supplied ConnectionPoolerEnableConfig (nil-safe).
-func isPoolerEnabled(c *platformv1alpha1.ConnectionPoolerEnableConfig) bool {
+func PoolerEnabled(c *platformv1alpha1.ConnectionPoolerEnableConfig) bool {
 	return c != nil && c.Enabled != nil && *c.Enabled
 }
 
 // poolerReadWriteWanted reports whether the RW pooler is opted-in. Default is
 // true when the parent struct exists; consumers should pair this with
-// isPoolerEnabled before acting on it.
+// PoolerEnabled before acting on it.
 func poolerReadWriteWanted(c *platformv1alpha1.ConnectionPoolerEnableConfig) bool {
 	if c == nil {
 		return false
@@ -120,7 +120,7 @@ func poolerReadWriteWanted(c *platformv1alpha1.ConnectionPoolerEnableConfig) boo
 
 // poolerReadOnlyWanted reports whether the RO pooler is opted-in. Default is
 // true when the parent struct exists; consumers should pair this with
-// isPoolerEnabled and the instances>=2 check before acting on it.
+// PoolerEnabled and the instances>=2 check before acting on it.
 func poolerReadOnlyWanted(c *platformv1alpha1.ConnectionPoolerEnableConfig) bool {
 	if c == nil {
 		return false
@@ -135,7 +135,7 @@ func PoolerReadOnlyRequested(merged *MergedConfig) bool {
 		return false
 	}
 	c := merged.Spec.ConnectionPooler
-	return isPoolerEnabled(c) && poolerReadOnlyWanted(c)
+	return PoolerEnabled(c) && poolerReadOnlyWanted(c)
 }
 
 // mergeConnectionPoolerEnable overlays cluster-level ConnectionPoolerEnableConfig
@@ -457,12 +457,20 @@ func normalizeCNPGPoolerSpec(spec cnpgv1.PoolerSpec) normalizedCNPGPoolerSpec {
 			normalized.Parameters = spec.PgBouncer.Parameters
 		}
 	}
-	if spec.Template != nil {
-		if len(spec.Template.ObjectMeta.Annotations) > 0 {
-			normalized.TemplateAnnotations = spec.Template.ObjectMeta.Annotations
-		}
-		for _, container := range spec.Template.Spec.Containers {
-			normalized.TemplateContainers = append(normalized.TemplateContainers, container.Name)
+	if spec.Template == nil {
+		return normalized
+	}
+	if len(spec.Template.ObjectMeta.Annotations) > 0 {
+		normalized.TemplateAnnotations = spec.Template.ObjectMeta.Annotations
+	}
+	normalized.ImagePullSecrets = spec.Template.Spec.ImagePullSecrets
+	if len(normalized.ImagePullSecrets) == 0 {
+		normalized.ImagePullSecrets = nil
+	}
+	for _, container := range spec.Template.Spec.Containers {
+		normalized.TemplateContainers = append(normalized.TemplateContainers, container.Name)
+		if container.Name == pgBouncerContainerName {
+			normalized.Image = container.Image
 		}
 	}
 	return normalized
@@ -471,6 +479,12 @@ func normalizeCNPGPoolerSpec(spec cnpgv1.PoolerSpec) normalizedCNPGPoolerSpec {
 func buildCNPGPooler(scheme *runtime.Scheme, cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig, cnpgCluster *cnpgv1.Cluster, poolerType string, poolerMetricsEnabled bool, environmentNamer clusteridentity.EnvironmentNamer) (*cnpgv1.Pooler, error) {
 	if cfg == nil || cfg.CNPG == nil || cfg.CNPG.ConnectionPooler == nil {
 		return nil, fmt.Errorf("connection pooler config is required")
+	}
+	if cfg.Spec == nil || cfg.Spec.Images == nil {
+		return nil, fmt.Errorf("cluster image configuration is required")
+	}
+	if cfg.Spec.Images.PgBouncer == "" {
+		return nil, fmt.Errorf("spec.images.pgbouncer is required to build a Pooler")
 	}
 	pc := cfg.CNPG.ConnectionPooler
 	instances := *pc.Instances
@@ -493,12 +507,13 @@ func buildCNPGPooler(scheme *runtime.Scheme, cluster *platformv1alpha1.PostgresC
 	}
 	// Template is always set so that annotation removal is explicit in merge patches.
 	// CNPG's Pooler CRD requires template.spec.containers to be present — a minimal
-	// named container lets CNPG's podspec builder merge in the real PgBouncer
-	// image/command/ports while still carrying our annotations.
+	// named container supplies our pinned image while CNPG merges command/ports
+	// and other defaults alongside our annotations.
 	pooler.Spec.Template = &cnpgv1.PodTemplateSpec{
 		ObjectMeta: cnpgv1.Metadata{Annotations: poolerAnnotations},
 		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{Name: "pgbouncer"}},
+			Containers:       []corev1.Container{{Name: pgBouncerContainerName, Image: string(cfg.Spec.Images.PgBouncer)}},
+			ImagePullSecrets: append([]corev1.LocalObjectReference(nil), cfg.Spec.Images.ImagePullSecrets...),
 		},
 	}
 	if err := ctrl.SetControllerReference(cluster, pooler, scheme); err != nil {

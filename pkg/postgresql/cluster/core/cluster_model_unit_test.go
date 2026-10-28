@@ -28,6 +28,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/google/go-cmp/cmp"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	pgtestfixture "github.com/splunk/splunk-operator/internal/testutil/postgres"
 	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
@@ -189,12 +190,12 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	scheme := newTestScheme()
 
 	instances := int32(3)
-	version := "15.13"
+	version := "17.13"
 	storageSize := resource.MustParse("10Gi")
 	restart := "restart"
 	switchover := "switchover"
 
-	baseSpec := &platformv1alpha1.PostgresClusterSpec{
+	baseSpec := &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 		Instances:        &instances,
 		PostgresVersion:  &version,
 		Storage:          &storageSize,
@@ -219,7 +220,7 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 	}
 	existingCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, "pg1", "pg1-secret", false),
+		Spec:       mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, currentConfig, "pg1", "pg1-secret", false),
 	}
 	events := &captureEventEmitter{}
 	c := fakeClientWithPostgreSQLParameterApply(t, scheme, nil, existingCNPG)
@@ -241,10 +242,10 @@ func TestClusterModelActuatePatchesPrimaryUpdateMethodDrift(t *testing.T) {
 func TestClusterModelReconcilesNonconventionalAuthoritativeEnvironmentIdempotently(t *testing.T) {
 	scheme := newTestScheme()
 	instances := int32(2)
-	version := "16"
+	version := platformv1alpha1.PostgresMajorVersion17
 	storageSize := resource.MustParse("10Gi")
 	mergedConfig := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -267,7 +268,7 @@ func TestClusterModelReconcilesNonconventionalAuthoritativeEnvironmentIdempotent
 	}
 	green := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: "default"},
-		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, mergedConfig, "primary-green", "primary-secret", false),
+		Spec:       mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, mergedConfig, "primary-green", "primary-secret", false),
 		Status: cnpgv1.ClusterStatus{
 			Phase:           cnpgv1.PhaseHealthy,
 			Instances:       int(instances),
@@ -309,14 +310,14 @@ func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
 
 	scheme := newTestScheme()
 
-	currentVersion := "15.10"
+	currentVersion := "17.10"
 	requestedVersion := "18"
 	instances := int32(1)
 	storageSize := resource.MustParse("10Gi")
 
 	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Spec: platformv1alpha1.PostgresClusterSpec{
+		Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			PostgresVersion: &requestedVersion,
 		},
 	}
@@ -324,7 +325,7 @@ func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 	}
 	currentConfig := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &currentVersion,
 			Storage:          &storageSize,
@@ -335,7 +336,7 @@ func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
 		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	desiredConfig := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &requestedVersion,
 			Storage:          &storageSize,
@@ -347,7 +348,7 @@ func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
 	}
 	existingCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
+		Spec:       mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
 		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, Instances: int(instances), ReadyInstances: int(instances)},
 	}
 	require.NoError(t, ctrl.SetControllerReference(cluster, existingCNPG, scheme))
@@ -368,7 +369,7 @@ func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
 
 	updated := &cnpgv1.Cluster{}
 	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
-	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:15.10", updated.Spec.ImageName)
+	assert.Equal(t, pgtestfixture.ImageForVersion(platformv1alpha1.PostgresMajorVersion17), updated.Spec.ImageName)
 
 	health, err := model.Observe(t.Context(), nil)
 	require.NoError(t, err)
@@ -376,7 +377,7 @@ func TestClusterModelBlocksMajorVersionDriftWithoutUpgradeConfig(t *testing.T) {
 	assert.Equal(t, pendingClusterPhase, health.Phase)
 	assert.Equal(t, clusterReady, health.Condition)
 	assert.Equal(t, reasonMajorUpgradeConfigRequired, health.Reason)
-	assert.Equal(t, "Detected requested PostgreSQL major version change from 15.10 to 18. Set spec.postgresMajorUpgradeConfig.allow=true to start the major upgrade workflow.", health.Message)
+	assert.Equal(t, "Detected requested PostgreSQL major version change from 17 to 18. Set spec.postgresMajorUpgradeConfig.allow=true to start the major upgrade workflow.", health.Message)
 }
 
 func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
@@ -385,13 +386,13 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 	scheme := newTestScheme()
 
 	currentVersion := "18"
-	requestedVersion := "15.10"
+	requestedVersion := "17.10"
 	instances := int32(1)
 	storageSize := resource.MustParse("10Gi")
 
 	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Spec: platformv1alpha1.PostgresClusterSpec{
+		Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			PostgresVersion: &requestedVersion,
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
 				Allow: new(true),
@@ -402,7 +403,7 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 	}
 	currentConfig := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &currentVersion,
 			Storage:          &storageSize,
@@ -413,7 +414,7 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	desiredConfig := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &requestedVersion,
 			Storage:          &storageSize,
@@ -425,7 +426,7 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 	}
 	existingCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
+		Spec:       mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
 		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, Instances: int(instances), ReadyInstances: int(instances)},
 	}
 	require.NoError(t, ctrl.SetControllerReference(cluster, existingCNPG, scheme))
@@ -446,7 +447,7 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 
 	updated := &cnpgv1.Cluster{}
 	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
-	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18", updated.Spec.ImageName)
+	assert.Equal(t, pgtestfixture.ImageForVersion(platformv1alpha1.PostgresMajorVersion18), updated.Spec.ImageName)
 
 	health, err := model.Observe(t.Context(), nil)
 	require.NoError(t, err)
@@ -454,7 +455,7 @@ func TestClusterModelBlocksMajorVersionDowngrade(t *testing.T) {
 	assert.Equal(t, pendingClusterPhase, health.Phase)
 	assert.Equal(t, clusterReady, health.Condition)
 	assert.Equal(t, reasonMajorDowngradeUnsupported, health.Reason)
-	assert.Equal(t, "Detected requested PostgreSQL major version downgrade from 18 to 15.10. Downgrades are not supported by reconciliation; restore from backup or create a new cluster.", health.Message)
+	assert.Equal(t, "Detected requested PostgreSQL major version downgrade from 18 to 17.10. Downgrades are not supported by reconciliation; restore from backup or create a new cluster.", health.Message)
 }
 
 // TestClusterModelHoldsMajorVersionUpgradeWhenAllowed verifies that allow=true does
@@ -474,14 +475,14 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 
 	scheme := newTestScheme()
 
-	currentVersion := "15.10"
+	currentVersion := "17.10"
 	requestedVersion := "18"
 	instances := int32(1)
 	storageSize := resource.MustParse("10Gi")
 
 	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"},
-		Spec: platformv1alpha1.PostgresClusterSpec{
+		Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			PostgresVersion: &requestedVersion,
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
 				Allow: new(true),
@@ -492,7 +493,7 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"},
 	}
 	currentConfig := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &currentVersion,
 			Storage:          &storageSize,
@@ -503,7 +504,7 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 		CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")},
 	}
 	desiredConfig := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &requestedVersion,
 			Storage:          &storageSize,
@@ -515,12 +516,12 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 	}
 	existingCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
+		Spec:       mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
 		Status: cnpgv1.ClusterStatus{
 			Phase:           cnpgv1.PhaseHealthy,
 			Instances:       int(instances),
 			ReadyInstances:  int(instances),
-			PGDataImageInfo: &cnpgv1.ImageInfo{Image: "ghcr.io/cloudnative-pg/postgresql:15.10", MajorVersion: 15},
+			PGDataImageInfo: &cnpgv1.ImageInfo{Image: pgtestfixture.ImageForVersion(platformv1alpha1.PostgresMajorVersion17), MajorVersion: 17},
 		},
 	}
 	require.NoError(t, ctrl.SetControllerReference(cluster, existingCNPG, scheme))
@@ -541,7 +542,7 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 
 	updated := &cnpgv1.Cluster{}
 	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(existingCNPG), updated))
-	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:15.10", updated.Spec.ImageName,
+	assert.Equal(t, pgtestfixture.ImageForVersion(platformv1alpha1.PostgresMajorVersion17), updated.Spec.ImageName,
 		"allow=true must not let the provisioner patch the major bump itself")
 
 	health, err := model.Observe(t.Context(), nil)
@@ -550,10 +551,10 @@ func TestClusterModelHoldsMajorVersionUpgradeWhenAllowed(t *testing.T) {
 	assert.Equal(t, pendingClusterPhase, health.Phase)
 	assert.Equal(t, clusterReady, health.Condition)
 	assert.Equal(t, reasonMajorUpgradePending, health.Reason)
-	assert.Equal(t, "Major version upgrade from 15.10 to 18 is allowed; holding the CNPG image until the major upgrade workflow takes ownership.", health.Message)
+	assert.Equal(t, "Major version upgrade from 17 to 18 is allowed; holding the CNPG image until the major upgrade workflow takes ownership.", health.Message)
 
 	// The held pass still publishes the observable current version projection.
-	assert.Equal(t, "15", cluster.Status.CurrentPgVersion,
+	assert.Equal(t, "17", cluster.Status.CurrentPgVersion,
 		"held provisioner must still publish CurrentPgVersion as an observability projection")
 }
 
@@ -565,18 +566,18 @@ func TestBlueGreenWaitsForSourceComponentsWithoutPatchingTargetImage(t *testing.
 	sourceStorage, targetStorage := resource.MustParse("10Gi"), resource.MustParse("12Gi")
 	cluster := &platformv1alpha1.PostgresCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "default"},
-		Spec: platformv1alpha1.PostgresClusterSpec{PostgresVersion: &targetVersion,
+		Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), PostgresVersion: &targetVersion,
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: new(true), Strategy: &strategy}},
 	}
 	config := func(version string, storage *resource.Quantity) *MergedConfig {
-		return &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{
+		return &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances: &instances, PostgresVersion: &version, Storage: storage,
 			Resources: &corev1.ResourceRequirements{}, PostgreSQLConfig: map[string]string{}, PgHBA: []string{},
 		}, CNPG: &platformv1alpha1.CNPGConfig{PrimaryUpdateMethod: new("restart")}}
 	}
 	source := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, config(sourceVersion, &sourceStorage), cluster.Name, "orders-secret", false),
+		Spec:       mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, config(sourceVersion, &sourceStorage), cluster.Name, "orders-secret", false),
 		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, Instances: 1, ReadyInstances: 1},
 	}
 	require.NoError(t, ctrl.SetControllerReference(cluster, source, scheme))
@@ -598,17 +599,15 @@ func TestClusterModelHoldsMajorVersionUpgradeForImageTagVariants(t *testing.T) {
 	t.Parallel()
 
 	requestedVersion := "18"
-	targetImage := "registry.example.com/team/postgresql:18-bookworm"
 	cluster := &platformv1alpha1.PostgresCluster{
-		Spec: platformv1alpha1.PostgresClusterSpec{
+		Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: new(true)},
 		},
 	}
 	model := &clusterModel{
 		cluster: cluster,
-		mergedConfig: &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{
+		mergedConfig: &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			PostgresVersion: &requestedVersion,
-			PostgresImage:   &targetImage,
 		}},
 	}
 
@@ -627,10 +626,10 @@ func TestClusterModelAppliesPostgreSQLParametersWithSSAOwnership(t *testing.T) {
 	scheme := newTestScheme()
 
 	instances := int32(1)
-	version := "16"
+	version := platformv1alpha1.PostgresMajorVersion17
 	storageSize := resource.MustParse("10Gi")
 
-	currentSpec := &platformv1alpha1.PostgresClusterSpec{
+	currentSpec := &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 		Instances:       &instances,
 		PostgresVersion: &version,
 		Storage:         &storageSize,
@@ -667,7 +666,7 @@ func TestClusterModelAppliesPostgreSQLParametersWithSSAOwnership(t *testing.T) {
 			Namespace:   cluster.Namespace,
 			Annotations: map[string]string{},
 		},
-		Spec: buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
+		Spec: mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
 	}
 	require.NoError(t, ctrl.SetControllerReference(cluster, existingCNPG, scheme))
 	existingCNPG.Spec.PostgresConfiguration.Parameters["cnpg_injected"] = "keep-me"
@@ -694,10 +693,10 @@ func TestClusterModelAdoptsAndPrunesLegacyPostgreSQLParameters(t *testing.T) {
 	scheme := newTestScheme()
 
 	instances := int32(1)
-	version := "16"
+	version := platformv1alpha1.PostgresMajorVersion17
 	storageSize := resource.MustParse("10Gi")
 
-	currentSpec := &platformv1alpha1.PostgresClusterSpec{
+	currentSpec := &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 		Instances:       &instances,
 		PostgresVersion: &version,
 		Storage:         &storageSize,
@@ -754,7 +753,7 @@ func TestClusterModelAdoptsAndPrunesLegacyPostgreSQLParameters(t *testing.T) {
 				},
 			},
 		},
-		Spec: buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
+		Spec: mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, currentConfig, cluster.Name, "pg1-secret", false),
 	}
 	require.NoError(t, ctrl.SetControllerReference(cluster, existingCNPG, scheme))
 	existingCNPG.Spec.PostgresConfiguration.Parameters["application_name"] = "keep-me"
@@ -800,28 +799,29 @@ func TestGetMergedConfig(t *testing.T) {
 	t.Run("cluster spec overrides class defaults", func(t *testing.T) {
 		overrideInstances := int32(5)
 		overrideVersion := "18"
-		overrideImage := "registry.example.com/team/postgresql:18.2"
+		overrideImage := pgtestfixture.ImageForVersion("18.2")
 		overridePullSecrets := []corev1.LocalObjectReference{{Name: "cluster-registry-creds"}}
 		overrideStorage := resource.MustParse("100Gi")
 		cluster := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{
-				Instances:        &overrideInstances,
-				PostgresVersion:  &overrideVersion,
-				PostgresImage:    &overrideImage,
-				ImagePullSecrets: overridePullSecrets,
+			Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
+				Instances:       &overrideInstances,
+				PostgresVersion: &overrideVersion,
+
 				Storage:          &overrideStorage,
 				PostgreSQLConfig: map[string]string{"max_connections": "200"},
 				PgHBA:            []string{"hostssl all all 0.0.0.0/0 scram-sha-256"},
 			},
 		}
 
+		cluster.Spec.Images.PostgreSQL[overrideVersion] = platformv1alpha1.PinnedImageReference(overrideImage)
+		cluster.Spec.Images.ImagePullSecrets = overridePullSecrets
 		cfg := GetMergedConfig(baseClass, cluster)
 
 		require.Empty(t, ValidateMergedConfig(cfg, baseClass.Name))
 		assert.Equal(t, int32(5), *cfg.Spec.Instances)
 		assert.Equal(t, "18", *cfg.Spec.PostgresVersion)
-		assert.Equal(t, overrideImage, *cfg.Spec.PostgresImage)
-		assert.Equal(t, overridePullSecrets, cfg.Spec.ImagePullSecrets)
+		assert.Equal(t, overrideImage, string(cfg.Spec.Images.PostgreSQL[overrideVersion]))
+		assert.Equal(t, overridePullSecrets, cfg.Spec.Images.ImagePullSecrets)
 		assert.Equal(t, "100Gi", cfg.Spec.Storage.String())
 		assert.Equal(t, "200", cfg.Spec.PostgreSQLConfig["max_connections"])
 		assert.Equal(t, "hostssl all all 0.0.0.0/0 scram-sha-256", cfg.Spec.PgHBA[0])
@@ -853,71 +853,18 @@ func TestGetMergedConfig(t *testing.T) {
 	})
 
 	t.Run("class defaults fill in nil cluster fields", func(t *testing.T) {
-		classImage := "registry.example.com/platform/postgresql:17.4"
-		classPullSecrets := []corev1.LocalObjectReference{{Name: "class-registry-creds"}}
-		baseClass.Spec.Config.PostgresImage = &classImage
-		baseClass.Spec.Config.ImagePullSecrets = classPullSecrets
-		t.Cleanup(func() {
-			baseClass.Spec.Config.PostgresImage = nil
-			baseClass.Spec.Config.ImagePullSecrets = nil
-		})
-		cluster := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{},
-		}
-
+		cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()}}
 		cfg := GetMergedConfig(baseClass, cluster)
-
 		require.Empty(t, ValidateMergedConfig(cfg, baseClass.Name))
-		assert.Equal(t, int32(1), *cfg.Spec.Instances)
-		assert.Equal(t, "17", *cfg.Spec.PostgresVersion)
-		assert.Equal(t, classImage, *cfg.Spec.PostgresImage)
-		assert.Equal(t, classPullSecrets, cfg.Spec.ImagePullSecrets)
-		assert.Equal(t, "50Gi", cfg.Spec.Storage.String())
-		assert.Equal(t, "128MB", cfg.Spec.PostgreSQLConfig["shared_buffers"])
+		assert.Equal(t, classInstances, *cfg.Spec.Instances)
+		assert.Equal(t, classVersion, *cfg.Spec.PostgresVersion)
+		assert.Equal(t, classStorage, *cfg.Spec.Storage)
 	})
-
-	t.Run("explicit empty cluster image pull secrets clear class default", func(t *testing.T) {
-		classPullSecrets := []corev1.LocalObjectReference{{Name: "class-registry-creds"}}
-		baseClass.Spec.Config.ImagePullSecrets = classPullSecrets
-		t.Cleanup(func() { baseClass.Spec.Config.ImagePullSecrets = nil })
-		cluster := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{
-				ImagePullSecrets: []corev1.LocalObjectReference{},
-			},
-		}
-
+	t.Run("merged image mapping does not alias cluster spec", func(t *testing.T) {
+		cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()}}
 		cfg := GetMergedConfig(baseClass, cluster)
-
-		require.Empty(t, ValidateMergedConfig(cfg, baseClass.Name))
-		assert.NotNil(t, cfg.Spec.ImagePullSecrets)
-		assert.Empty(t, cfg.Spec.ImagePullSecrets)
-	})
-
-	t.Run("empty cluster postgres image inherits class default", func(t *testing.T) {
-		classImage := "registry.example.com/platform/postgresql:17.4"
-		emptyImage := "  "
-		baseClass.Spec.Config.PostgresImage = &classImage
-		t.Cleanup(func() { baseClass.Spec.Config.PostgresImage = nil })
-		cluster := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{PostgresImage: &emptyImage},
-		}
-
-		cfg := GetMergedConfig(baseClass, cluster)
-
-		require.Empty(t, ValidateMergedConfig(cfg, baseClass.Name))
-		assert.Equal(t, classImage, *cfg.Spec.PostgresImage)
-	})
-
-	t.Run("merged postgres image does not alias cluster spec pointer", func(t *testing.T) {
-		image := "registry.example.com/team/postgresql:17.4"
-		cluster := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{PostgresImage: &image},
-		}
-
-		cfg := GetMergedConfig(baseClass, cluster)
-		*cfg.Spec.PostgresImage = "registry.example.com/team/postgresql:17.5"
-
-		assert.Equal(t, image, *cluster.Spec.PostgresImage)
+		cfg.Spec.Images.PostgreSQL[classVersion] = platformv1alpha1.PinnedImageReference(pgtestfixture.ImageForVersion(classVersion + ".1"))
+		assert.NotEqual(t, cfg.Spec.Images.PostgreSQL[classVersion], cluster.Spec.Images.PostgreSQL[classVersion])
 	})
 
 	t.Run("returns error when required fields missing from both", func(t *testing.T) {
@@ -926,7 +873,7 @@ func TestGetMergedConfig(t *testing.T) {
 			Spec:       platformv1alpha1.PostgresClusterClassSpec{},
 		}
 		cluster := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{},
+			Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()},
 		}
 
 		cfg := GetMergedConfig(emptyClass, cluster)
@@ -936,7 +883,7 @@ func TestGetMergedConfig(t *testing.T) {
 
 	t.Run("CNPG config comes from class not cluster", func(t *testing.T) {
 		cluster := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{},
+			Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()},
 		}
 
 		cfg := GetMergedConfig(baseClass, cluster)
@@ -959,7 +906,7 @@ func TestGetMergedConfig(t *testing.T) {
 				},
 			},
 		}
-		cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{}}
+		cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()}}
 
 		cfg := GetMergedConfig(badClass, cluster)
 		errs := ValidateMergedConfig(cfg, badClass.Name)
@@ -968,7 +915,7 @@ func TestGetMergedConfig(t *testing.T) {
 		assert.Contains(t, errs[0].Error(), "ssl")
 
 		clusterOverride := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{
+			Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Instances:       &classInstances,
 				PostgresVersion: &classVersion,
 				Storage:         &classStorage,
@@ -997,7 +944,7 @@ func TestGetMergedConfig(t *testing.T) {
 			},
 		}
 		cluster := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{},
+			Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()},
 		}
 
 		cfg := GetMergedConfig(classWithNoMaps, cluster)
@@ -1012,7 +959,7 @@ func TestGetMergedConfig(t *testing.T) {
 		enabled := true
 		sixField := "0 */5 * * * *"
 		cluster := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{
+			Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Backup: &platformv1alpha1.BackupConfig{
 					Enabled:  &enabled,
 					Schedule: &sixField,
@@ -1032,7 +979,7 @@ func TestGetMergedConfig(t *testing.T) {
 		enabled := true
 		fiveField := "*/5 * * * *"
 		cluster := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{
+			Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Backup: &platformv1alpha1.BackupConfig{
 					Enabled:  &enabled,
 					Schedule: &fiveField,
@@ -1046,64 +993,6 @@ func TestGetMergedConfig(t *testing.T) {
 		require.Empty(t, errs)
 	})
 
-	t.Run("rejects invalid postgres image references", func(t *testing.T) {
-		tests := []struct {
-			name  string
-			image string
-			want  string
-		}{
-			{name: "url", image: "https://registry.example.com/team/postgresql:17.5", want: "not a URL"},
-			{name: "empty name", image: ":17.5", want: "valid image reference"},
-			{name: "double slash", image: "registry.example.com//postgresql:17.5", want: "valid image reference"},
-			{name: "empty digest", image: "registry.example.com/team/postgresql:17.5@", want: "digest suffix must not be empty"},
-			{name: "invalid digest", image: "registry.example.com/team/postgresql:17.5@sha256:nothex", want: "valid image reference"},
-			{name: "invalid sha512 digest length", image: "registry.example.com/team/postgresql:17.5@sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", want: "valid image reference"},
-			{name: "uppercase repository", image: "registry.example.com/team/PostgreSQL:17.5", want: "valid image reference"},
-			{name: "invalid tag", image: "registry.example.com/team/postgresql:17+5", want: "valid image reference"},
-			{name: "missing tag", image: "registry.example.com/team/postgresql", want: "must include a tag"},
-			{name: "digest only", image: "registry.example.com/team/postgresql@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", want: "must include a tag"},
-			{name: "latest", image: "registry.example.com/team/postgresql:latest", want: "latest"},
-			{name: "tag does not start with major", image: "registry.example.com/team/postgresql:v17", want: "must start with the PostgreSQL major"},
-			{name: "major mismatch", image: "registry.example.com/team/postgresql:16.8", want: "must match postgresVersion major version 17"},
-		}
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{PostgresImage: &tt.image}}
-				cfg := GetMergedConfig(baseClass, cluster)
-
-				errs := ValidateMergedConfig(cfg, baseClass.Name)
-
-				require.NotEmpty(t, errs)
-				assert.Equal(t, "spec.postgresImage", errs[0].Field)
-				assert.Contains(t, errs[0].Error(), tt.want)
-			})
-		}
-	})
-
-	t.Run("accepts tag plus digest postgres image", func(t *testing.T) {
-		image := "registry.example.com/team/postgresql:17.5@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-		cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{PostgresImage: &image}}
-
-		cfg := GetMergedConfig(baseClass, cluster)
-
-		require.Empty(t, ValidateMergedConfig(cfg, baseClass.Name))
-		assert.Equal(t, image, *cfg.Spec.PostgresImage)
-	})
-
-	t.Run("rejects image pull secret without name", func(t *testing.T) {
-		cluster := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{
-				ImagePullSecrets: []corev1.LocalObjectReference{{}},
-			},
-		}
-
-		cfg := GetMergedConfig(baseClass, cluster)
-		errs := ValidateMergedConfig(cfg, baseClass.Name)
-
-		require.NotEmpty(t, errs)
-		assert.Equal(t, "spec.imagePullSecrets[0].name", errs[0].Field)
-		assert.Contains(t, errs[0].Error(), "must not be empty")
-	})
 }
 
 func TestBuildCNPGClusterSpec(t *testing.T) {
@@ -1112,7 +1001,7 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 	storage := resource.MustParse("50Gi")
 	primaryUpdateMethod := "switchover"
 	cfg := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			PostgresVersion: &version,
 			Instances:       &instances,
 			Storage:         &storage,
@@ -1131,9 +1020,9 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 		},
 	}
 
-	spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "my-secret", false)
+	spec := mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, cfg, "c1", "my-secret", false)
 
-	assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18", spec.ImageName)
+	assert.Equal(t, pgtestfixture.ImageForVersion(platformv1alpha1.PostgresMajorVersion18), spec.ImageName)
 	assert.Equal(t, 3, spec.Instances)
 	require.NotNil(t, spec.SuperuserSecret)
 	assert.Equal(t, "my-secret", spec.SuperuserSecret.Name)
@@ -1153,28 +1042,37 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 	assert.Empty(t, spec.InheritedMetadata.Annotations)
 
 	t.Run("uses explicit postgres image when configured", func(t *testing.T) {
-		image := "registry.example.com/team/postgresql:18.1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		image := pgtestfixture.ImageForVersion(version + ".1")
 		specCopy := *cfg.Spec
-		specCopy.PostgresImage = &image
+		specCopy.Images = cfg.Spec.Images.DeepCopy()
+		specCopy.Images.PostgreSQL[version] = platformv1alpha1.PinnedImageReference(image)
 		imageCfg := MergedConfig{Spec: &specCopy, CNPG: cfg.CNPG}
 
-		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, &imageCfg, "c1", "my-secret", false)
+		spec := mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, &imageCfg, "c1", "my-secret", false)
 
 		assert.Equal(t, image, spec.ImageName)
 	})
 
+	t.Run("removes a conflicting image catalog", func(t *testing.T) {
+		live := cnpgv1.ClusterSpec{ImageCatalogRef: &cnpgv1.ImageCatalogRef{TypedLocalObjectReference: corev1.TypedLocalObjectReference{Name: "external"}}}
+		spec := mustBuildCNPGClusterSpec(t, live, cfg, "c1", "my-secret", false)
+		assert.Nil(t, spec.ImageCatalogRef)
+		assert.NotEqual(t, normalizeCNPGClusterSpec(live), normalizeCNPGClusterSpec(spec))
+	})
+
 	t.Run("passes image pull secrets through to CNPG", func(t *testing.T) {
 		specCopy := *cfg.Spec
-		specCopy.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "registry-creds"}}
+		specCopy.Images = cfg.Spec.Images.DeepCopy()
+		specCopy.Images.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "registry-creds"}}
 		pullCfg := MergedConfig{Spec: &specCopy, CNPG: cfg.CNPG}
 
-		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, &pullCfg, "c1", "my-secret", false)
+		spec := mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, &pullCfg, "c1", "my-secret", false)
 
 		assert.Equal(t, []cnpgv1.LocalObjectReference{{Name: "registry-creds"}}, spec.ImagePullSecrets)
 	})
 
 	t.Run("adds postgres scrape annotations when enabled", func(t *testing.T) {
-		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "my-secret", true)
+		spec := mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, cfg, "c1", "my-secret", true)
 
 		require.NotNil(t, spec.InheritedMetadata)
 		assert.Equal(t, "true", spec.InheritedMetadata.Annotations[prometheusScrapeAnnotation])
@@ -1189,11 +1087,11 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 		}
 
 		liveCluster := cnpgv1.ClusterSpec{Managed: &cnpgv1.ManagedConfiguration{Roles: managedRoles}}
-		spec := buildCNPGClusterSpec(liveCluster, cfg, "c1", "my-secret", true)
+		spec := mustBuildCNPGClusterSpec(t, liveCluster, cfg, "c1", "my-secret", true)
 
 		require.NotNil(t, spec.Managed)
 		assert.Equal(t, managedRoles, spec.Managed.Roles)
-		assert.Equal(t, "ghcr.io/cloudnative-pg/postgresql:18", spec.ImageName)
+		assert.Equal(t, pgtestfixture.ImageForVersion(platformv1alpha1.PostgresMajorVersion18), spec.ImageName)
 		assert.Equal(t, 3, spec.Instances)
 		require.NotNil(t, spec.SuperuserSecret)
 		assert.Equal(t, "my-secret", spec.SuperuserSecret.Name)
@@ -1213,7 +1111,7 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 		}
 		backupCfg := MergedConfig{Spec: &specCopy, CNPG: &cnpgCopy}
 
-		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, &backupCfg, "c1", "my-secret", false)
+		spec := mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, &backupCfg, "c1", "my-secret", false)
 
 		require.NotNil(t, spec.Backup)
 		require.NotNil(t, spec.Backup.VolumeSnapshot)
@@ -1233,7 +1131,7 @@ func TestBuildCNPGClusterSpec(t *testing.T) {
 		cnpgCopy := *cfg.CNPG
 		disabledCfg := MergedConfig{Spec: &specCopy, CNPG: &cnpgCopy}
 
-		spec := buildCNPGClusterSpec(liveSpec, &disabledCfg, "c1", "my-secret", false)
+		spec := mustBuildCNPGClusterSpec(t, liveSpec, &disabledCfg, "c1", "my-secret", false)
 
 		assert.Nil(t, spec.Backup, "stale backup config must be cleared when backup is disabled")
 	})
@@ -1255,7 +1153,7 @@ func TestBuildCNPGCluster(t *testing.T) {
 		},
 	}
 	cfg := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storage,
@@ -1785,10 +1683,10 @@ func TestClusterModelAdoptsOrphanedCNPGCluster(t *testing.T) {
 	scheme := newTestScheme()
 
 	instances := int32(1)
-	version := "16"
+	version := platformv1alpha1.PostgresMajorVersion17
 	storageSize := resource.MustParse("10Gi")
 	cfg := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -1802,7 +1700,7 @@ func TestClusterModelAdoptsOrphanedCNPGCluster(t *testing.T) {
 	clusterClass := &platformv1alpha1.PostgresClusterClass{ObjectMeta: metav1.ObjectMeta{Name: "pg1-class"}}
 	orphanedCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "pg1-secret", false),
+		Spec:       mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, cfg, "c1", "pg1-secret", false),
 	}
 	events := &captureEventEmitter{}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(orphanedCNPG).Build()
@@ -1894,10 +1792,10 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 	}
 
 	instances := int32(1)
-	version := "16"
+	version := platformv1alpha1.PostgresMajorVersion17
 	storageSize := resource.MustParse("10Gi")
 	mergedConfig := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -1933,7 +1831,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 		}
 		cnpg := &cnpgv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-			Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, mergedConfig, cluster.Name, "pg1-secret", false),
+			Spec:       mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, mergedConfig, cluster.Name, "pg1-secret", false),
 			Status:     cnpgStatus,
 		}
 		require.NoError(t, ctrl.SetControllerReference(cluster, cnpg, scheme))
@@ -1954,7 +1852,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 				cluster := examplePgCluster.DeepCopy()
 				cnpg := &cnpgv1.Cluster{
 					ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-					Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, mergedConfig, cluster.Name, "pg1-secret", false),
+					Spec:       mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, mergedConfig, cluster.Name, "pg1-secret", false),
 					Status: cnpgv1.ClusterStatus{
 						Phase:          cnpgv1.PhaseHealthy,
 						Instances:      int(instances),
@@ -2338,11 +2236,11 @@ func TestClusterModelActuatePreservesManagedRoles(t *testing.T) {
 	require.NoError(t, corev1.AddToScheme(scheme))
 
 	instances := int32(3)
-	version := "15.13"
+	version := "17.13"
 	storageSize := resource.MustParse("10Gi")
 
 	cfg := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -2362,7 +2260,7 @@ func TestClusterModelActuatePreservesManagedRoles(t *testing.T) {
 
 	existingCNPG := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace},
-		Spec:       buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "pg1-secret", false),
+		Spec:       mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, cfg, "c1", "pg1-secret", false),
 	}
 	roleConfig := cnpgv1.ManagedConfiguration{
 		Roles: []cnpgv1.RoleConfiguration{
@@ -2373,7 +2271,7 @@ func TestClusterModelActuatePreservesManagedRoles(t *testing.T) {
 
 	updatedInstances := int32(5)
 	driftedCfg := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &updatedInstances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -2404,10 +2302,10 @@ func TestClusterModelReconcilePatchesPoolerSANDrift(t *testing.T) {
 	// Reconcile must detect SAN drift and issue a single patch.
 	scheme := newTestScheme()
 	instances := int32(1)
-	version := "16"
+	version := platformv1alpha1.PostgresMajorVersion17
 	storageSize := resource.MustParse("10Gi")
 	mergedConfig := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -2715,7 +2613,7 @@ func defaultRoundTripFixture() roundTripFixture {
 
 func (f roundTripFixture) mergedConfig() *MergedConfig {
 	cfg := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        new(f.instances),
 			PostgresVersion:  new(f.postgresVersion),
 			Storage:          new(f.storage),
@@ -2813,7 +2711,7 @@ func TestBuildCNPGClusterSpec_RoundTripUnderCRDDefaulting(t *testing.T) {
 			t.Parallel()
 
 			cfg := tc.fixture.mergedConfig()
-			desiredSpec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "test-secret", tc.fixture.metricsEnabled)
+			desiredSpec := mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, cfg, "c1", "test-secret", tc.fixture.metricsEnabled)
 
 			beforeRT := &cnpgv1.Cluster{
 				TypeMeta: metav1.TypeMeta{
@@ -2850,7 +2748,7 @@ func TestBuildCNPGClusterSpec_RoundTrip_NegativeControl(t *testing.T) {
 	ss := loadCNPGClusterStructuralSchema(t)
 
 	cfg := defaultRoundTripFixture().mergedConfig()
-	desiredSpec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "test-secret", false)
+	desiredSpec := mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, cfg, "c1", "test-secret", false)
 	desiredSpec.PrimaryUpdateMethod = "" // simulate pre-fix builder
 
 	beforeRT := &cnpgv1.Cluster{
@@ -2877,10 +2775,10 @@ func TestClusterModelObserve_PhaseGate(t *testing.T) {
 
 	scheme := newTestScheme()
 	instances := int32(1)
-	version := "16"
+	version := platformv1alpha1.PostgresMajorVersion17
 	storageSize := resource.MustParse("10Gi")
 	cfg := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storageSize,
@@ -3050,7 +2948,7 @@ func TestClusterModelScaleInProgress(t *testing.T) {
 
 	desired := int32(3)
 	cfg := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{Instances: &desired},
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), Instances: &desired},
 	}
 
 	tests := []struct {
@@ -3111,7 +3009,7 @@ func TestClusterModelComputeHealthMirrorsCNPGStatus(t *testing.T) {
 
 	desired := int32(3)
 	cfg := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{Instances: &desired, PostgreSQLConfig: map[string]string{}},
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), Instances: &desired, PostgreSQLConfig: map[string]string{}},
 	}
 	cluster := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "pg1", Namespace: "default"}}
 	model := &clusterModel{
@@ -3147,7 +3045,7 @@ func TestClusterModelComputeHealthGatesScale(t *testing.T) {
 
 	desired := int32(3)
 	cfg := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{Instances: &desired, PostgreSQLConfig: map[string]string{}},
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), Instances: &desired, PostgreSQLConfig: map[string]string{}},
 	}
 	newModel := func(instances, ready int) *clusterModel {
 		return &clusterModel{
@@ -3217,7 +3115,7 @@ func TestValidateCrossResourceScalingGuardrails(t *testing.T) {
 		{
 			name:      "switchover with cluster instances=1 rejected",
 			class:     switchoverClass(new(int32(3))),
-			cluster:   &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Instances: new(int32(1))}},
+			cluster:   &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), Instances: new(int32(1))}},
 			wantField: "spec.instances",
 		},
 		{
@@ -3229,19 +3127,19 @@ func TestValidateCrossResourceScalingGuardrails(t *testing.T) {
 		{
 			name:    "switchover with cluster instances=2 accepted",
 			class:   switchoverClass(new(int32(1))),
-			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Instances: new(int32(2))}},
+			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), Instances: new(int32(2))}},
 		},
 		{
 			name:  "readOnly pooler at instances=1 NOT rejected (runtime suppresses RO)",
 			class: poolerClass(new(int32(1))),
-			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{
+			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(true), ReadOnly: new(true)},
 			}},
 		},
 		{
 			name:  "readOnly pooler with cluster instances=2 accepted",
 			class: poolerClass(new(int32(1))),
-			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{
+			cluster: &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Instances:        new(int32(2)),
 				ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(true), ReadOnly: new(true)},
 			}},

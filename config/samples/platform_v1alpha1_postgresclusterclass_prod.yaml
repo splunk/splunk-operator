@@ -15,13 +15,8 @@ spec:
     # Production storage
     storage: 100Gi
 
-    # PostgreSQL 18.1 (specific minor version)
-    postgresVersion: "18.1"
-    # Optional default CNPG-compatible PostgreSQL image and pull secret for
-    # clusters using this class. Cluster-level values take precedence.
-    # postgresImage: registry.example.com/team/postgresql:18.1
-    # imagePullSecrets:
-    #   - name: registry-creds
+    # PostgreSQL 17; each cluster pins its exact image build
+    postgresVersion: "17"
 
     # Production-grade resources
     resources:

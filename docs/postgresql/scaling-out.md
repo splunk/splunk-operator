@@ -4,6 +4,12 @@ parent: PostgreSQL
 nav_order: 5
 ---
 
+Image references below are template variables. Set them to approved complete
+`tag@sha256` references and render standalone YAML with `envsubst` before applying.
+See [image configuration](quickstart.md#3-create-a-postgresql-cluster) for the
+required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
+
+
 # PostgresCluster Scaling
 
 This document describes how to scale out or scale down a Splunk Operator `PostgresCluster` by changing the number of instances, what guard rails the operator enforces, and what level of interruption to expect.
@@ -83,6 +89,13 @@ kind: PostgresCluster
 metadata:
   name: postgresql-cluster-dev
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: postgresql-dev
   instances: 3
 ```
@@ -159,6 +172,13 @@ spec:
 apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: postgresql-prod
   connectionPooler:
     readOnly: false     # opt out of the RO pooler explicitly
