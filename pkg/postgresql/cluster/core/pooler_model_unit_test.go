@@ -22,6 +22,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	pgtestfixture "github.com/splunk/splunk-operator/internal/testutil/postgres"
 	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 	"github.com/stretchr/testify/assert"
@@ -41,7 +42,7 @@ func poolerEnabledConfig() *MergedConfig {
 	instances := int32(3)
 	mode := platformv1alpha1.ConnectionPoolerModeTransaction
 	return &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(true)},
 		},
 		CNPG: &platformv1alpha1.CNPGConfig{
@@ -331,14 +332,13 @@ func TestCreateConnectionPooler(t *testing.T) {
 			Namespace: "default",
 		},
 	}
-	cfg := &MergedConfig{
-		CNPG: &platformv1alpha1.CNPGConfig{
-			ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{
-				Instances: &poolerInstances,
-				Mode:      &poolerMode,
-				Config:    map[string]string{"default_pool_size": "25"},
-			},
+	cfg := &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()}, CNPG: &platformv1alpha1.CNPGConfig{
+		ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{
+			Instances: &poolerInstances,
+			Mode:      &poolerMode,
+			Config:    map[string]string{"default_pool_size": "25"},
 		},
+	},
 	}
 
 	tests := []struct {
@@ -399,14 +399,13 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 			Namespace: "default",
 		},
 	}
-	cfg := &MergedConfig{
-		CNPG: &platformv1alpha1.CNPGConfig{
-			ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{
-				Instances: &poolerInstances,
-				Mode:      &poolerMode,
-				Config:    map[string]string{"default_pool_size": "25"},
-			},
+	cfg := &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()}, CNPG: &platformv1alpha1.CNPGConfig{
+		ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{
+			Instances: &poolerInstances,
+			Mode:      &poolerMode,
+			Config:    map[string]string{"default_pool_size": "25"},
 		},
+	},
 	}
 
 	expectedPoolerSpec := func(poolerType string) cnpgv1.PoolerSpec {
@@ -419,7 +418,7 @@ func TestCreateOrUpdateConnectionPoolers(t *testing.T) {
 				Parameters: map[string]string{"default_pool_size": "25"},
 			},
 			Template: &cnpgv1.PodTemplateSpec{
-				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "pgbouncer"}}},
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: pgBouncerContainerName, Image: string(cfg.Spec.Images.PgBouncer)}}},
 			},
 		}
 	}
@@ -542,14 +541,13 @@ func TestBuildCNPGPooler(t *testing.T) {
 			Name: "my-cluster",
 		},
 	}
-	cfg := &MergedConfig{
-		CNPG: &platformv1alpha1.CNPGConfig{
-			ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{
-				Instances: &poolerInstances,
-				Mode:      &poolerMode,
-				Config:    map[string]string{"default_pool_size": "25"},
-			},
+	cfg := &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()}, CNPG: &platformv1alpha1.CNPGConfig{
+		ConnectionPooler: &platformv1alpha1.ConnectionPoolerConfig{
+			Instances: &poolerInstances,
+			Mode:      &poolerMode,
+			Config:    map[string]string{"default_pool_size": "25"},
 		},
+	},
 	}
 
 	t.Run("rw pooler", func(t *testing.T) {
@@ -834,7 +832,7 @@ func TestPoolerModelConvergeSetsConnectionPoolerStatus(t *testing.T) {
 		contracts := &reconcileContracts{CNPGCluster: healthyCNPG, EnvironmentNamer: testEnvironmentNamer}
 		model := newPoolerModel(
 			fake.NewClientBuilder().WithScheme(scheme).Build(),
-			scheme, noopEventEmitter{}, nil, cluster, clusterClass, &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{}}, contracts,
+			scheme, noopEventEmitter{}, nil, cluster, clusterClass, &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()}}, contracts,
 		)
 
 		// Act
@@ -1044,7 +1042,7 @@ func TestPoolerModelActuateDisabledIsCleanWhenCNPGAbsent(t *testing.T) {
 	contracts := &reconcileContracts{EnvironmentNamer: testEnvironmentNamer} // no CNPGCluster — bootstrap race
 	model := newPoolerModel(
 		fake.NewClientBuilder().WithScheme(scheme).Build(),
-		scheme, events, nil, cluster, clusterClass, &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{}}, contracts,
+		scheme, events, nil, cluster, clusterClass, &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()}}, contracts,
 	)
 
 	reconcileErr := model.Reconcile(t.Context())
@@ -1087,7 +1085,7 @@ func TestPoolerModelActuateDisabledDeletesManagedEnvironmentPoolers(t *testing.T
 	model := newPoolerModel(
 		fake.NewClientBuilder().WithScheme(scheme).WithObjects(poolers...).Build(),
 		scheme, noopEventEmitter{}, nil, cluster, nil,
-		&MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{}}, contracts,
+		&MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()}}, contracts,
 	)
 
 	require.NoError(t, model.Reconcile(t.Context()))
@@ -1107,7 +1105,7 @@ func TestPoolerModelROPoolerWanted(t *testing.T) {
 
 	poolerOptedIn := &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(true)}
 	specWith := func(instances *int32, pooler *platformv1alpha1.ConnectionPoolerEnableConfig) *platformv1alpha1.PostgresClusterSpec {
-		return &platformv1alpha1.PostgresClusterSpec{Instances: instances, ConnectionPooler: pooler}
+		return &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), Instances: instances, ConnectionPooler: pooler}
 	}
 
 	tests := []struct {
@@ -1136,7 +1134,7 @@ func TestPoolerModelRWPoolerWanted(t *testing.T) {
 	t.Parallel()
 
 	specWith := func(pooler *platformv1alpha1.ConnectionPoolerEnableConfig) *platformv1alpha1.PostgresClusterSpec {
-		return &platformv1alpha1.PostgresClusterSpec{ConnectionPooler: pooler}
+		return &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), ConnectionPooler: pooler}
 	}
 
 	tests := []struct {

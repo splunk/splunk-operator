@@ -148,24 +148,19 @@ func (r *PostgresClusterReconciler) useCaseRegistry(key types.NamespacedName, cl
 // already decided this use case is relevant before registering it).
 func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedName, cluster *platformv1alpha1.PostgresCluster, mergedConfig *clustercore.MergedConfig) usecases.Factory {
 	return func() (usecases.UseCase, error) {
-		targetVersion := ""
-		if mergedConfig != nil && mergedConfig.Spec != nil && mergedConfig.Spec.PostgresVersion != nil {
-			targetVersion = *mergedConfig.Spec.PostgresVersion
+		targetImage, err := clustercore.EffectivePostgresImage(mergedConfig)
+		if err != nil {
+			return nil, fmt.Errorf("resolve major-upgrade target image: %w", err)
 		}
+		targetVersion := *mergedConfig.Spec.PostgresVersion
 
 		backupMethod, backupPluginName, providerConfigured := clustercore.EffectiveBackupProvider(mergedConfig)
 
 		stateStore := clusterk8s.NewClusterStateStore(r.Client, key)
 		infoStore := majorupgradeadapter.NewMajorUpgradeStateStoreWithTarget(stateStore, targetVersion)
-		targetImage := ""
-		blueGreenPlan := majorupgradeadapter.BlueGreenPreflightPlan{}
-		blueGreenCandidatePlan := majorupgradeadapter.BlueGreenCandidatePlan{}
-		if mergedConfig != nil && mergedConfig.Spec != nil && mergedConfig.Spec.PostgresVersion != nil {
-			targetImage = clustercore.EffectivePostgresImage(mergedConfig)
-			blueGreenPlan, blueGreenCandidatePlan = blueGreenUpgradePlans(mergedConfig, targetImage)
-		}
+		blueGreenPlan, blueGreenCandidatePlan := blueGreenUpgradePlans(mergedConfig, targetImage)
 		driver := majorupgradeadapter.NewPgUpgradeDriver(r.Client, key, targetVersion, targetImage).
-			WithImagePullSecrets(clustercore.EffectiveCNPGImagePullSecrets(mergedConfig))
+			WithImagePullSecrets(cnpgadapter.ImagePullSecrets(mergedConfig.Spec.Images.ImagePullSecrets))
 
 		var notifier *majorupgradeadapter.UpgradeNotifier
 		if cluster != nil {

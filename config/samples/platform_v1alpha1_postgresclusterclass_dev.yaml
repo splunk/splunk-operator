@@ -14,13 +14,8 @@ spec:
     # Small storage for development
     storage: 10Gi
 
-    # Latest PostgreSQL 18
-    postgresVersion: "18"
-    # Optional default CNPG-compatible PostgreSQL image and pull secret for
-    # clusters using this class. Cluster-level values take precedence.
-    # postgresImage: registry.example.com/team/postgresql:18
-    # imagePullSecrets:
-    #   - name: registry-creds
+    # Default major; each cluster supplies its pinned image mapping
+    postgresVersion: "17"
 
     # Minimal resources
     resources:

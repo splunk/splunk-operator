@@ -236,8 +236,14 @@ metadata:
           "spec": {
             "class": "postgresql-dev",
             "clusterDeletionPolicy": "Retain",
+            "images": {
+              "pgbouncer": "${TEST_PGBOUNCER_IMAGE}",
+              "postgresql": {
+                "17": "${TEST_PG17_IMAGE}"
+              }
+            },
             "instances": 3,
-            "postgresVersion": "18.0",
+            "postgresVersion": "17.0",
             "resources": {
               "limits": {
                 "cpu": "500m",
@@ -282,7 +288,7 @@ metadata:
                   "enabled": true
                 }
               },
-              "postgresVersion": "18",
+              "postgresVersion": "17",
               "resources": {
                 "limits": {
                   "cpu": "1",

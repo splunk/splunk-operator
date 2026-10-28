@@ -20,6 +20,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	pgtestfixture "github.com/splunk/splunk-operator/internal/testutil/postgres"
 	"github.com/splunk/splunk-operator/pkg/postgresql/shared/recoverytypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,7 +35,7 @@ func recoveryTestCfg(b *platformv1alpha1.BootstrapFrom, withObjectStore bool) *M
 	version := "17"
 	instances := int32(1)
 	cfg := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			PostgresVersion: &version,
 			Instances:       &instances,
 			BootstrapFrom:   b,
@@ -251,7 +252,7 @@ func TestBuildCNPGClusterSpec_RecoveryWiring(t *testing.T) {
 	live := cnpgv1.ClusterSpec{
 		ExternalClusters: []cnpgv1.ExternalCluster{{Name: "foreign"}},
 	}
-	spec := buildCNPGClusterSpec(live, cfg, "c1", "my-secret", false)
+	spec := mustBuildCNPGClusterSpec(t, live, cfg, "c1", "my-secret", false)
 
 	require.NotNil(t, spec.Bootstrap.Recovery)
 	assert.Nil(t, spec.Bootstrap.InitDB, "recovery bootstrap must not also set initdb")
@@ -283,7 +284,7 @@ func TestBuildCNPGClusterSpec_ReservedOriginNameCollision(t *testing.T) {
 			{Name: recoveryExternalClusterName, ConnectionParameters: map[string]string{"host": "foreign-host"}},
 		},
 	}
-	spec := buildCNPGClusterSpec(live, cfg, "c1", "my-secret", false)
+	spec := mustBuildCNPGClusterSpec(t, live, cfg, "c1", "my-secret", false)
 
 	var origins []cnpgv1.ExternalCluster
 	for _, e := range spec.ExternalClusters {
@@ -342,7 +343,7 @@ func TestValidateBootstrapFrom(t *testing.T) {
 	}
 
 	clusterWith := func(b *platformv1alpha1.BootstrapFrom) *platformv1alpha1.PostgresCluster {
-		return &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{BootstrapFrom: b}}
+		return &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), BootstrapFrom: b}}
 	}
 
 	tests := []struct {
@@ -553,7 +554,7 @@ func TestDeriveRecoveryPlan(t *testing.T) {
 	}
 	classNoStore := &platformv1alpha1.PostgresClusterClass{Spec: platformv1alpha1.PostgresClusterClassSpec{CNPG: &platformv1alpha1.CNPGConfig{}}}
 	clusterWith := func(b *platformv1alpha1.BootstrapFrom) *platformv1alpha1.PostgresCluster {
-		return &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{BootstrapFrom: b}}
+		return &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), BootstrapFrom: b}}
 	}
 
 	tests := []struct {
@@ -619,7 +620,7 @@ func TestValidateRecoveryCapabilities(t *testing.T) {
 			},
 		},
 	}
-	cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{
+	cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 		BootstrapFrom: &platformv1alpha1.BootstrapFrom{
 			ObjectStorage:  &platformv1alpha1.ObjectStorageSource{ServerName: "src"},
 			RecoveryTarget: &platformv1alpha1.RecoveryTarget{Type: platformv1alpha1.RecoveryTargetXID, Value: "1234567"},
@@ -676,7 +677,7 @@ func TestNormalizeRecoveryDriftDetection(t *testing.T) {
 	storage := resource.MustParse("1Gi")
 	cfg.Spec.Storage = &storage
 
-	desired := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "my-secret", false)
+	desired := mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, cfg, "c1", "my-secret", false)
 	desiredNorm := normalizeCNPGClusterSpec(desired)
 	require.NotNil(t, desiredNorm.Recovery, "recovery wiring must be captured for drift detection")
 	require.NotNil(t, desiredNorm.Recovery.ExternalCluster)

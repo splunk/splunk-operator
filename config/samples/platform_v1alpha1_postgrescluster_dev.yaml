@@ -1,3 +1,7 @@
+# Image template: set TEST_PG17_IMAGE and TEST_PGBOUNCER_IMAGE
+# to complete tag@sha256 references.
+# Render with envsubst before applying.
+# Unrendered placeholders are not valid images.
 # Sample PostgresCluster using Postgres-dev ClusterClass with overriding defaults
 # This sample demonstrates how to override default values from the ClusterClass "postgresql-dev" (see platform_v1alpha1_postgresclusterclass_dev.yaml) in a PostgresCluster manifest.
 # Overrides include changing storage, changing PostgreSQL version, and modifying resources.
@@ -9,6 +13,13 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: postgresql-cluster-dev
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   # Reference the ClusterClass to inherit defaults - this is required, immutable, and must match the name of an existing ClusterClass
   class: postgresql-dev
   # Create PostgresDatabase resources that reference this cluster for application databases and roles.
@@ -16,12 +27,7 @@ spec:
   instances: 3
   # Storage and PostgreSQL version are overridden from the ClusterClass defaults. Validation rules on the PostgresCluster resource will prevent removing these fields or setting them to lower values than the original overrides.
   storage: 20Gi
-  postgresVersion: "18.0"
-  # To use a CNPG-compatible image from a private registry, set postgresImage and
-  # reference any required pull secret in the same namespace.
-  # postgresImage: registry.example.com/team/postgresql:18.0
-  # imagePullSecrets:
-  #   - name: registry-creds
+  postgresVersion: "17.0"
   resources:
     requests:
       cpu: "250m"

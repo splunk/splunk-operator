@@ -83,9 +83,11 @@ var _ = Describe("postgrescontrollers, integration, postgres-metrics",
 				Expect(kubeClient.Create(ctx, clusterSourceB)).To(Succeed())
 
 				pgClass := createPGClass(ctx, kubeClient, namespace)
+				clusterImages, imageErr := pgtesthelpers.PostgresImages()
+				Expect(imageErr).To(Succeed())
 				cluster := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "metrics-cluster", Namespace: namespace},
-					Spec: platformv1alpha1.PostgresClusterSpec{
+					Spec: platformv1alpha1.PostgresClusterSpec{Images: clusterImages,
 						Class:                 pgClass.Name,
 						ClusterDeletionPolicy: new("Delete"),
 						Monitoring: &platformv1alpha1.PostgresClusterMonitoring{

@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	pgtestfixture "github.com/splunk/splunk-operator/internal/testutil/postgres"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -40,6 +41,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -251,7 +253,7 @@ func applyCNPGPostgreSQLParameters(ctx context.Context, c client.Client, name, n
 var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 	const (
-		postgresVersion    = "15.10"
+		postgresVersion    = "17.10"
 		clusterMemberCount = int32(2)
 		storageAmount      = "1Gi"
 		poolerEnabled      = false
@@ -424,7 +426,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 		pgCluster = &platformv1alpha1.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: namespace},
-			Spec: platformv1alpha1.PostgresClusterSpec{
+			Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class:                 className,
 				ClusterDeletionPolicy: new(deletePolicy),
 			},
@@ -628,9 +630,9 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			It("drives the pg_upgrade major-version workflow and observes one readiness duration", func() {
-				targetVersion := "16"
-				initialImage := fmt.Sprintf("ghcr.io/cloudnative-pg/postgresql:%s", postgresVersion)
-				targetImage := "registry.example.com/team/postgresql:16-bookworm@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+				targetVersion := platformv1alpha1.PostgresMajorVersion18
+				initialImage := pgtestfixture.ImageForVersion(platformv1alpha1.PostgresMajorVersion17)
+				targetImage := pgtestfixture.ImageForVersion(targetVersion)
 
 				// Use the backup-enabled class so the upgrade gate creates a CNPG
 				// Backup that matches the target Cluster's VolumeSnapshot config.
@@ -644,7 +646,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				caSecretName := seedCNPGClusterServerCASecret(ctx, k8sClient, clusterName, namespace)
 				markCNPGClusterBackupReady(cnpg, clusterName, caSecretName)
 				cnpg.Status.Image = initialImage
-				cnpg.Status.PGDataImageInfo = &cnpgv1.ImageInfo{Image: initialImage, MajorVersion: 15}
+				cnpg.Status.PGDataImageInfo = &cnpgv1.ImageInfo{Image: initialImage, MajorVersion: 17}
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 				reconcileAfterCNPGHealthyOrPatch()
 
@@ -668,8 +670,8 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
 				pc.Spec.PostgresVersion = new(targetVersion)
-				pc.Spec.PostgresImage = new(targetImage)
-				pc.Spec.ImagePullSecrets = []v1.LocalObjectReference{{Name: "target-registry-creds"}}
+				pc.Spec.Images.PostgreSQL[targetVersion] = platformv1alpha1.PinnedImageReference(targetImage)
+				pc.Spec.Images.ImagePullSecrets = []v1.LocalObjectReference{{Name: "target-registry-creds"}}
 				pc.Spec.PostgresMajorUpgradeConfig = &platformv1alpha1.PostgresMajorUpgradeConfig{
 					Allow:    new(true),
 					Strategy: &[]string{mvutypes.MajorUpgradeFlowPgUpgrade}[0],
@@ -733,7 +735,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
 				markCNPGClusterBackupReady(cnpg, clusterName, caSecretName)
 				cnpg.Status.Image = targetImage
-				cnpg.Status.PGDataImageInfo = &cnpgv1.ImageInfo{Image: targetImage, MajorVersion: 16}
+				cnpg.Status.PGDataImageInfo = &cnpgv1.ImageInfo{Image: targetImage, MajorVersion: 18}
 				Expect(k8sClient.Status().Update(ctx, cnpg)).To(Succeed())
 
 				_, err = reconciler.Reconcile(ctx, req)
@@ -988,6 +990,8 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				cnpg := &cnpgv1.Cluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
 				Expect(cnpg.Spec.Instances).To(Equal(int(clusterMemberCount)))
+				Expect(cnpg.Spec.ImageName).To(Equal(string(pgCluster.Spec.Images.PostgreSQL[platformv1alpha1.PostgresMajorVersion17])))
+				Expect(cnpg.Spec.ImagePullSecrets).To(BeEmpty())
 
 				pc := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, pc)).To(Succeed())
@@ -997,13 +1001,13 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 
 			It("patches the CNPG image and reports configuring state during a minor PostgreSQL upgrade", func() {
-				const upgradedPostgresVersion = "15.13"
+				const upgradedPostgresVersion = "17.13"
 				Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
 				reconcileNTimes(2)
 
 				cnpg := &cnpgv1.Cluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
-				Expect(cnpg.Spec.ImageName).To(Equal("ghcr.io/cloudnative-pg/postgresql:" + postgresVersion))
+				Expect(cnpg.Spec.ImageName).To(Equal(pgtestfixture.ImageForVersion(platformv1alpha1.PostgresMajorVersion17)))
 
 				// Seed the CNPG server CA Secret + status ref so the access ConfigMap can publish
 				// SERVER_CA_* keys; otherwise configMap converge loops on ConfigMapCAMetadataPending
@@ -1016,12 +1020,13 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				current := &platformv1alpha1.PostgresCluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
 				current.Spec.PostgresVersion = new(upgradedPostgresVersion)
+				current.Spec.Images.PostgreSQL[platformv1alpha1.PostgresMajorVersion17] = platformv1alpha1.PinnedImageReference(pgtestfixture.ImageForVersion(upgradedPostgresVersion))
 				Expect(k8sClient.Update(ctx, current)).To(Succeed())
 
 				reconcileNTimes(1)
 
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
-				Expect(cnpg.Spec.ImageName).To(Equal("ghcr.io/cloudnative-pg/postgresql:" + upgradedPostgresVersion))
+				Expect(cnpg.Spec.ImageName).To(Equal(pgtestfixture.ImageForVersion(upgradedPostgresVersion)))
 
 				Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
 				cond := meta.FindStatusCondition(current.Status.Conditions, "ClusterReady")
@@ -1792,7 +1797,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 
 				bad := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: badName, Namespace: namespace},
-					Spec:       platformv1alpha1.PostgresClusterSpec{Class: "missing-class"},
+					Spec:       platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "missing-class"},
 				}
 				Expect(k8sClient.Create(ctx, bad)).To(Succeed())
 				DeferCleanup(func() { _ = k8sClient.Delete(ctx, bad) })
@@ -1821,6 +1826,162 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 			})
 		})
 
+		It("defaults class configuration to PostgreSQL 17 and selects the mapped image", func() {
+			defaultClass := &platformv1alpha1.PostgresClusterClass{
+				ObjectMeta: metav1.ObjectMeta{Name: className + "-default"},
+				Spec: platformv1alpha1.PostgresClusterClassSpec{
+					Provisioner: provisioner,
+					Config:      &platformv1alpha1.PostgresClusterClassConfig{},
+					CNPG:        &platformv1alpha1.CNPGConfig{},
+				},
+			}
+			Expect(k8sClient.Create(ctx, defaultClass)).To(Succeed())
+			DeferCleanup(func() { Expect(k8sClient.Delete(ctx, defaultClass)).To(Succeed()) })
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(defaultClass), defaultClass)).To(Succeed())
+			Expect(defaultClass.Spec.Config.PostgresVersion).To(HaveValue(Equal(platformv1alpha1.DefaultPostgresVersion)))
+
+			pgCluster.Spec.Class = defaultClass.Name
+			delete(pgCluster.Spec.Images.PostgreSQL, platformv1alpha1.PostgresMajorVersion18)
+			Expect(pgCluster.Spec.PostgresVersion).To(BeNil())
+			Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+			reconcileNTimes(2)
+
+			cnpg := &cnpgv1.Cluster{}
+			Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
+			Expect(cnpg.Spec.ImageName).To(Equal(pgtestfixture.ImageForVersion(platformv1alpha1.PostgresMajorVersion17)))
+		})
+
+		It("validates image mappings atomically in the CRD", func() {
+			pgCluster.Spec.PostgresVersion = new(platformv1alpha1.PostgresMajorVersion17)
+			invalid := pgCluster.DeepCopy()
+			invalid.Spec.Images = nil
+			Expect(k8sClient.Create(ctx, invalid)).NotTo(Succeed())
+			delete(pgCluster.Spec.Images.PostgreSQL, platformv1alpha1.PostgresMajorVersion18)
+			Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+			pgCluster.Spec.PostgresVersion = new(platformv1alpha1.PostgresMajorVersion18)
+			Expect(k8sClient.Update(ctx, pgCluster)).NotTo(Succeed())
+			pgCluster.Spec.Images.PostgreSQL[platformv1alpha1.PostgresMajorVersion18] = pgtestfixture.Images().PostgreSQL[platformv1alpha1.PostgresMajorVersion18]
+			Expect(k8sClient.Update(ctx, pgCluster)).To(Succeed())
+		})
+
+		It("enforces intrinsic image policy in the CRD", func() {
+			valid := pgtestfixture.ImageForVersion(platformv1alpha1.PostgresMajorVersion17)
+			prefix, digest, _ := strings.Cut(valid, "@")
+			for _, tc := range []struct{ name, image string }{
+				{"tag-only", prefix},
+				{"digest-only", "registry.example.invalid/postgresql@" + digest},
+				{"latest", "registry.example.invalid/postgresql:latest@" + digest},
+				{"URL", "https://" + valid},
+				{"whitespace", valid + " "},
+				{"invalid-tag", "registry.example.invalid/postgresql:17+test@" + digest},
+				{"empty-digest", prefix + "@"},
+				{"short-digest", valid[:len(valid)-1]},
+				{"invalid-digest", prefix + "@sha256:" + strings.Repeat("z", 64)},
+				{"wrong-algorithm", strings.Replace(valid, "@sha256:", "@sha512:", 1)},
+				{"wrong-major", pgtestfixture.ImageForVersion(platformv1alpha1.PostgresMajorVersion18)},
+				{"major-prefix-collision", "registry.example.invalid/postgresql:170@" + digest},
+			} {
+				invalid := pgCluster.DeepCopy()
+				invalid.Spec.Images.PostgreSQL[platformv1alpha1.PostgresMajorVersion17] = platformv1alpha1.PinnedImageReference(tc.image)
+				err := k8sClient.Create(ctx, invalid)
+				Expect(apierrors.IsInvalid(err)).To(BeTrue(), "%s must fail CRD validation: %v", tc.name, err)
+				Expect(err.Error()).To(ContainSubstring("images.postgresql"))
+			}
+			for _, mutate := range []func(*platformv1alpha1.PostgresCluster){
+				func(p *platformv1alpha1.PostgresCluster) { p.Spec.Images.PostgreSQL = nil },
+				func(p *platformv1alpha1.PostgresCluster) {
+					p.Spec.Images.PostgreSQL["99"] = platformv1alpha1.PinnedImageReference(pgtestfixture.ImageForVersion("99"))
+				},
+				func(p *platformv1alpha1.PostgresCluster) { p.Spec.PostgresVersion = new("99") },
+				func(p *platformv1alpha1.PostgresCluster) {
+					p.Spec.Images.PgBouncer = "registry.example.invalid/pgbouncer:unpinned"
+				},
+				func(p *platformv1alpha1.PostgresCluster) {
+					p.Spec.ConnectionPooler = &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(true)}
+					p.Spec.Images.PgBouncer = ""
+				},
+			} {
+				invalid := pgCluster.DeepCopy()
+				mutate(invalid)
+				err := k8sClient.Create(ctx, invalid)
+				Expect(apierrors.IsInvalid(err)).To(BeTrue(), "invalid spec must fail CRD validation: %v", err)
+			}
+			accepted := pgCluster.DeepCopy()
+			accepted.Name += "-port"
+			accepted.Spec.Images.PgBouncer = ""
+			accepted.Spec.Images.PostgreSQL[platformv1alpha1.PostgresMajorVersion17] = platformv1alpha1.PinnedImageReference(strings.Replace(valid, "registry.example.invalid/", "registry.example.invalid:5000/", 1))
+			Expect(k8sClient.Create(ctx, accepted)).To(Succeed())
+			DeferCleanup(func() { Expect(k8sClient.Delete(ctx, accepted)).To(Succeed()) })
+		})
+
+		It("validates repository names for PostgreSQL and PgBouncer images in the CRD", func() {
+			_, pin, _ := strings.Cut(pgtestfixture.ImageForVersion(platformv1alpha1.PostgresMajorVersion17), ":")
+			for _, repository := range []string{
+				"registry.example.com//postgresql", "registry.example.com/team/PostgreSQL",
+				"/postgresql", "registry.example.com/team/", "registry.example.com/team/pg+sql",
+				"registry.example.com/team/pg..sql", "registry.example.com/team/_postgresql",
+			} {
+				image := platformv1alpha1.PinnedImageReference(repository + ":" + pin)
+				for _, field := range []string{"postgresql", "pgbouncer"} {
+					invalid := pgCluster.DeepCopy()
+					if field == "postgresql" {
+						invalid.Spec.Images.PostgreSQL[platformv1alpha1.PostgresMajorVersion17] = image
+					} else {
+						invalid.Spec.Images.PgBouncer = image
+					}
+					err := k8sClient.Create(ctx, invalid)
+					Expect(apierrors.IsInvalid(err)).To(BeTrue(), "%s repository %q must fail CRD validation: %v", field, repository, err)
+					Expect(err.Error()).To(ContainSubstring("images." + field))
+				}
+			}
+			for i, repository := range []string{
+				"postgresql", "team/postgresql", "registry.example.com/team/postgresql",
+				"REGISTRY.example.com:5000/team/pg_sql.v1--test", "localhost:5000/team/pg__sql",
+				"127.0.0.1:5000/team/postgresql", "[2001:db8::1]:5000/team/postgresql",
+			} {
+				accepted := pgCluster.DeepCopy()
+				accepted.Name = fmt.Sprintf("%s-repo-%d", pgCluster.Name, i)
+				image := platformv1alpha1.PinnedImageReference(repository + ":" + pin)
+				accepted.Spec.Images.PostgreSQL[platformv1alpha1.PostgresMajorVersion17] = image
+				accepted.Spec.Images.PgBouncer = image
+				Expect(k8sClient.Create(ctx, accepted)).To(Succeed(), "repository %q must remain valid", repository)
+				DeferCleanup(func() { Expect(k8sClient.Delete(ctx, accepted)).To(Succeed()) })
+			}
+		})
+
+		It("validates registry Secret name lengths in the CRD", func() {
+			for _, name := range []string{"", strings.Repeat("a", k8svalidation.DNS1123SubdomainMaxLength+1)} {
+				invalid := pgCluster.DeepCopy()
+				invalid.Spec.Images.ImagePullSecrets = []v1.LocalObjectReference{{Name: name}}
+				err := k8sClient.Create(ctx, invalid)
+				Expect(apierrors.IsInvalid(err)).To(BeTrue(), "Secret name %q must fail schema validation: %v", name, err)
+				Expect(err.Error()).To(ContainSubstring("imagePullSecrets"))
+			}
+			for i, name := range []string{"registry-reader", "registry.reader", strings.Repeat("a", k8svalidation.DNS1123SubdomainMaxLength)} {
+				valid := pgCluster.DeepCopy()
+				valid.Name = fmt.Sprintf("%s-secret-%d", pgCluster.Name, i)
+				valid.Spec.Images.ImagePullSecrets = []v1.LocalObjectReference{{Name: name}}
+				Expect(k8sClient.Create(ctx, valid)).To(Succeed())
+				DeferCleanup(func() { Expect(k8sClient.Delete(ctx, valid)).To(Succeed()) })
+			}
+		})
+
+		It("reports missing inherited image mappings before creating CNPG workloads", func() {
+			delete(pgCluster.Spec.Images.PostgreSQL, platformv1alpha1.PostgresMajorVersion17)
+			Expect(k8sClient.Create(ctx, pgCluster)).To(Succeed())
+			reconcileNTimes(1)
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.images.postgresql[" + platformv1alpha1.PostgresMajorVersion17 + "]"))
+			cnpg := &cnpgv1.Cluster{}
+			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, pgClusterKey, cnpg))).To(BeTrue())
+			current := &platformv1alpha1.PostgresCluster{}
+			Expect(k8sClient.Get(ctx, pgClusterKey, current)).To(Succeed())
+			condition := meta.FindStatusCondition(current.Status.Conditions, "ClusterReady")
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Reason).To(Equal("InvalidConfiguration"))
+		})
+
 		// PC-06
 		Context("when managed child spec drifts from desired state", func() {
 			It("restores drifted managed spec", func() {
@@ -1830,6 +1991,8 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 				cnpg := &cnpgv1.Cluster{}
 				Expect(k8sClient.Get(ctx, pgClusterKey, cnpg)).To(Succeed())
 				cnpg.Spec.Instances = 8
+				cnpg.Spec.ImageName = pgtestfixture.ImageForVersion(platformv1alpha1.PostgresMajorVersion17 + ".1")
+				cnpg.Spec.ImagePullSecrets = []cnpgv1.LocalObjectReference{{Name: "out-of-band"}}
 				Expect(k8sClient.Update(ctx, cnpg)).To(Succeed())
 
 				reconcileNTimes(2)

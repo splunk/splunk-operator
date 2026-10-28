@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -73,60 +72,6 @@ func TestValidatePostgresClusterClassCreate(t *testing.T) {
 				},
 			},
 			wantErrCount: 0,
-		},
-		{
-			name: "valid - tagged postgresImage",
-			obj: &platformApi.PostgresClusterClass{
-				Spec: platformApi.PostgresClusterClassSpec{
-					Provisioner: "postgresql.cnpg.io",
-					Config: &platformApi.PostgresClusterClassConfig{
-						PostgresVersion: new("18"),
-						PostgresImage:   new("registry.example.com/team/postgresql:18.1"),
-					},
-				},
-			},
-			wantErrCount: 0,
-		},
-		{
-			name: "valid - tag plus digest postgresImage",
-			obj: &platformApi.PostgresClusterClass{
-				Spec: platformApi.PostgresClusterClassSpec{
-					Provisioner: "postgresql.cnpg.io",
-					Config: &platformApi.PostgresClusterClassConfig{
-						PostgresVersion: new("18"),
-						PostgresImage:   new("registry.example.com/team/postgresql:18.1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-					},
-				},
-			},
-			wantErrCount: 0,
-		},
-		{
-			name: "invalid - latest postgresImage",
-			obj: &platformApi.PostgresClusterClass{
-				Spec: platformApi.PostgresClusterClassSpec{
-					Provisioner: "postgresql.cnpg.io",
-					Config: &platformApi.PostgresClusterClassConfig{
-						PostgresVersion: new("18"),
-						PostgresImage:   new("registry.example.com/team/postgresql:latest"),
-					},
-				},
-			},
-			wantErrCount: 1,
-			wantErrField: "spec.config.postgresImage",
-		},
-		{
-			name: "invalid - postgresImage major mismatch",
-			obj: &platformApi.PostgresClusterClass{
-				Spec: platformApi.PostgresClusterClassSpec{
-					Provisioner: "postgresql.cnpg.io",
-					Config: &platformApi.PostgresClusterClassConfig{
-						PostgresVersion: new("18"),
-						PostgresImage:   new("registry.example.com/team/postgresql:17.5"),
-					},
-				},
-			},
-			wantErrCount: 1,
-			wantErrField: "spec.config.postgresImage",
 		},
 		{
 			name: "invalid - bad connection type",

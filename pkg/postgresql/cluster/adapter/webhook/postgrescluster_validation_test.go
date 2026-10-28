@@ -20,10 +20,12 @@ import (
 	"testing"
 	"time"
 
+	pgtestfixture "github.com/splunk/splunk-operator/internal/testutil/postgres"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
@@ -43,7 +45,7 @@ func TestValidatePostgresClusterCreate(t *testing.T) {
 		{
 			name: "valid - no pgHBA rules",
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 				},
 			},
@@ -52,7 +54,7 @@ func TestValidatePostgresClusterCreate(t *testing.T) {
 		{
 			name: "valid - empty pgHBA",
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{},
 				},
@@ -62,7 +64,7 @@ func TestValidatePostgresClusterCreate(t *testing.T) {
 		{
 			name: "valid - correct pgHBA rules",
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{
 						"hostnossl all all 0.0.0.0/0 reject",
@@ -75,7 +77,7 @@ func TestValidatePostgresClusterCreate(t *testing.T) {
 		{
 			name: "invalid - bad connection type",
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{
 						"hostx all all 0.0.0.0/0 md5",
@@ -88,7 +90,7 @@ func TestValidatePostgresClusterCreate(t *testing.T) {
 		{
 			name: "invalid - bad CIDR",
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{
 						"host all all 192.168.0.0/33 md5",
@@ -101,7 +103,7 @@ func TestValidatePostgresClusterCreate(t *testing.T) {
 		{
 			name: "invalid - bad auth method",
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{
 						"host all all 0.0.0.0/0 bogus-auth",
@@ -114,7 +116,7 @@ func TestValidatePostgresClusterCreate(t *testing.T) {
 		{
 			name: "invalid - missing fields",
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{
 						"host all all",
@@ -147,13 +149,13 @@ func TestValidatePostgresClusterUpdate(t *testing.T) {
 		{
 			name: "valid update - add pgHBA rules",
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{"host all all 0.0.0.0/0 scram-sha-256"},
 				},
 			},
 			oldObj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 				},
 			},
@@ -162,13 +164,13 @@ func TestValidatePostgresClusterUpdate(t *testing.T) {
 		{
 			name: "invalid update - bad pgHBA",
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 					PgHBA: []string{"hostx all all 0.0.0.0/0 md5"},
 				},
 			},
 			oldObj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "dev",
 				},
 			},
@@ -191,7 +193,7 @@ func TestValidatePostgresClusterMajorUpgradeConfig(t *testing.T) {
 		}
 	}
 	clusterWith := func(strategy string, blueGreen *platformApi.PostgresBlueGreenUpgradeConfig) *platformApi.PostgresCluster {
-		return &platformApi.PostgresCluster{Spec: platformApi.PostgresClusterSpec{
+		return &platformApi.PostgresCluster{Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Class: "dev",
 			PostgresMajorUpgradeConfig: &platformApi.PostgresMajorUpgradeConfig{
 				Strategy:  new(strategy),
@@ -215,7 +217,7 @@ func TestValidatePostgresClusterMajorUpgradeConfig(t *testing.T) {
 		},
 		{
 			name: "blueGreen allow is rejected until runtime is implemented",
-			obj: &platformApi.PostgresCluster{Spec: platformApi.PostgresClusterSpec{
+			obj: &platformApi.PostgresCluster{Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class: "dev",
 				PostgresMajorUpgradeConfig: &platformApi.PostgresMajorUpgradeConfig{
 					Allow:    new(true),
@@ -266,7 +268,7 @@ func TestValidatePostgresClusterUpdateFreezesActiveBlueGreenAttempt(t *testing.T
 	strategy := mvutypes.MajorUpgradeFlowBlueGreen
 	allow := true
 	oldObj := &platformApi.PostgresCluster{
-		Spec: platformApi.PostgresClusterSpec{
+		Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Class: "dev",
 			PostgresMajorUpgradeConfig: &platformApi.PostgresMajorUpgradeConfig{
 				Allow:    &allow,
@@ -345,7 +347,7 @@ func TestValidatePostgresClusterUpdateFreezesActiveBlueGreenAttempt(t *testing.T
 func TestValidatePostgresClusterUpdateSkipsActiveBlueGreenFreezeForMetadataAndDeletion(t *testing.T) {
 	strategy := mvutypes.MajorUpgradeFlowBlueGreen
 	oldObj := &platformApi.PostgresCluster{
-		Spec: platformApi.PostgresClusterSpec{Class: "dev"},
+		Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "dev"},
 		Status: platformApi.PostgresClusterStatus{
 			PostgresMajorUpgradeStatus: []platformApi.PostgresMajorUpgradeStatus{{
 				Strategy:  &strategy,
@@ -376,12 +378,58 @@ func TestValidatePostgresClusterUpdateSkipsActiveBlueGreenFreezeForMetadataAndDe
 	})
 }
 
+func TestStoredImagePolicyDoesNotBlockMetadataOrFinalizerUpdates(t *testing.T) {
+	class := &platformApi.PostgresClusterClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "dev"},
+		Spec:       platformApi.PostgresClusterClassSpec{Provisioner: "postgresql.cnpg.io"},
+	}
+	for _, imageCase := range []struct {
+		name   string
+		mutate func(*platformApi.PostgresCluster)
+	}{
+		{"missing images", func(obj *platformApi.PostgresCluster) { obj.Spec.Images = nil }},
+		{"invalid secret name", func(obj *platformApi.PostgresCluster) {
+			obj.Spec.Images.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "Registry_Reader"}}
+		}},
+		{"malformed image", func(obj *platformApi.PostgresCluster) {
+			obj.Spec.Images.PostgreSQL[platformApi.DefaultPostgresVersion] = "invalid image"
+		}},
+	} {
+		t.Run(imageCase.name, func(t *testing.T) {
+			for _, readerCase := range []struct {
+				name   string
+				reader client.Reader
+			}{{"without reader", nil}, {"with class reader", newFakeReader(class).Build()}} {
+				t.Run(readerCase.name, func(t *testing.T) {
+					oldObj := &platformApi.PostgresCluster{
+						ObjectMeta: metav1.ObjectMeta{Name: "pg", Finalizers: []string{"example.com/finalizer"}},
+						Spec: platformApi.PostgresClusterSpec{
+							Images: pgtestfixture.Images(), Class: class.Name,
+							PostgresVersion: new(platformApi.DefaultPostgresVersion),
+						},
+					}
+					imageCase.mutate(oldObj)
+					obj := oldObj.DeepCopy()
+					obj.Labels = map[string]string{"example.com/metadata": "updated"}
+					assert.Empty(t, webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, readerCase.reader))
+
+					now := metav1.Now()
+					oldObj.DeletionTimestamp = &now
+					obj = oldObj.DeepCopy()
+					obj.Finalizers = nil
+					assert.Empty(t, webhook.ValidatePostgresClusterUpdate(t.Context(), obj, oldObj, readerCase.reader))
+				})
+			}
+		})
+	}
+}
+
 func TestValidatePostgresClusterUpdateAllowsRecoveryFromUnavailableBlueGreenRuntime(t *testing.T) {
 	strategy := mvutypes.MajorUpgradeFlowBlueGreen
 	allow := true
 	failed := string(mvutypes.Failed)
 	oldObj := &platformApi.PostgresCluster{
-		Spec: platformApi.PostgresClusterSpec{
+		Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Class: "dev",
 			PostgresMajorUpgradeConfig: &platformApi.PostgresMajorUpgradeConfig{
 				Allow:    &allow,
@@ -416,7 +464,7 @@ func TestValidatePostgresClusterCreateFeatureGateDisabled(t *testing.T) {
 	})
 
 	obj := &platformApi.PostgresCluster{
-		Spec: platformApi.PostgresClusterSpec{Class: "dev"},
+		Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "dev"},
 	}
 
 	errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, nil)
@@ -432,7 +480,7 @@ func TestValidatePostgresClusterUpdateFeatureGateDisabled(t *testing.T) {
 	})
 
 	obj := &platformApi.PostgresCluster{
-		Spec: platformApi.PostgresClusterSpec{Class: "dev"},
+		Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "dev"},
 	}
 	oldObj := obj.DeepCopy()
 
@@ -447,7 +495,7 @@ func TestValidatePostgresClusterUpdateDeletedClass(t *testing.T) {
 
 	t.Run("allowed - spec unchanged (metadata-only update)", func(t *testing.T) {
 		oldObj := &platformApi.PostgresCluster{
-			Spec: platformApi.PostgresClusterSpec{
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class:           "deleted-class",
 				PostgresVersion: new("16"),
 			},
@@ -460,10 +508,10 @@ func TestValidatePostgresClusterUpdateDeletedClass(t *testing.T) {
 
 	t.Run("rejected - spec.class changed to nonexistent", func(t *testing.T) {
 		oldObj := &platformApi.PostgresCluster{
-			Spec: platformApi.PostgresClusterSpec{Class: "old-class"},
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "old-class"},
 		}
 		newObj := &platformApi.PostgresCluster{
-			Spec: platformApi.PostgresClusterSpec{Class: "new-class"},
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "new-class"},
 		}
 
 		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), newObj, oldObj, reader)
@@ -474,13 +522,13 @@ func TestValidatePostgresClusterUpdateDeletedClass(t *testing.T) {
 
 	t.Run("rejected - spec fields changed with deleted class", func(t *testing.T) {
 		oldObj := &platformApi.PostgresCluster{
-			Spec: platformApi.PostgresClusterSpec{
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class:           "deleted-class",
 				PostgresVersion: new("17"),
 			},
 		}
 		newObj := &platformApi.PostgresCluster{
-			Spec: platformApi.PostgresClusterSpec{
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class:           "deleted-class",
 				PostgresVersion: new("15"),
 			},
@@ -491,80 +539,6 @@ func TestValidatePostgresClusterUpdateDeletedClass(t *testing.T) {
 		assert.Equal(t, "spec.class", errs[0].Field)
 		assert.Contains(t, errs[0].Detail, "referenced PostgresClusterClass not found")
 	})
-}
-
-func TestValidatePostgresClusterPostgresImage(t *testing.T) {
-	const ns = "default"
-
-	validClass := &platformApi.PostgresClusterClass{
-		ObjectMeta: metav1.ObjectMeta{Name: "dev"},
-		Spec: platformApi.PostgresClusterClassSpec{
-			Provisioner: "postgresql.cnpg.io",
-			Config: &platformApi.PostgresClusterClassConfig{
-				Instances:       new(int32(3)),
-				Storage:         new(resource.MustParse("50Gi")),
-				PostgresVersion: new("17"),
-			},
-		},
-	}
-
-	clusterWithImage := func(image string) *platformApi.PostgresCluster {
-		return &platformApi.PostgresCluster{
-			ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: ns},
-			Spec: platformApi.PostgresClusterSpec{
-				Class:         "dev",
-				PostgresImage: new(image),
-			},
-		}
-	}
-
-	tests := []struct {
-		name       string
-		image      string
-		wantErr    bool
-		wantDetail string
-	}{
-		{
-			name:  "tagged image admitted",
-			image: "registry.example.com/team/postgresql:17.5",
-		},
-		{
-			name:  "tag plus digest admitted",
-			image: "registry.example.com/team/postgresql:17.5@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		},
-		{
-			name:       "digest-only image rejected",
-			image:      "registry.example.com/team/postgresql@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			wantErr:    true,
-			wantDetail: "must include a tag",
-		},
-		{
-			name:       "latest image rejected",
-			image:      "registry.example.com/team/postgresql:latest",
-			wantErr:    true,
-			wantDetail: "latest",
-		},
-		{
-			name:       "major mismatch rejected",
-			image:      "registry.example.com/team/postgresql:16.10",
-			wantErr:    true,
-			wantDetail: "must match postgresVersion major version 17",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			errs := webhook.ValidatePostgresClusterCreate(t.Context(), clusterWithImage(tt.image), newFakeReader(validClass).Build())
-
-			if !tt.wantErr {
-				assert.Empty(t, errs)
-				return
-			}
-			require.Len(t, errs, 1)
-			assert.Equal(t, "spec.postgresImage", errs[0].Field)
-			assert.Contains(t, errs[0].Detail, tt.wantDetail)
-		})
-	}
 }
 
 // TestValidatePostgresClusterExternalSecret pins the admission-time policy for
@@ -591,7 +565,7 @@ func TestValidatePostgresClusterExternalSecret(t *testing.T) {
 	clusterWithRef := func() *platformApi.PostgresCluster {
 		return &platformApi.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: ns},
-			Spec: platformApi.PostgresClusterSpec{
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class: "dev",
 				PasswordConfig: &platformApi.SuperuserPasswordConfig{
 					SuperuserExternalSecretRef: corev1.LocalObjectReference{Name: secretRef},
@@ -693,7 +667,7 @@ func TestValidatePostgresClusterCustomMetrics(t *testing.T) {
 	clusterWith := func(refs ...corev1.ConfigMapKeySelector) *platformApi.PostgresCluster {
 		return &platformApi.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: ns},
-			Spec: platformApi.PostgresClusterSpec{
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class:      "dev",
 				Monitoring: &platformApi.PostgresClusterMonitoring{CustomQueriesConfigMap: refs},
 			},
@@ -709,7 +683,7 @@ func TestValidatePostgresClusterCustomMetrics(t *testing.T) {
 		reader := newFakeReader(validClass).Build()
 		obj := &platformApi.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: "pg", Namespace: ns},
-			Spec:       platformApi.PostgresClusterSpec{Class: "dev"},
+			Spec:       platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "dev"},
 		}
 		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
 		assert.Empty(t, errs)
@@ -865,13 +839,13 @@ func TestValidatePostgresClusterStorageUpdate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			oldObj := &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:   "prod",
 					Storage: tt.oldStorage,
 				},
 			}
 			newObj := &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:   "prod",
 					Storage: tt.newStorage,
 				},
@@ -922,7 +896,7 @@ func TestValidatePostgresClusterScaling(t *testing.T) {
 
 	makeCluster := func(className string, instances int32, phase *string) *platformApi.PostgresCluster {
 		c := &platformApi.PostgresCluster{
-			Spec: platformApi.PostgresClusterSpec{
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class:     className,
 				Instances: new(instances),
 			},
@@ -955,7 +929,7 @@ func TestValidatePostgresClusterScaling(t *testing.T) {
 
 	t.Run("create: switchover, instances unset (inherits class default 3) allowed", func(t *testing.T) {
 		obj := &platformApi.PostgresCluster{
-			Spec: platformApi.PostgresClusterSpec{Class: "switchover-class"},
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "switchover-class"},
 		}
 		errs := webhook.ValidatePostgresClusterCreate(t.Context(), obj, reader)
 		assert.Empty(t, errs)
@@ -977,7 +951,7 @@ func TestValidatePostgresClusterScaling(t *testing.T) {
 		r := newFakeReader(oneClass).Build()
 		oldObj := makeCluster("switchover-one", 2, &readyPhase)
 		newObj := &platformApi.PostgresCluster{
-			Spec: platformApi.PostgresClusterSpec{Class: "switchover-one"},
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "switchover-one"},
 		}
 		newObj.Status.Phase = &readyPhase
 		errs := webhook.ValidatePostgresClusterUpdate(t.Context(), newObj, oldObj, r)
@@ -1061,7 +1035,7 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 
 	t.Run("create: readOnly=true with effective instances=1 rejected", func(t *testing.T) {
 		obj := &platformApi.PostgresCluster{
-			Spec: platformApi.PostgresClusterSpec{
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class: "single",
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 					Enabled:  new(true),
@@ -1083,7 +1057,7 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 
 	t.Run("create: readOnly=false with effective instances=1 accepted", func(t *testing.T) {
 		obj := &platformApi.PostgresCluster{
-			Spec: platformApi.PostgresClusterSpec{
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class: "single",
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 					Enabled:  new(true),
@@ -1099,7 +1073,7 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 
 	t.Run("create: readOnly=true with effective instances=2 accepted", func(t *testing.T) {
 		obj := &platformApi.PostgresCluster{
-			Spec: platformApi.PostgresClusterSpec{
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class: "ha",
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 					Enabled:  new(true),
@@ -1115,7 +1089,7 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 
 	t.Run("create: pooler disabled, no readOnly check fires", func(t *testing.T) {
 		obj := &platformApi.PostgresCluster{
-			Spec: platformApi.PostgresClusterSpec{
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class: "single",
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 					Enabled: new(false),
@@ -1131,7 +1105,7 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 	t.Run("update: readOnly=true with effective instances=1 rejected", func(t *testing.T) {
 		readyPhase := "Ready"
 		oldObj := &platformApi.PostgresCluster{
-			Spec: platformApi.PostgresClusterSpec{
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class: "single",
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 					Enabled:  new(true),
@@ -1158,7 +1132,7 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 		// so an enabled pooler with readOnly unset arrives nil. The webhook treats nil
 		// as opted-in, matching the reconciler's poolerReadOnlyWanted.
 		obj := &platformApi.PostgresCluster{
-			Spec: platformApi.PostgresClusterSpec{
+			Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class: "single",
 				ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 					Enabled: new(true),
@@ -1179,17 +1153,17 @@ func TestValidatePoolerEndpoints(t *testing.T) {
 
 func TestGetPostgresClusterWarningsOnCreate(t *testing.T) {
 	obj := &platformApi.PostgresCluster{
-		Spec: platformApi.PostgresClusterSpec{Class: "dev"},
+		Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "dev"},
 	}
 	assert.Empty(t, webhook.GetPostgresClusterWarningsOnCreate(obj))
 }
 
 func TestGetPostgresClusterWarningsOnUpdate(t *testing.T) {
 	obj := &platformApi.PostgresCluster{
-		Spec: platformApi.PostgresClusterSpec{Class: "dev"},
+		Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "dev"},
 	}
 	oldObj := &platformApi.PostgresCluster{
-		Spec: platformApi.PostgresClusterSpec{Class: "dev"},
+		Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "dev"},
 	}
 	assert.Empty(t, webhook.GetPostgresClusterWarningsOnUpdate(obj, oldObj))
 }
@@ -1261,6 +1235,11 @@ func TestValidateAgainstClass(t *testing.T) {
 		},
 	}
 
+	classWithPG18 := classWithDefaults.DeepCopy()
+	classWithPG18.Spec.Config.PostgresVersion = new(platformApi.PostgresMajorVersion18)
+	classWithPG18Minor := classWithMinorVersion.DeepCopy()
+	classWithPG18Minor.Spec.Config.PostgresVersion = new(platformApi.PostgresMajorVersion18 + ".2")
+
 	tests := []struct {
 		name          string
 		class         *platformApi.PostgresClusterClass
@@ -1274,7 +1253,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "class not found",
 			class: nil,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{Class: "nonexistent"},
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "nonexistent"},
 			},
 			wantErrCount:  1,
 			wantErrFields: []string{"spec.class"},
@@ -1284,7 +1263,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "valid - no overrides",
 			class: classWithDefaults,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{Class: "prod"},
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "prod"},
 			},
 			wantErrCount: 0,
 		},
@@ -1292,7 +1271,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "valid - same postgres version",
 			class: classWithDefaults,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod",
 					PostgresVersion: new("17"),
 				},
@@ -1303,7 +1282,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "valid - higher postgres version",
 			class: classWithDefaults,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod",
 					PostgresVersion: new("18"),
 				},
@@ -1312,23 +1291,23 @@ func TestValidateAgainstClass(t *testing.T) {
 		},
 		{
 			name:  "invalid - lower postgres version",
-			class: classWithDefaults,
+			class: classWithPG18,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod",
-					PostgresVersion: new("16"),
+					PostgresVersion: new("17"),
 				},
 			},
 			wantErrCount:  1,
 			wantErrFields: []string{"spec.postgresVersion"},
-			wantErrMsgs:   []string{"postgresVersion cannot be lower than class default (17)"},
-			wantErrValues: []any{"16"},
+			wantErrMsgs:   []string{"postgresVersion cannot be lower than class default (18)"},
+			wantErrValues: []any{"17"},
 		},
 		{
 			name:  "valid - minor version ignored when class has major only",
 			class: classWithDefaults,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod",
 					PostgresVersion: new("17.2"),
 				},
@@ -1339,7 +1318,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "valid - lower minor ignored when class has major only",
 			class: classWithDefaults,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod",
 					PostgresVersion: new("17.0"),
 				},
@@ -1350,7 +1329,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "valid - cluster minor equal to class minor",
 			class: classWithMinorVersion,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod-pinned",
 					PostgresVersion: new("17.2"),
 				},
@@ -1361,7 +1340,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "valid - cluster minor higher than class minor",
 			class: classWithMinorVersion,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod-pinned",
 					PostgresVersion: new("17.5"),
 				},
@@ -1372,7 +1351,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "invalid - cluster minor lower than class minor",
 			class: classWithMinorVersion,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod-pinned",
 					PostgresVersion: new("17.1"),
 				},
@@ -1384,23 +1363,23 @@ func TestValidateAgainstClass(t *testing.T) {
 		},
 		{
 			name:  "invalid - cluster major lower even with higher minor",
-			class: classWithMinorVersion,
+			class: classWithPG18Minor,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod-pinned",
-					PostgresVersion: new("16.9"),
+					PostgresVersion: new("17.9"),
 				},
 			},
 			wantErrCount:  1,
 			wantErrFields: []string{"spec.postgresVersion"},
-			wantErrMsgs:   []string{"postgresVersion cannot be lower than class default (17.2)"},
-			wantErrValues: []any{"16.9"},
+			wantErrMsgs:   []string{"postgresVersion cannot be lower than class default (18.2)"},
+			wantErrValues: []any{"17.9"},
 		},
 		{
 			name:  "valid - cluster major higher than class with minor",
 			class: classWithMinorVersion,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "prod-pinned",
 					PostgresVersion: new("18"),
 				},
@@ -1411,7 +1390,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "invalid - pooler enabled but class has no cnpg.connectionPooler",
 			class: classWithDefaults,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "prod",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled: new(true),
@@ -1427,7 +1406,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "valid - pooler disabled, class has no cnpg config",
 			class: classWithDefaults,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "prod",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled: new(false),
@@ -1440,7 +1419,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "valid - pooler enabled and class has cnpg.connectionPooler",
 			class: classWithPoolerEnabled,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "pooler-class",
 					ConnectionPooler: &platformApi.ConnectionPoolerEnableConfig{
 						Enabled: new(true),
@@ -1453,7 +1432,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "valid - pooler unset (inherits class)",
 			class: classWithDefaults,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{Class: "prod"},
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "prod"},
 			},
 			wantErrCount: 0,
 		},
@@ -1474,7 +1453,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				},
 			},
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{Class: "pooler-no-cnpg"},
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "pooler-no-cnpg"},
 			},
 			wantErrCount:  1,
 			wantErrFields: []string{"spec.connectionPooler.enabled"},
@@ -1489,7 +1468,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				},
 			},
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "bare-pooler",
 					Instances:       new(int32(1)),
 					PostgresVersion: new("17"),
@@ -1508,7 +1487,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "invalid - cluster enables backup but class has no cnpg.backup.volumeSnapshot",
 			class: classWithDefaults,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "prod",
 					Backup: &platformApi.BackupConfig{
 						Enabled:  new(true),
@@ -1525,7 +1504,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "valid - backup disabled, class has no cnpg.backup config",
 			class: classWithDefaults,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "prod",
 					Backup: &platformApi.BackupConfig{
 						Enabled: new(false),
@@ -1538,7 +1517,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "valid - backup enabled and class has cnpg.backup.volumeSnapshot",
 			class: classWithBackupEnabled,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "backup-class",
 				},
 			},
@@ -1548,7 +1527,7 @@ func TestValidateAgainstClass(t *testing.T) {
 			name:  "invalid - backup enabled but no volumeSnapshot and no schedule",
 			class: classWithDefaults,
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "prod",
 					Backup: &platformApi.BackupConfig{
 						Enabled: new(true),
@@ -1578,7 +1557,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				},
 			},
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "backup-no-schedule",
 					Backup: &platformApi.BackupConfig{
 						Enabled: new(true),
@@ -1611,7 +1590,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				},
 			},
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "backup-no-schedule-class",
 					Backup: &platformApi.BackupConfig{
 						Schedule: new("0 3 * * *"),
@@ -1637,7 +1616,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				},
 			},
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class: "backup-no-cnpg",
 					Backup: &platformApi.BackupConfig{
 						Schedule: new("0 2 * * *"),
@@ -1657,7 +1636,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				},
 			},
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{Class: "bare"},
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "bare"},
 			},
 			wantErrCount:  3,
 			wantErrFields: []string{"spec.instances"},
@@ -1676,7 +1655,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				},
 			},
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{Class: "no-storage"},
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "no-storage"},
 			},
 			wantErrCount:  1,
 			wantErrFields: []string{"spec.storage"},
@@ -1692,7 +1671,7 @@ func TestValidateAgainstClass(t *testing.T) {
 				},
 			},
 			obj: &platformApi.PostgresCluster{
-				Spec: platformApi.PostgresClusterSpec{
+				Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 					Class:           "minimal",
 					Instances:       new(int32(1)),
 					PostgresVersion: new("17"),

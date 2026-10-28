@@ -214,30 +214,78 @@ spec:
                       When omitted it is treated as true (see poolerReadWriteWanted).
                     type: boolean
                 type: object
-              imagePullSecrets:
-                description: |-
-                  ImagePullSecrets references Secrets in the same namespace used by CNPG to
-                  pull the PostgreSQL image. Cluster values override class defaults.
-                items:
-                  description: |-
-                    LocalObjectReference contains enough information to let you locate the
-                    referenced object inside the same namespace.
-                  properties:
-                    name:
-                      default: ""
+              images:
+                description: Images supplies customer-controlled images and namespaced
+                  registry credentials.
+                properties:
+                  imagePullSecrets:
+                    description: |-
+                      ImagePullSecrets names registry Secrets in the PostgresCluster namespace.
+                      The same references are applied to PostgreSQL and PgBouncer pods.
+                    items:
                       description: |-
-                        Name of the referent.
-                        This field is effectively required, but due to backwards compatibility is
-                        allowed to be empty. Instances of this type with an empty value here are
-                        almost certainly wrong.
-                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        LocalObjectReference contains enough information to let you locate the
+                        referenced object inside the same namespace.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    type: array
+                    x-kubernetes-validations:
+                    - message: imagePullSecrets.name must not be empty
+                      rule: self.all(x, has(x.name) && x.name.size() > 0)
+                    - message: imagePullSecrets.name must contain at most 253 characters
+                      rule: self.all(x, x.name.size() <= 253)
+                  pgbouncer:
+                    description: PgBouncer is required whenever the effective connection
+                      pooler is enabled.
+                    maxLength: 2048
+                    pattern: ^(([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*|\[[a-fA-F0-9:]+\])(:[0-9]+)?/)?[a-z0-9]+(([._]|__|-+)[a-z0-9]+)*(/[a-z0-9]+(([._]|__|-+)[a-z0-9]+)*)*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}@sha256:[a-f0-9]{64}$
+                    type: string
+                    x-kubernetes-validations:
+                    - message: image must be a container image reference, not a URL
+                      rule: '!self.contains(''://'')'
+                    - message: image must not use the latest tag
+                      rule: self.split('@')[0].split(':')[self.split('@')[0].split(':').size()
+                        - 1] != 'latest'
+                  postgresql:
+                    additionalProperties:
+                      description: PinnedImageReference identifies an image by both
+                        a tag and a SHA-256 digest.
+                      maxLength: 2048
+                      pattern: ^(([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*|\[[a-fA-F0-9:]+\])(:[0-9]+)?/)?[a-z0-9]+(([._]|__|-+)[a-z0-9]+)*(/[a-z0-9]+(([._]|__|-+)[a-z0-9]+)*)*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}@sha256:[a-f0-9]{64}$
                       type: string
-                  type: object
-                  x-kubernetes-map-type: atomic
-                type: array
-                x-kubernetes-validations:
-                - message: imagePullSecrets.name must not be empty
-                  rule: self.all(x, has(x.name) && x.name.size() > 0)
+                      x-kubernetes-validations:
+                      - message: image must be a container image reference, not a
+                          URL
+                        rule: '!self.contains(''://'')'
+                      - message: image must not use the latest tag
+                        rule: self.split('@')[0].split(':')[self.split('@')[0].split(':').size()
+                          - 1] != 'latest'
+                    description: |-
+                      PostgreSQL maps each supported major to a pinned image with a matching numeric-leading tag.
+                      Only the selected major must be supplied. Additional entries prepare a future upgrade.
+                    maxProperties: 2
+                    minProperties: 1
+                    type: object
+                    x-kubernetes-validations:
+                    - message: PostgreSQL image mappings support only majors 17 and
+                        18
+                      rule: self.all(major, major in ['17', '18'])
+                    - message: PostgreSQL image tag must match its mapped major
+                      rule: self.all(major, self[major].split('@')[0].split(':')[self[major].split('@')[0].split(':').size()
+                        - 1].matches('^' + major + '([^0-9].*)?$'))
+                required:
+                - postgresql
+                type: object
               instances:
                 description: Instances overrides the number of PostgreSQL instances
                   from ClusterClass.
@@ -331,30 +379,6 @@ spec:
                 items:
                   type: string
                 type: array
-              postgresImage:
-                description: |-
-                  PostgresImage overrides the CNPG PostgreSQL image. The image must include
-                  a tag whose leading PostgreSQL major version matches the effective
-                  postgresVersion. The "latest" tag and digest-only references are rejected;
-                  tag-plus-digest references are supported.
-                type: string
-                x-kubernetes-validations:
-                - message: postgresImage must be an image reference, not a URL
-                  rule: '!self.contains(''://'')'
-                - message: postgresImage must not contain whitespace
-                  rule: '!self.matches(''.*[ \t\r\n].*'')'
-                - message: postgresImage must include a tag; digest-only references
-                    are not supported
-                  rule: self.split('@')[0].split('/')[self.split('@')[0].split('/').size()
-                    - 1].contains(':')
-                - message: postgresImage must not use the latest tag
-                  rule: self.split('@')[0].split(':')[self.split('@')[0].split(':').size()
-                    - 1] != 'latest'
-                - message: postgresImage tag is not a valid image tag
-                  rule: self.split('@')[0].split(':')[self.split('@')[0].split(':').size()
-                    - 1].matches('^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')
-                - message: postgresImage digest is not a valid OCI digest
-                  rule: self.split('@').size() <= 2 && (!self.contains('@') || self.split('@')[1].matches('^[A-Za-z][A-Za-z0-9]*(?:[+._-][A-Za-z][A-Za-z0-9]*)*:[0-9A-Fa-f]{32,}$'))
               postgresMajorUpgradeConfig:
                 description: PostgresMajorUpgradeConfig sets up the upgrade flow according
                   to backup, version and strategy requirements.
@@ -419,8 +443,8 @@ spec:
               postgresVersion:
                 description: |-
                   PostgresVersion is the PostgreSQL version (major or major.minor).
-                  Examples: "18" (latest 18.x), "18.1" (specific minor), "17", "16"
-                pattern: ^[0-9]+(\.[0-9]+)?$
+                  The major selects the pinned image in PostgresCluster.spec.images.postgresql.
+                pattern: ^(17|18)(\.[0-9]+)?$
                 type: string
               postgresqlConfig:
                 additionalProperties:
@@ -513,8 +537,15 @@ spec:
                 type: object
             required:
             - class
+            - images
             type: object
             x-kubernetes-validations:
+            - message: the selected PostgreSQL major must have an image mapping
+              rule: '!has(self.postgresVersion) || self.postgresVersion.split(''.'')[0]
+                in self.images.postgresql'
+            - message: images.pgbouncer is required when pooling is enabled
+              rule: '!has(self.connectionPooler) || !has(self.connectionPooler.enabled)
+                || !self.connectionPooler.enabled || has(self.images.pgbouncer)'
             - messageExpression: '!has(self.postgresVersion) ? ''postgresVersion cannot
                 be removed once set (was: '' + oldSelf.postgresVersion + '')'' : ''postgresVersion
                 major version cannot be downgraded (from: '' + oldSelf.postgresVersion

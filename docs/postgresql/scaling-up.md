@@ -4,6 +4,12 @@ parent: PostgreSQL
 nav_order: 6
 ---
 
+Image references below are template variables. Set them to approved complete
+`tag@sha256` references and render standalone YAML with `envsubst` before applying.
+See [image configuration](quickstart.md#3-create-a-postgresql-cluster) for the
+required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
+
+
 # PostgresCluster Vertical Scaling
 
 This document describes how to change CPU and memory resources, and how to expand storage, for a `PostgresCluster`. It covers what the operator does during each operation, what level of interruption to expect, and how to track progress.
@@ -70,6 +76,13 @@ kind: PostgresCluster
 metadata:
   name: postgresql-cluster-prod
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: postgresql-prod
   resources:
     requests:
@@ -88,6 +101,13 @@ kind: PostgresCluster
 metadata:
   name: postgresql-cluster-prod
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: postgresql-prod
   storage: 50Gi   # was 20Gi; can only increase
 ```

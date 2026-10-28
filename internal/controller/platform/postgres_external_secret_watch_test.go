@@ -17,6 +17,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	pgtestfixture "github.com/splunk/splunk-operator/internal/testutil/postgres"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
@@ -45,7 +46,7 @@ Watches(&corev1.Secret{}, ...) correctly
 var _ = Describe("PostgresCluster external Secret watch", Ordered, Label("postgres", "postgres-watch"), func() {
 	const (
 		namespace       = "default"
-		postgresVersion = "15.10"
+		postgresVersion = "17.10"
 		instances       = int32(1)
 		storageAmount   = "1Gi"
 
@@ -151,7 +152,7 @@ var _ = Describe("PostgresCluster external Secret watch", Ordered, Label("postgr
 
 		pgCluster = &platformv1alpha1.PostgresCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: namespace},
-			Spec: platformv1alpha1.PostgresClusterSpec{
+			Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class:                 className,
 				ClusterDeletionPolicy: new("Delete"),
 				PasswordConfig: &platformv1alpha1.SuperuserPasswordConfig{
