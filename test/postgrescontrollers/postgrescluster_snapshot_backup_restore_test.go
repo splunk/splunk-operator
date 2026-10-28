@@ -98,9 +98,11 @@ var _ = Describe("postgrescontrollers, integration, postgres-snapshot-backup-res
 				})
 				pgtesthelpers.RegisterSnapshotFailureDump(apiClient, snapshots, namespace)
 
+				sourceImages, imageErr := pgtesthelpers.PostgresImages()
+				Expect(imageErr).To(Succeed())
 				source := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "snapshot-source", Namespace: namespace},
-					Spec: platformv1alpha1.PostgresClusterSpec{
+					Spec: platformv1alpha1.PostgresClusterSpec{Images: sourceImages,
 						Class:                 class.Name,
 						ClusterDeletionPolicy: new("Delete"),
 					},
@@ -302,9 +304,11 @@ ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value`)
 				Expect(err).To(Succeed())
 
 				restoreStarted := time.Now()
+				restoredImages, imageErr := pgtesthelpers.PostgresImages()
+				Expect(imageErr).To(Succeed())
 				restored := &platformv1alpha1.PostgresCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "snapshot-restored", Namespace: namespace},
-					Spec: platformv1alpha1.PostgresClusterSpec{
+					Spec: platformv1alpha1.PostgresClusterSpec{Images: restoredImages,
 						Class:                 class.Name,
 						ClusterDeletionPolicy: new("Delete"),
 						Backup:                &platformv1alpha1.BackupConfig{Enabled: new(false)},

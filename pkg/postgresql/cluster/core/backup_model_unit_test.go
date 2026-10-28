@@ -22,6 +22,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	pgtestfixture "github.com/splunk/splunk-operator/internal/testutil/postgres"
 	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	backuptypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/backup"
 	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
@@ -85,7 +86,7 @@ func newTestMergedConfig(backupEnabled bool, schedule string) *MergedConfig {
 	version := "18"
 	storage := resource.MustParse("50Gi")
 	cfg := &MergedConfig{
-		Spec: &platformv1alpha1.PostgresClusterSpec{
+		Spec: &platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 			Instances:        &instances,
 			PostgresVersion:  &version,
 			Storage:          &storage,
@@ -597,7 +598,7 @@ func TestGetMergedConfig_BackupMerge(t *testing.T) {
 				},
 			},
 		}
-		cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{}}
+		cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()}}
 
 		// Act
 		cfg := GetMergedConfig(class, cluster)
@@ -626,7 +627,7 @@ func TestGetMergedConfig_BackupMerge(t *testing.T) {
 			},
 		}
 		cluster := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{
+			Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Backup: &platformv1alpha1.BackupConfig{Schedule: new("30 3 * * *")},
 			},
 		}
@@ -658,7 +659,7 @@ func TestGetMergedConfig_BackupMerge(t *testing.T) {
 			},
 		}
 		cluster := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{
+			Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Backup: &platformv1alpha1.BackupConfig{Enabled: new(false)},
 			},
 		}
@@ -686,7 +687,7 @@ func TestGetMergedConfig_BackupMerge(t *testing.T) {
 			},
 		}
 		cluster := &platformv1alpha1.PostgresCluster{
-			Spec: platformv1alpha1.PostgresClusterSpec{
+			Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Backup: &platformv1alpha1.BackupConfig{Enabled: new(true)},
 			},
 		}
@@ -712,7 +713,7 @@ func TestGetMergedConfig_BackupMerge(t *testing.T) {
 				},
 			},
 		}
-		cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{}}
+		cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()}}
 
 		// Act
 		cfg := GetMergedConfig(class, cluster)
@@ -874,7 +875,7 @@ func TestBuildCNPGClusterSpec_Backup(t *testing.T) {
 		cfg := newTestMergedConfig(true, "0 2 * * *")
 
 		// Act
-		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "secret", false)
+		spec := mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, cfg, "c1", "secret", false)
 
 		// Assert
 		require.NotNil(t, spec.Backup)
@@ -888,7 +889,7 @@ func TestBuildCNPGClusterSpec_Backup(t *testing.T) {
 		cfg := newTestMergedConfig(false, "")
 
 		// Act
-		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "secret", false)
+		spec := mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, cfg, "c1", "secret", false)
 
 		// Assert
 		assert.Nil(t, spec.Backup)
@@ -900,7 +901,7 @@ func TestBuildCNPGClusterSpec_Backup(t *testing.T) {
 		cfg.CNPG.Backup = nil
 
 		// Act
-		spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "secret", false)
+		spec := mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, cfg, "c1", "secret", false)
 
 		// Assert
 		assert.Nil(t, spec.Backup)
@@ -1217,7 +1218,7 @@ func TestBuildCNPGClusterSpec_BarmanDisabledOmitsPlugin(t *testing.T) {
 	cfg := newTestMergedConfigBarman("0 2 * * *")
 	cfg.Spec.Backup.Enabled = new(false)
 
-	spec := buildCNPGClusterSpec(cnpgv1.ClusterSpec{}, cfg, "c1", "secret", false)
+	spec := mustBuildCNPGClusterSpec(t, cnpgv1.ClusterSpec{}, cfg, "c1", "secret", false)
 
 	assert.Nil(t, spec.Backup)
 	assert.Empty(t, spec.Plugins)
@@ -1232,7 +1233,7 @@ func TestBuildCNPGClusterSpec_PreservesForeignPlugins(t *testing.T) {
 			},
 		}
 
-		spec := buildCNPGClusterSpec(live, cfg, "c1", "secret", false)
+		spec := mustBuildCNPGClusterSpec(t, live, cfg, "c1", "secret", false)
 
 		names := make([]string, 0, len(spec.Plugins))
 		for _, p := range spec.Plugins {
@@ -1252,7 +1253,7 @@ func TestBuildCNPGClusterSpec_PreservesForeignPlugins(t *testing.T) {
 			},
 		}
 
-		spec := buildCNPGClusterSpec(live, cfg, "c1", "secret", false)
+		spec := mustBuildCNPGClusterSpec(t, live, cfg, "c1", "secret", false)
 
 		var barmanCount int
 		for _, p := range spec.Plugins {
@@ -1275,7 +1276,7 @@ func TestBuildCNPGClusterSpec_PreservesForeignPlugins(t *testing.T) {
 			},
 		}
 
-		spec := buildCNPGClusterSpec(live, cfg, "c1", "secret", false)
+		spec := mustBuildCNPGClusterSpec(t, live, cfg, "c1", "secret", false)
 
 		require.Len(t, spec.Plugins, 1)
 		assert.Equal(t, "some-other.plugin.io", spec.Plugins[0].Name)

@@ -8,7 +8,7 @@ nav_order: 4
 
 This document describes how to perform a PostgreSQL major version upgrade for a Splunk Operator `PostgresCluster`, what safety checks the operator performs, and what to monitor during the upgrade.
 
-Examples here use `15 -> 16`, but the same process applies to other supported PostgreSQL major versions.
+Examples here use `17 -> 18`, but the same process applies to other supported PostgreSQL major versions.
 
 Minor-version upgrades, scaling, and backup configuration are covered separately.
 
@@ -26,11 +26,16 @@ kind: PostgresCluster
 metadata:
   name: postgresql-cluster-prod
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+      "18": ${TEST_PG18_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: postgresql-prod
-  postgresVersion: "16"
-  # If postgresImage is set on this cluster or inherited from the class, update
-  # it in the same change so it points at the target PostgreSQL major version.
-  # postgresImage: registry.example.com/team/postgresql:16
+  postgresVersion: "18"
   postgresMajorUpgradeConfig:
     allow: true
 ```
@@ -54,9 +59,21 @@ target version and remove `spec.postgresMajorUpgradeConfig` from the tracked
 manifest. If the operator used multiple upgrade hops, wait until all status
 entries for the requested upgrade are `Completed`.
 
-The operator only supports single-major-version upgrades. A request that skips intermediate versions, such as `15 -> 18`, is rejected with a terminal `Failed` condition and requires manual correction of `spec.postgresVersion` before the workflow can proceed. To reach PostgreSQL 18 from 15, perform sequential upgrades: `15 -> 16`, then `16 -> 17`, then `17 -> 18`.
+The supported major transition is PostgreSQL 17 to 18. Downgrades and unsupported
+majors are rejected. Add the pinned PG18 reference under `spec.images.postgresql["18"]`
+in the same update as `postgresVersion: "18"`, or prepare that entry in advance.
+A version-only update with no PG18 mapping is rejected. The upgrade resolves the
+exact target from this mapping, and ordinary reconciliation keeps PG17 in place
+until the existing backup/preflight gates permit the upgrade.
 
-Minor PostgreSQL version changes are different. A same-major change, such as `15.10 -> 15.12`, is handled by normal cluster reconciliation and is documented in [Minor Version Upgrades](minor-version-upgrade.md).
+Set `TEST_PG17_IMAGE`, `TEST_PG18_IMAGE`, and `TEST_PGBOUNCER_IMAGE` to approved
+`tag@sha256` references before rendering the examples. PostgreSQL tags must begin
+with the mapped numeric major. Use `envsubst` to render standalone YAML templates;
+existing `spec.images.imagePullSecrets` must be retained if the registry needs them.
+The operator never constructs a public image or chooses an implicit PgBouncer image.
+
+Minor upgrades change the pinned reference within the same major mapping and are
+documented in [Minor Version Upgrades](minor-version-upgrade.md).
 
 ### Blue/green strategy availability
 
@@ -105,11 +122,16 @@ kind: PostgresCluster
 metadata:
   name: postgresql-cluster-prod
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+      "18": ${TEST_PG18_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: postgresql-prod
-  postgresVersion: "16"
-  # If postgresImage is set on this cluster or inherited from the class, update
-  # it in the same change so it points at the target PostgreSQL major version.
-  # postgresImage: registry.example.com/team/postgresql:16
+  postgresVersion: "18"
   postgresMajorUpgradeConfig:
     allow: true
 ```
@@ -126,12 +148,13 @@ For ad hoc testing or an emergency change window, you can patch the existing
 ```bash
 kubectl patch postgrescluster $CLUSTER -n $NS \
   --type=merge \
-  -p '{
+  -p "$(jq -n --arg image "${TEST_PG18_IMAGE:?Set the approved target image}" '{
     "spec": {
-      "postgresVersion": "16",
+      "postgresVersion": "18",
+      "images": {"postgresql": {"18": $image}},
       "postgresMajorUpgradeConfig": { "allow": true }
     }
-  }'
+  }')"
 ```
 
 Prefer the tracked manifest for production changes so the requested target
@@ -214,7 +237,7 @@ After the upgrade reports `Completed` for the requested target version:
 - confirm backup status for the upgraded cluster
 - remove `spec.postgresMajorUpgradeConfig` from the tracked manifest
 
-Example final manifest shape after a completed `15 -> 16` upgrade:
+Example final manifest shape after a completed `17 -> 18` upgrade:
 
 ```yaml
 apiVersion: platform.splunk.com/v1alpha1
@@ -222,8 +245,16 @@ kind: PostgresCluster
 metadata:
   name: postgresql-cluster-prod
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+      "18": ${TEST_PG18_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: postgresql-prod
-  postgresVersion: "16"
+  postgresVersion: "18"
 ```
 
 The completion record remains in status. Keeping `postgresMajorUpgradeConfig` after completion is not required once `spec.postgresVersion` already reflects the new steady-state PostgreSQL version.

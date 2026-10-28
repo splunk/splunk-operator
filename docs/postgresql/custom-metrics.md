@@ -4,6 +4,12 @@ parent: PostgreSQL
 nav_order: 8
 ---
 
+Image references below are template variables. Set them to approved complete
+`tag@sha256` references and render standalone YAML with `envsubst` before applying.
+See [image configuration](quickstart.md#3-create-a-postgresql-cluster) for the
+required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
+
+
 # Custom PostgreSQL metrics
 
 Custom metrics let you expose information that matters to your application as
@@ -36,6 +42,13 @@ metadata:
   name: orders-postgres
   namespace: apps
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: production-postgres
   monitoring:
     postgresqlMetrics: true
@@ -153,6 +166,13 @@ metadata:
   name: orders-postgres
   namespace: apps
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: production-postgres
   monitoring:
     postgresqlMetrics: true

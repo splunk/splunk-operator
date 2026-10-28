@@ -127,6 +127,8 @@ type RecoveryTarget struct {
 // (clearing returns to the class default) subject to the scaling rules in
 // scaling-out.md, which the admission webhook enforces against the merged
 // effective instance count.
+// +kubebuilder:validation:XValidation:rule="!has(self.postgresVersion) || self.postgresVersion.split('.')[0] in self.images.postgresql",message="the selected PostgreSQL major must have an image mapping"
+// +kubebuilder:validation:XValidation:rule="!has(self.connectionPooler) || !has(self.connectionPooler.enabled) || !self.connectionPooler.enabled || has(self.images.pgbouncer)",message="images.pgbouncer is required when pooling is enabled"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.postgresVersion) || (has(self.postgresVersion) && int(self.postgresVersion.split('.')[0]) >= int(oldSelf.postgresVersion.split('.')[0]))",messageExpression="!has(self.postgresVersion) ? 'postgresVersion cannot be removed once set (was: ' + oldSelf.postgresVersion + ')' : 'postgresVersion major version cannot be downgraded (from: ' + oldSelf.postgresVersion + ', to: ' + self.postgresVersion + ')'"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.storage) || (has(self.storage) && quantity(self.storage).compareTo(quantity(oldSelf.storage)) >= 0)",messageExpression="!has(self.storage) ? 'storage cannot be removed once set (was: ' + string(oldSelf.storage) + ')' : 'storage size cannot be decreased (from: ' + string(oldSelf.storage) + ', to: ' + string(self.storage) + ')'"
 // +kubebuilder:validation:XValidation:rule="(has(self.passwordConfig) == has(oldSelf.passwordConfig))",message="passwordConfig cannot be altered after creation"
@@ -151,29 +153,14 @@ type PostgresClusterSpec struct {
 	Instances *int32 `json:"instances,omitempty"`
 
 	// PostgresVersion is the PostgreSQL version (major or major.minor).
-	// Examples: "18" (latest 18.x), "18.1" (specific minor), "17", "16"
-	// +kubebuilder:validation:Pattern=`^[0-9]+(\.[0-9]+)?$`
+	// The major selects the pinned image in PostgresCluster.spec.images.postgresql.
+	// +kubebuilder:validation:Pattern=`^(17|18)(\.[0-9]+)?$`
 	// +optional
 	PostgresVersion *string `json:"postgresVersion,omitempty"`
 
-	// PostgresImage overrides the CNPG PostgreSQL image. The image must include
-	// a tag whose leading PostgreSQL major version matches the effective
-	// postgresVersion. The "latest" tag and digest-only references are rejected;
-	// tag-plus-digest references are supported.
-	// +optional
-	// +kubebuilder:validation:XValidation:rule="!self.contains('://')",message="postgresImage must be an image reference, not a URL"
-	// +kubebuilder:validation:XValidation:rule="!self.matches('.*[ \\t\\r\\n].*')",message="postgresImage must not contain whitespace"
-	// +kubebuilder:validation:XValidation:rule="self.split('@')[0].split('/')[self.split('@')[0].split('/').size() - 1].contains(':')",message="postgresImage must include a tag; digest-only references are not supported"
-	// +kubebuilder:validation:XValidation:rule="self.split('@')[0].split(':')[self.split('@')[0].split(':').size() - 1] != 'latest'",message="postgresImage must not use the latest tag"
-	// +kubebuilder:validation:XValidation:rule="self.split('@')[0].split(':')[self.split('@')[0].split(':').size() - 1].matches('^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')",message="postgresImage tag is not a valid image tag"
-	// +kubebuilder:validation:XValidation:rule="self.split('@').size() <= 2 && (!self.contains('@') || self.split('@')[1].matches('^[A-Za-z][A-Za-z0-9]*(?:[+._-][A-Za-z][A-Za-z0-9]*)*:[0-9A-Fa-f]{32,}$'))",message="postgresImage digest is not a valid OCI digest"
-	PostgresImage *string `json:"postgresImage,omitempty"`
-
-	// ImagePullSecrets references Secrets in the same namespace used by CNPG to
-	// pull the PostgreSQL image. Cluster values override class defaults.
-	// +optional
-	// +kubebuilder:validation:XValidation:rule="self.all(x, has(x.name) && x.name.size() > 0)",message="imagePullSecrets.name must not be empty"
-	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	// Images supplies customer-controlled images and namespaced registry credentials.
+	// +kubebuilder:validation:Required
+	Images *PostgresClusterImages `json:"images"`
 
 	// Resources overrides CPU/memory resources from ClusterClass.
 	// +optional

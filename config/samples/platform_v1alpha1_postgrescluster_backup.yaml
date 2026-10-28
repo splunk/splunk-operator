@@ -1,3 +1,7 @@
+# Image template: set TEST_PG17_IMAGE and TEST_PGBOUNCER_IMAGE
+# to complete tag@sha256 references.
+# Render with envsubst before applying.
+# Unrendered placeholders are not valid images.
 # PostgresCluster with backup schedule override
 # Inherits backup enabled from class, overrides schedule to run at 3:30am
 apiVersion: platform.splunk.com/v1alpha1
@@ -8,6 +12,13 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: postgresql-cluster-backup
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: postgresql-backup
   clusterDeletionPolicy: Retain
 

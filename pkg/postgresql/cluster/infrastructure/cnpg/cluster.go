@@ -27,12 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const PostgresImageNameFormat = "ghcr.io/cloudnative-pg/postgresql:%s"
-
-func PostgresImageName(version string) string {
-	return fmt.Sprintf(PostgresImageNameFormat, version)
-}
-
 // ImagePullSecrets converts Kubernetes secret references to CNPG's reference type.
 func ImagePullSecrets(refs []corev1.LocalObjectReference) []cnpgv1.LocalObjectReference {
 	if len(refs) == 0 {

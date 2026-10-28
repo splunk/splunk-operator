@@ -251,7 +251,7 @@ func serverTLSNames(cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig
 	for _, endpoint := range []string{"rw", "ro", "r"} {
 		names = append(names, serviceDNSNames(environmentName+"-"+endpoint, cluster.Namespace)...)
 	}
-	if cfg != nil && cfg.Spec != nil && isPoolerEnabled(cfg.Spec.ConnectionPooler) {
+	if cfg != nil && cfg.Spec != nil && PoolerEnabled(cfg.Spec.ConnectionPooler) {
 		if poolerReadWriteWanted(cfg.Spec.ConnectionPooler) {
 			names = append(names, serviceDNSNames(environmentName+defaultPoolerSuffix+readWriteEndpoint, cluster.Namespace)...)
 		}
@@ -330,7 +330,7 @@ func serviceDNSNames(service, namespace string) []string {
 
 func newCNPGDefaultServerTLSPlan(cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig, environmentName string) serverTLSPlan {
 	plan := serverTLSPlan{initialized: true}
-	if cluster == nil || cfg == nil || cfg.Spec == nil || !isPoolerEnabled(cfg.Spec.ConnectionPooler) {
+	if cluster == nil || cfg == nil || cfg.Spec == nil || !PoolerEnabled(cfg.Spec.ConnectionPooler) {
 		return plan
 	}
 	environmentName = cmp.Or(environmentName, cluster.Name)
@@ -346,7 +346,7 @@ func newCertManagerServerTLSPlan(cluster *platformv1alpha1.PostgresCluster, cfg 
 		serverTLSSecret: identity.ServerTLSSecret,
 		serverCASecret:  identity.ServerCASecret,
 	}
-	if cluster != nil && cfg != nil && cfg.Spec != nil && isPoolerEnabled(cfg.Spec.ConnectionPooler) {
+	if cluster != nil && cfg != nil && cfg.Spec != nil && PoolerEnabled(cfg.Spec.ConnectionPooler) {
 		plan.poolerEnabled = true
 		plan.requiredPoolerSANs = certManagerPoolerSANs(cluster, cfg, environmentName)
 	}
@@ -358,7 +358,7 @@ func newCertManagerServerTLSPlan(cluster *platformv1alpha1.PostgresCluster, cfg 
 // RW or RO pooler names, so the post-adoption leaf check must use the issuance
 // intent rather than reconstructing a broader CNPG-default set.
 func certManagerPoolerSANs(cluster *platformv1alpha1.PostgresCluster, cfg *MergedConfig, environmentName string) []string {
-	if cluster == nil || cfg == nil || cfg.Spec == nil || !isPoolerEnabled(cfg.Spec.ConnectionPooler) {
+	if cluster == nil || cfg == nil || cfg.Spec == nil || !PoolerEnabled(cfg.Spec.ConnectionPooler) {
 		return nil
 	}
 	environmentName = cmp.Or(environmentName, cluster.Name)

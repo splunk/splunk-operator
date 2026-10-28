@@ -256,6 +256,11 @@ func (p *BlueGreenCandidatePreparer) buildCandidate(ctx context.Context, source 
 
 	spec := *source.Spec.DeepCopy()
 	spec.ImageName = p.plan.TargetImage
+	var imagePullSecrets []corev1.LocalObjectReference
+	if p.plan.TargetConfiguration != nil && p.plan.TargetConfiguration.Images != nil {
+		imagePullSecrets = p.plan.TargetConfiguration.Images.ImagePullSecrets
+	}
+	spec.ImagePullSecrets = clusterCnpg.ImagePullSecrets(imagePullSecrets)
 	spec.ImageCatalogRef = nil
 	spec.Instances = 1
 	spec.StorageConfiguration.Size = p.plan.TargetStorage.String()

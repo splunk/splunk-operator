@@ -11,7 +11,7 @@ spec:
   config:
     instances: 3
     storage: 50Gi
-    postgresVersion: "18"
+    postgresVersion: "17"
 
     resources:
       requests:

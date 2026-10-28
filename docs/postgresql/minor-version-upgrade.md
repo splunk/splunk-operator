@@ -8,7 +8,7 @@ nav_order: 3
 
 This document describes how to perform a PostgreSQL minor version upgrade for a Splunk Operator `PostgresCluster`, what upgrade behaviors are available, and what level of interruption to expect.
 
-Examples here use `15.10 -> 15.12`, but the same process applies to any minor version upgrade within the same PostgreSQL major version.
+Examples here use `17.10 -> 17.12`, but the same process applies to any minor version upgrade within the same PostgreSQL major version.
 
 Backups and major-version upgrades are not covered here.
 
@@ -22,27 +22,17 @@ That version can be defined in either field:
 - `PostgresCluster.spec.postgresVersion`
 
 If both are set, the `PostgresCluster` value is the effective override used for that cluster.
-The CNPG image defaults to `ghcr.io/cloudnative-pg/postgresql:<effective postgresVersion>`. To use
-a private registry, custom CNPG-compatible build, or pinned digest, set
-`PostgresClusterClass.spec.config.postgresImage` or `PostgresCluster.spec.postgresImage`; the
-cluster-level value takes precedence. Explicit images must include a non-`latest` tag whose leading
-PostgreSQL major version matches the effective `postgresVersion`. Digest-only references are
-rejected, while tag-plus-digest references are supported. For private registries, set
-`PostgresClusterClass.spec.config.imagePullSecrets` or `PostgresCluster.spec.imagePullSecrets`;
-the cluster-level value takes precedence and is passed through to CNPG.
+Every PostgresCluster must provide `spec.images.postgresql`, keyed by the supported
+major (`"17"` or `"18"`), and `spec.images.pgbouncer` when pooling is enabled. Images
+require a numeric-leading PostgreSQL tag matching the map key and a SHA-256 digest;
+PgBouncer also requires `tag@sha256`. No image is generated or inherited from the class.
+Optional `spec.images.imagePullSecrets` references Secrets in the cluster namespace
+and applies to both PostgreSQL and PgBouncer pods.
 
-In practice:
-
-- use `PostgresClusterClass.spec.config.postgresVersion` to define the default version for new clusters created from that class
-- use `PostgresCluster.spec.postgresVersion` to change the version of an existing cluster through its manifest
-- use `postgresImage` only when you need to override the generated CNPG PostgreSQL image while
-  keeping `postgresVersion` as the lifecycle-policy source of truth
-- use `imagePullSecrets` with `postgresImage` when the target registry requires pull credentials
-
-If `postgresImage` is set on the cluster or inherited from the class, changing
-only `postgresVersion` does not change the desired CNPG image. Update
-`postgresImage` in the same manifest change so it points at the image for the
-target PostgreSQL version.
+To perform a minor upgrade, update the selected major's mapped reference to your
+approved target image, supplied through an image variable. Changing only
+`postgresVersion` within the same major leaves the pinned image unchanged. If the
+cluster explicitly specifies a minor, update that selector consistently too.
 
 When that field changes:
 
@@ -88,7 +78,7 @@ Before starting the upgrade:
 
 - make sure the operator runs with `PostgresController` enabled
 - make sure the cluster is healthy and `Ready`
-- use a same-major patch version change, for example `15.10 -> 15.12` (not `15.10 -> 16.2`)
+- use a same-major patch version change, for example `17.10 -> 17.12` (not `17.10 -> 18.2`)
 - ensure client applications retry transient connection failures
 - have a backup and recovery plan in case of unexpected issues
 
@@ -119,7 +109,7 @@ spec:
   config:
     instances: 3
     storage: 20Gi
-    postgresVersion: "15.10"
+    postgresVersion: "17.10"
     connectionPooler:
       enabled: true
   cnpg:
@@ -141,7 +131,7 @@ spec:
   config:
     instances: 1
     storage: 10Gi
-    postgresVersion: "15.10"
+    postgresVersion: "17.10"
   cnpg:
     primaryUpdateMethod: restart
 ```
@@ -154,13 +144,13 @@ Important:
 
 ### Upgrade procedure
 
-For an existing cluster, trigger the version change by updating `PostgresCluster.spec.postgresVersion` in the version-controlled `PostgresCluster` manifest and applying it with `kubectl apply`.
+For an existing cluster, set `TEST_PG17_IMAGE` to the approved target minor `tag@sha256` reference and update `spec.images.postgresql["17"]` in the tracked manifest. Render variables before applying the YAML. Update any explicit `postgresVersion` minor consistently.
 
 1. Note the current PostgreSQL version.
 2. Select the write endpoint that matches your update method:
    - direct RW service for `restart`
    - RW pooler for `switchover`
-3. Update the tracked `PostgresCluster` YAML with the target version.
+3. Update the tracked mapping with the target pinned image and any explicit version selector.
 4. Review and commit the manifest change according to your normal change-management process.
 5. Apply the manifest.
 6. Watch the cluster status and events.
@@ -181,8 +171,15 @@ kind: PostgresCluster
 metadata:
   name: postgresql-cluster-dev
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: postgresql-dev
-  postgresVersion: "15.12"
+  postgresVersion: "17.12"
 ```
 
 Apply the manifest:
@@ -226,7 +223,7 @@ You may also see additional namespace events from CNPG and Kubernetes, such as:
 ### Rollback to the earlier patch version
 
 Rolling back from a higher patch version to an earlier patch version within the same major version is supported.
-The process is the same as the upgrade: revert `spec.postgresVersion` in the tracked `PostgresCluster` manifest, review and commit the change, then apply it. Treat this as a validation or recovery procedure, not as a preferred steady-state operating pattern.
+The process is the same as the upgrade: restore the prior mapped image reference and any explicit minor selector in the tracked manifest, then apply it after review. Treat this as a validation or recovery procedure, not as a preferred steady-state operating pattern.
 
 ### CNPG 1.30 behavioral notes
 

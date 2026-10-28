@@ -193,3 +193,10 @@ func (c configMapNotFoundClient) Get(ctx context.Context, key client.ObjectKey, 
 	}
 	return c.Client.Get(ctx, key, obj, opts...)
 }
+
+func mustBuildCNPGClusterSpec(t *testing.T, live cnpgv1.ClusterSpec, cfg *MergedConfig, name, secret string, metrics bool) cnpgv1.ClusterSpec {
+	t.Helper()
+	spec, err := buildCNPGClusterSpec(live, cfg, name, secret, metrics)
+	require.NoError(t, err)
+	return spec
+}

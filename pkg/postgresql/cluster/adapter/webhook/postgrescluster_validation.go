@@ -259,13 +259,14 @@ func validateExternalSuperuserSecret(ctx context.Context, obj *platformApi.Postg
 }
 
 func validateAgainstClass(ctx context.Context, obj, oldObj *platformApi.PostgresCluster, reader client.Reader, specUnchanged bool) field.ErrorList {
+	// Stored configuration must not block metadata or finalizer updates.
+	if specUnchanged {
+		return nil
+	}
 	var allErrs field.ErrorList
 
 	class := &platformApi.PostgresClusterClass{}
 	if err := reader.Get(ctx, client.ObjectKey{Name: obj.Spec.Class}, class); err != nil {
-		if apierrors.IsNotFound(err) && specUnchanged {
-			return nil
-		}
 		classPath := field.NewPath("spec").Child("class")
 		if apierrors.IsNotFound(err) {
 			allErrs = append(allErrs, field.Invalid(classPath, obj.Spec.Class,

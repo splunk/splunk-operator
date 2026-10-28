@@ -1,3 +1,9 @@
+
+Image references below are template variables. Set them to approved complete
+`tag@sha256` references and render standalone YAML with `envsubst` before applying.
+See [image configuration](quickstart.md#3-create-a-postgresql-cluster) for the
+required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
+
 # cert-manager TLS for PostgresCluster
 
 `PostgresClusterClass` is immutable. Select cert-manager when creating the
@@ -44,6 +50,13 @@ metadata:
   name: orders
   namespace: payments
 spec:
+  images:
+    postgresql:
+      "17": ${TEST_PG17_IMAGE}
+    pgbouncer: ${TEST_PGBOUNCER_IMAGE}
+    # Optional Secrets must exist in this PostgresCluster's namespace.
+    # imagePullSecrets:
+    #   - name: registry-reader
   class: postgres-cert-manager
   tls:
     serverAltDNSNames:
