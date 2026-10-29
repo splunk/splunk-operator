@@ -20,7 +20,6 @@ NOAH_LOCAL_HELM_REPOSITORY_CACHE ?= $(NOAH_LOCAL_HELM_STATE_DIR)/repository
 
 NOAH_LOCAL_DEPLOYMENT_ID ?=
 NOAH_LOCAL_CONTEXT ?= kraken
-NOAH_LOCAL_KRAKEN_BASE_URL ?= https://kraken.cyclops-pdx10-play-payne.splunk8s.io
 NOAH_LOCAL_KRAKEN_WAIT_TIMEOUT ?= 20m
 # CI can set these optional fields so leaked deployments remain identifiable
 # and expire even if the runner disappears. Local deployments remain untagged
@@ -135,8 +134,7 @@ noah-local-cluster: ## Create and configure a Kraken vCluster.
 			deployment_id_source=saved; \
 		fi; \
 		if test -n "$$deployment_id"; then \
-			if deployment_status="$$(kraken status --base-url "$(NOAH_LOCAL_KRAKEN_BASE_URL)" \
-				"$$deployment_id" 2>&1)"; then \
+			if deployment_status="$$(kraken status "$$deployment_id" 2>&1)"; then \
 				deployment_state="$$(printf '%s\n' "$$deployment_status" | \
 					jq -er '.state | strings | select(length > 0)')" || { \
 					printf 'Kraken returned an invalid status for deployment %s.\n' \
@@ -155,8 +153,8 @@ noah-local-cluster: ## Create and configure a Kraken vCluster.
 						fi \
 						;; \
 					failed) \
-						printf 'Kraken deployment %s is failed. Inspect `kraken status --base-url %s %s` and its events, then clean it up before retrying.\n' \
-							"$$deployment_id" "$(NOAH_LOCAL_KRAKEN_BASE_URL)" "$$deployment_id" >&2; \
+						printf 'Kraken deployment %s failed. Inspect `kraken status %s` and its events, then clean it up before retrying.\n' \
+							"$$deployment_id" "$$deployment_id" >&2; \
 						exit 1 \
 						;; \
 					*) \
@@ -185,7 +183,6 @@ noah-local-cluster: ## Create and configure a Kraken vCluster.
 			NOAH_LOCAL_CONTEXT="$(NOAH_LOCAL_CONTEXT)" \
 			NOAH_LOCAL_DEPLOYMENT_ID_FILE="$(NOAH_LOCAL_DEPLOYMENT_ID_FILE)" \
 			NOAH_LOCAL_KRAKEN_RUNTIME_FILE="$(NOAH_LOCAL_KRAKEN_RUNTIME_FILE)" \
-			NOAH_LOCAL_KRAKEN_BASE_URL="$(NOAH_LOCAL_KRAKEN_BASE_URL)" \
 			NOAH_LOCAL_KRAKEN_WAIT_TIMEOUT="$(NOAH_LOCAL_KRAKEN_WAIT_TIMEOUT)" \
 			NOAH_LOCAL_KRAKEN_TTL_SECONDS="$(NOAH_LOCAL_KRAKEN_TTL_SECONDS)" \
 			NOAH_LOCAL_KRAKEN_PURPOSE="$(NOAH_LOCAL_KRAKEN_PURPOSE)" \
@@ -207,8 +204,7 @@ noah-local-destroy: ## Destroy the saved Kraken vCluster.
 			printf '%s\n' 'No Kraken deployment found.'; \
 			exit 0; \
 		fi; \
-		if delete_output="$$(kraken delete --base-url "$(NOAH_LOCAL_KRAKEN_BASE_URL)" \
-			"$$deployment_id" --json 2>&1)"; then \
+		if delete_output="$$(kraken delete "$$deployment_id" --json 2>&1)"; then \
 			printf '%s\n' "$$delete_output"; \
 		else \
 			case "$$delete_output" in \
