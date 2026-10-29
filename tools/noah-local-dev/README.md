@@ -222,8 +222,9 @@ command if the entry is missing. A `401` from
 Helm args, deploy timeout, and the in-cluster operator release, images, chart,
 Helm args and timeout.
 
-Kraken calls use `NOAH_LOCAL_KRAKEN_BASE_URL` explicitly. New deployments wait
-up to `NOAH_LOCAL_KRAKEN_WAIT_TIMEOUT` (default `20m`). CI can also set
+Kraken calls use the production control plane by default, as selected by the
+production CLI. New deployments wait
+`NOAH_LOCAL_KRAKEN_WAIT_TIMEOUT` (default `20m`). CI can also set
 `NOAH_LOCAL_KRAKEN_TTL_SECONDS`, `NOAH_LOCAL_KRAKEN_PURPOSE`, and the optional
 `NOAH_LOCAL_KRAKEN_WORKFLOW_TAG`, `NOAH_LOCAL_KRAKEN_PIPELINE_TAG` and
 `NOAH_LOCAL_KRAKEN_SHA_TAG` values so deployments are identifiable and

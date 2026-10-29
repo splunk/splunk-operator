@@ -12,7 +12,6 @@
 #                                 setup that follows cannot orphan the vCluster
 #   NOAH_LOCAL_KRAKEN_RUNTIME_FILE where to write non-secret Kraken SmartBus and
 #                                 workload-identity coordinates
-#   NOAH_LOCAL_KRAKEN_BASE_URL    Kraken API base URL used for every request
 #   NOAH_LOCAL_KRAKEN_WAIT_TIMEOUT maximum readiness wait (seconds, or Ns/Nm/Nh)
 #   NOAH_LOCAL_KRAKEN_TTL_SECONDS optional deployment lease duration
 #   NOAH_LOCAL_KRAKEN_PURPOSE     optional deployment purpose metadata
@@ -25,7 +24,6 @@ set -eu
 deployment_id=${1:-}
 deployment_id_file=${NOAH_LOCAL_DEPLOYMENT_ID_FILE:-}
 runtime_file=${NOAH_LOCAL_KRAKEN_RUNTIME_FILE:-}
-kraken_base_url=${NOAH_LOCAL_KRAKEN_BASE_URL:-https://kraken.cyclops-pdx10-play-payne.splunk8s.io}
 kraken_wait_timeout=${NOAH_LOCAL_KRAKEN_WAIT_TIMEOUT:-20m}
 kraken_ttl_seconds=${NOAH_LOCAL_KRAKEN_TTL_SECONDS:-}
 kraken_purpose=${NOAH_LOCAL_KRAKEN_PURPOSE:-}
@@ -58,7 +56,6 @@ fail() {
 }
 
 test -n "$kube_context" || fail 'NOAH_LOCAL_CONTEXT must not be empty.'
-test -n "$kraken_base_url" || fail 'NOAH_LOCAL_KRAKEN_BASE_URL must not be empty.'
 
 duration_seconds() {
     duration=$1
@@ -87,8 +84,7 @@ wait_for_kraken_ready() {
     last_state=unknown
 
     while :; do
-        if wait_status=$(kraken status --base-url "$kraken_base_url" \
-            "$wait_deployment_id" 2>&1); then
+        if wait_status=$(kraken status "$wait_deployment_id" 2>&1); then
             wait_state=$(printf '%s\n' "$wait_status" |
                 jq -er '.state | strings | select(length > 0)') ||
                 fail "Kraken returned an invalid status for deployment $wait_deployment_id."
@@ -150,8 +146,7 @@ if test -z "$deployment_id"; then
             "$request_file"
     fi
 
-    set -- create --base-url "$kraken_base_url" \
-        --file "$request_file" --json
+    set -- create --file "$request_file" --json
     if test -n "$kraken_purpose"; then
         set -- "$@" --purpose "$kraken_purpose"
     fi
@@ -216,8 +211,7 @@ if ! test -s "$kubeconfig"; then
         'contexts: []' > "$kubeconfig"
 fi
 
-connection_details=$(kraken connection --base-url "$kraken_base_url" \
-    "$deployment_id") ||
+connection_details=$(kraken connection "$deployment_id") ||
     fail "Failed to read the connection details for $deployment_id."
 kraken_kubeconfig=$(printf '%s\n' "$connection_details" | jq -er '.kubeconfig') ||
     fail "Kraken connection details for $deployment_id have no kubeconfig."
