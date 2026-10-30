@@ -22,7 +22,7 @@ import pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/conne
 const (
 	configMapKeySuperUserName      = "SUPER_USER_NAME"
 	configMapKeySuperUserSecretRef = "SUPER_USER_SECRET_REF"
-	configMapKeyServerCASecretRef  = "SERVER_CA_SECRET_REF"
+	configMapKeyServerCASecretRef  = pgconninfo.KeyServerCASecretRef
 )
 
 func withSuperUser(name, secretRef string) pgconninfo.Option {

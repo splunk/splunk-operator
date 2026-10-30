@@ -125,13 +125,13 @@ uninstalls and reinstalls its CRDs.
 
 #### A. Install the CNPG backend
 
-The Postgres Operator currently uses CNPG as its backend provisioner and requires the CNPG 1.29 API.
-Install the current patch release from that release line and wait for its controller. Consumers
+The Postgres Operator currently uses CNPG as its backend provisioner and requires the CNPG 1.30 API.
+Install the pinned 1.30.1 release and wait for its controller. Consumers
 will use the Postgres Operator CRs later in this guide rather than creating CNPG resources directly.
 
 ```bash
 kubectl apply --server-side -f \
-  https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.29/releases/cnpg-1.29.2.yaml
+  https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/v1.30.1/releases/cnpg-1.30.1.yaml
 kubectl rollout status deployment/cnpg-controller-manager \
   -n cnpg-system --timeout=2m
 ```

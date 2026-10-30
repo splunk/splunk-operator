@@ -241,3 +241,17 @@ func TestRequiredKeys(t *testing.T) {
 		KeyDefaultClusterPort,
 	}, RequiredKeys())
 }
+
+func TestSecretReference(t *testing.T) {
+	encoded := FormatSecretReference("cluster-ca", "ca.crt")
+	name, key, err := ParseSecretReference(encoded)
+	require.NoError(t, err)
+	assert.Equal(t, "cluster-ca", name)
+	assert.Equal(t, "ca.crt", key)
+	for _, invalid := range []string{"", "cluster-ca", "/ca.crt", "cluster-ca/", "cluster-ca/ca/extra"} {
+		t.Run(invalid, func(t *testing.T) {
+			_, _, err := ParseSecretReference(invalid)
+			require.Error(t, err)
+		})
+	}
+}
