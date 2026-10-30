@@ -90,6 +90,10 @@ items:
     podAnnotations:
 {{ toYaml . | indent 6 }}
   {{- end }}
+  {{- with $.Values.searchHeadCluster.postgresDatabaseMounts }}
+    postgresDatabaseMounts:
+{{ toYaml . | indent 6 }}
+  {{- end }}
   {{- with $.Values.searchHeadCluster.volumes }}
     volumes:
 {{ toYaml . | indent 6 }}

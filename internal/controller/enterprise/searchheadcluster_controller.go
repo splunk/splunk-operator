@@ -136,6 +136,7 @@ func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&enterpriseApi.SearchHeadCluster{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
+			postgresDatabaseChangedPredicate(),
 			common.AnnotationChangedPredicate(),
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
@@ -203,6 +204,10 @@ func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		})
+
+	if err := setupPostgresDatabaseWatch(mgr, bldr, &enterpriseApi.SearchHeadCluster{}, func() client.ObjectList { return &enterpriseApi.SearchHeadClusterList{} }); err != nil {
+		return err
+	}
 
 	if config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
 		bldr = bldr.Watches(&corev1.Secret{},

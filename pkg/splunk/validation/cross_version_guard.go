@@ -41,6 +41,13 @@ type crossVersionPolicy struct {
 
 // crossVersionPolicies is keyed by the older served version a write arrives at.
 var crossVersionPolicies = map[schema.GroupVersionResource]crossVersionPolicy{
+	StandaloneV3GVR: {
+		kind:      "Standalone",
+		newStored: func() client.Object { return &enterpriseApiV4.Standalone{} },
+		unrepresentable: func(stored client.Object) []string {
+			return unrepresentableStandaloneFields(&stored.(*enterpriseApiV4.Standalone).Spec)
+		},
+	},
 	IndexerClusterV3GVR: {
 		kind: "IndexerCluster",
 		newStored: func() client.Object {

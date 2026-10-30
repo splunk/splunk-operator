@@ -17,6 +17,7 @@ package standalone
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -31,6 +32,7 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
+	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -158,6 +160,13 @@ func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
+	// Let normal workload reconciliation finish before reporting an unresolved
+	// PostgreSQL dependency. Ready-only housekeeping must not be skipped.
+	defer func() {
+		if phase, message := reconcileutil.PostgresDatabaseWorkloadPhase(cr.Status.Phase, "", cr.Status.Conditions); phase != cr.Status.Phase {
+			setPhaseAndConditions(phase, message)
+		}
+	}()
 
 	// validate and updates defaults for CR
 	err = ValidateStandaloneSpec(ctx, client, cr)
@@ -311,6 +320,10 @@ func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 
 	// create or update statefulset
 	statefulSet, err := GetStandaloneStatefulSet(ctx, client, cr)
+	if errors.Is(err, configworkflow.ErrPostgresDatabasePending) {
+		setPhaseAndConditions(enterpriseApi.PhasePending, err.Error())
+		return result, nil
+	}
 	if err != nil {
 		eventPublisher.Warning(ctx, splcommon.EventReasonStatefulSetFailed, fmt.Sprintf("get standalone status set failed %s", err.Error()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
@@ -412,6 +425,9 @@ func GetStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerCl
 		return nil, err
 	}
 	certs.InjectCertMounts(&ss.Spec.Template, certMounts)
+	if err := reconcileutil.ApplyPostgresDatabaseBundle(ctx, client, cr, cr.Spec.PostgresDatabaseMounts, cr.Spec.Volumes, &cr.Status.Conditions, ss); err != nil {
+		return nil, err
+	}
 
 	smartStoreConfigMap := k8sops.GetSmartstoreConfigMap(ctx, client, cr, splcommon.SplunkStandalone)
 

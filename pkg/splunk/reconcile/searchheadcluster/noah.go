@@ -17,6 +17,7 @@ package searchheadcluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -62,6 +63,13 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	setPhaseAndConditions(enterpriseApi.PhaseError, "")
 	cr.Status.DeployerPhase = enterpriseApi.PhaseError
 	defer updateCRStatus(ctx, client, cr, &err)
+	// Let normal workload reconciliation finish before reporting an unresolved
+	// PostgreSQL dependency. Ready-only housekeeping must not be skipped.
+	defer func() {
+		if phase, message := reconcileutil.PostgresDatabaseWorkloadPhase(cr.Status.Phase, "", cr.Status.Conditions); phase != cr.Status.Phase {
+			setPhaseAndConditions(phase, message)
+		}
+	}()
 
 	if cr.Spec.NoahClusterRef == nil || cr.Spec.NoahClusterRef.Name == "" {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Noah Cluster reference is required")
@@ -140,6 +148,11 @@ func ApplySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 		if searchHeadPhase == enterpriseApi.PhasePending {
 			logger.WarnContext(ctx, "Noah dependency is not available; requeueing", "message", phaseMessage)
 		}
+	}
+	if errors.Is(err, configworkflow.ErrPostgresDatabasePending) {
+		searchHeadPhase = enterpriseApi.PhasePending
+		phaseMessage = err.Error()
+		err = nil
 	}
 	setPhaseAndConditions(searchHeadPhase, phaseMessage)
 	cr.Status.DeployerPhase = deployerPhase

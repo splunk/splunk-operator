@@ -372,6 +372,9 @@ indexerCluster:
 
 searchHeadCluster:
 
+  # Read-only database mounts on search members only. Requires PostgresController.
+  postgresDatabaseMounts: []
+
   enabled: false
 
   # Disable operator-provided CPU and memory request/limit defaults
@@ -723,6 +726,9 @@ licenseManager:
   #    nodeTaintsPolicy: [Honor|Ignore] # optional; beta since v1.26
 
 standalone:
+
+  # Read-only database mounts. Requires PostgresController.
+  postgresDatabaseMounts: []
 
   enabled: false
 

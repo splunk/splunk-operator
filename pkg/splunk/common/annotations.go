@@ -34,3 +34,7 @@ const ConfigMapRevAnnotationPrefix = "revision.configmap.enterprise.splunk.com/"
 // The domain matches the operator's own annotation prefix (revision.configmap.enterprise.splunk.com/)
 // to keep all operator-managed annotation keys under a single, consistent namespace.
 const ConfigMapRestartOptOutAnnotation = "enterprise.splunk.com/configmap-restart"
+
+// PostgresDatabaseBindingAnnotation identifies the requested producer bindings
+// for which the stored pod projection was resolved. It contains no credentials.
+const PostgresDatabaseBindingAnnotation = "enterprise.splunk.com/postgres-database-bindings"

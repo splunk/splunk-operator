@@ -34,6 +34,8 @@ func ValidateStandaloneCreate(obj *enterpriseApi.Standalone) field.ErrorList {
 			"replicas must be non-negative"))
 	}
 
+	allErrs = append(allErrs, validatePostgresDatabaseMounts(obj.Spec.PostgresDatabaseMounts, obj.Spec.Volumes)...)
+
 	// Validate common spec
 	allErrs = append(allErrs, validateCommonSplunkSpec(&obj.Spec.CommonSplunkSpec, field.NewPath("spec"))...)
 
