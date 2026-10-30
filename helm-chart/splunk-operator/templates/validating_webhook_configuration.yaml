@@ -6,7 +6,7 @@ feature gate that serves it is on. Otherwise every matching write would fail.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: {{ include "splunk-operator.operator.fullname" . }}-cross-version-field-protection
+  name: {{ include "splunk-operator.webhookConfigurationName" (dict "ctx" . "suffix" "cross-version-field-protection") }}
   labels:
 {{- include "splunk-operator.labels" . | nindent 4 }}
 {{- if .Values.splunkOperator.webhook.useCertManager }}
@@ -56,7 +56,7 @@ webhooks:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: {{ include "splunk-operator.operator.fullname" . }}-validating-webhook-configuration
+  name: {{ include "splunk-operator.webhookConfigurationName" (dict "ctx" . "suffix" "validating-webhook-configuration") }}
   labels:
 {{- include "splunk-operator.labels" . | nindent 4 }}
 {{- if .Values.splunkOperator.webhook.useCertManager }}
