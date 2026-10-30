@@ -53,6 +53,9 @@ const (
 	// SplunkMountNamePrefix is a helper string representing Splunk Volume mount names
 	SplunkMountNamePrefix = "mnt-splunk-%s"
 
+	// PostgresDatabaseVolumeName is reserved for the projected connection bundle.
+	PostgresDatabaseVolumeName = "sok-postgresok"
+
 	// SplunkMountDirecPrefix is a helper string representing Splunk Volume mount directory
 	SplunkMountDirecPrefix = "/opt/splunk/%s"
 

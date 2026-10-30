@@ -54,7 +54,18 @@ func unrepresentableSearchHeadClusterFields(spec *enterpriseApiV4.SearchHeadClus
 	if spec.DeployerNodeAffinity != nil {
 		fields = append(fields, "spec.deployerNodeAffinity")
 	}
+	if len(spec.PostgresDatabaseMounts) > 0 {
+		fields = append(fields, "spec.postgresDatabaseMounts")
+	}
 	return fields
+}
+
+// unrepresentableStandaloneFields returns the v4-only mount configuration.
+func unrepresentableStandaloneFields(spec *enterpriseApiV4.StandaloneSpec) []string {
+	if len(spec.PostgresDatabaseMounts) > 0 {
+		return []string{"spec.postgresDatabaseMounts"}
+	}
+	return nil
 }
 
 // refuseIfUnrepresentable builds the error returned when v3 cannot represent a

@@ -97,7 +97,7 @@ func TestMain(m *testing.M) {
 							Rule: admissionregistrationv1.Rule{
 								APIGroups:   []string{"enterprise.splunk.com"},
 								APIVersions: []string{"v3"},
-								Resources: []string{"indexerclusters", "indexerclusters/*",
+								Resources: []string{"standalones", "standalones/*", "indexerclusters", "indexerclusters/*",
 									"searchheadclusters", "searchheadclusters/*"},
 							},
 						}},

@@ -36,6 +36,7 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
+	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 	appsv1 "k8s.io/api/apps/v1"
@@ -278,6 +279,13 @@ func applySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 	// Update the CR Status
 	defer updateCRStatus(ctx, client, cr, &err)
+	// Let normal workload reconciliation finish before reporting an unresolved
+	// PostgreSQL dependency. Ready-only housekeeping must not be skipped.
+	defer func() {
+		if phase, message := reconcileutil.PostgresDatabaseWorkloadPhase(cr.Status.Phase, "", cr.Status.Conditions); phase != cr.Status.Phase {
+			setPhaseAndConditions(phase, message)
+		}
+	}()
 
 	// validate and updates defaults for CR
 	err = validateSearchHeadClusterSpec(ctx, client, cr)
@@ -423,6 +431,10 @@ func applySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 
 	// create or update statefulset for the search heads
 	statefulSet, err = getSearchHeadStatefulSet(ctx, client, cr)
+	if errors.Is(err, configworkflow.ErrPostgresDatabasePending) {
+		setPhaseAndConditions(enterpriseApi.PhasePending, err.Error())
+		return result, nil
+	}
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Search Head StatefulSet")
 		return result, err
@@ -533,6 +545,9 @@ func getSearchHeadStatefulSet(ctx context.Context, client splcommon.ControllerCl
 		return nil, err
 	}
 	certs.InjectCertMounts(&ss.Spec.Template, certMounts)
+	if err := reconcileutil.ApplyPostgresDatabaseBundle(ctx, client, cr, cr.Spec.PostgresDatabaseMounts, cr.Spec.Volumes, &cr.Status.Conditions, ss); err != nil {
+		return nil, err
+	}
 
 	return ss, nil
 }

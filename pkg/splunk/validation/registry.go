@@ -84,6 +84,12 @@ var (
 		Resource: "ingestorclusters",
 	}
 
+	StandaloneV3GVR = schema.GroupVersionResource{
+		Group:    "enterprise.splunk.com",
+		Version:  "v3",
+		Resource: "standalones",
+	}
+
 	IndexerClusterV3GVR = schema.GroupVersionResource{
 		Group:    "enterprise.splunk.com",
 		Version:  "v3",

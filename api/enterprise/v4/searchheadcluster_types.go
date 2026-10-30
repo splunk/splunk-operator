@@ -67,6 +67,15 @@ type SearchHeadClusterSpec struct {
 	// immediately against the already-running timer. Defaults to 3600 (1 hour).
 	// +optional
 	DetentionTimeoutSeconds int32 `json:"detentionTimeoutSeconds,omitempty"`
+
+	// PostgresDatabaseMounts mounts published database metadata and credentials
+	// read-only under $SPLUNK_HOME/var/run/supervisor/postgresok. SearchHeadCluster
+	// deployers do not receive these mounts. Consumers must reload updated files.
+	// +optional
+	// +kubebuilder:validation:MaxItems=10
+	// +listType=map
+	// +listMapKey=name
+	PostgresDatabaseMounts []PostgresDatabaseMountSpec `json:"postgresDatabaseMounts,omitempty"`
 }
 
 // NoahEnabled reports whether this spec selects Noah mode.
