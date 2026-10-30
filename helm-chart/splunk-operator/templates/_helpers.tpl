@@ -223,3 +223,17 @@ namespaceSelector:
 {{- end }}
 {{- end }}
 
+{{/*
+Give namespace-mode webhook configurations a release-namespace suffix so
+multiple cluster-scoped configurations can coexist and each release can own
+its configuration and webhook Service independently.
+*/}}
+{{- define "splunk-operator.webhookConfigurationName" -}}
+{{- $baseName := printf "%s-%s" (include "splunk-operator.operator.fullname" .ctx) .suffix -}}
+{{- if .ctx.Values.splunkOperator.clusterWideAccess -}}
+{{- $baseName -}}
+{{- else -}}
+{{- printf "%s-%s" $baseName .ctx.Release.Namespace -}}
+{{- end -}}
+{{- end -}}
+
