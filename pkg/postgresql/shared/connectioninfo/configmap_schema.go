@@ -34,6 +34,9 @@ const (
 	KeyDefaultClusterPort = "DEFAULT_CLUSTER_PORT"
 	KeyPoolerRWEndpoint   = "CLUSTER_POOLER_RW_ENDPOINT"
 	KeyPoolerROEndpoint   = "CLUSTER_POOLER_RO_ENDPOINT"
+
+	// KeyServerCASecretRef identifies the cluster's published trust bundle.
+	KeyServerCASecretRef = "SERVER_CA_SECRET_REF"
 )
 
 var requiredKeys = []string{

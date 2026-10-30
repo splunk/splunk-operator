@@ -40,7 +40,7 @@ Certificate lifecycle and server-side behaviour follow **[CloudNativePG — Cert
 | `CLUSTER_POOLER_RW_ENDPOINT` / `CLUSTER_POOLER_RO_ENDPOINT`         | Cluster + Database | PgBouncer hosts — only if poolers are enabled                     |
 | `SUPER_USER_NAME`                                                   | Cluster only       | Bootstrap superuser (often `postgres`)                            |
 | `SUPER_USER_SECRET_REF`                                             | Cluster only       | Secret name for the superuser password                            |
-| `SERVER_CA_SECRET_REF`                                              | Cluster only       | Serialized `SecretKeySelector` for the server CA Secret + key     |
+| `SERVER_CA_SECRET_REF`                                              | Cluster only       | `<secret-name>/<key>` reference to the server CA Secret     |
 | `DATABASE_NAME`                                                     | Database only      | Logical database name for the application                         |
 | `ADMIN_USER_NAME`                                                   | Database only      | Application admin role name                                       |
 | `RW_USER_NAME`                                                      | Database only      | Application read-write role name                                  |
@@ -55,7 +55,7 @@ If `SERVER_CA_*` is missing, the database may still be starting, CNPG has not ye
 
 | Purpose                      | Source                                                                                                                                                           |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Trust anchor (server CA)** | `SERVER_CA_SECRET_REF` publishes a serialized `SecretKeySelector`; use it to locate the CA Secret and key (typically `ca.crt`), then mount read-only. |
+| **Trust anchor (server CA)** | `SERVER_CA_SECRET_REF` publishes `<secret-name>/<key>`; use it to locate the CA Secret and key (typically `ca.crt`), then mount read-only. |
 | **Password**                 | Secret named by `SUPER_USER_SECRET_REF` — typically key `password` (follow your cluster’s conventions if documented elsewhere).                       |
 
 

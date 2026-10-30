@@ -14,7 +14,6 @@
 package postgrescontrollers
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -111,7 +110,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-upgrade", Label("ti
 				g.Expect(presentRoleNames(pc)).To(ContainElements("appdb_admin", "appdb_rw"))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
-			adminCreds, _ := managedRoleCredentials(ctx, kubeClient, dbKey, "appdb")
+			adminCreds, _ := pgtesthelpers.ManagedRoleCredentials(ctx, kubeClient, dbKey, "appdb")
 
 			By("creating database objects and inserting deterministic test data as the managed admin role")
 			// Written through the published RW endpoint so the same statement path
@@ -119,7 +118,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-upgrade", Label("ti
 			// the managed admin role (the database owner) rather than the superuser:
 			// that is the path an application takes, and it is what gives the rw role
 			// its inherited privileges to assert after the upgrade.
-			runSQLAs(ctx, kubeClient, deployment, clusterKey, adminCreds, "appdb", fmt.Sprintf(`
+			pgtesthelpers.RunSQLAs(ctx, kubeClient, postgresPodClient, clusterKey, adminCreds, "appdb", fmt.Sprintf(`
 CREATE TABLE IF NOT EXISTS upgrade_fixture (id int PRIMARY KEY, payload text NOT NULL);
 TRUNCATE upgrade_fixture;
 INSERT INTO upgrade_fixture (id, payload)
@@ -131,7 +130,7 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 			// Serialize the ordered rows directly. This is deterministic across
 			// PostgreSQL majors and avoids depending on a hash implementation.
 			const fixtureStateSQL = `SELECT count(*) || ':' || coalesce(string_agg(id::text || '=' || payload, ',' ORDER BY id), '') FROM upgrade_fixture`
-			preUpgradeState := runSQLAs(ctx, kubeClient, deployment, clusterKey, adminCreds, "appdb", fixtureStateSQL)
+			preUpgradeState := pgtesthelpers.RunSQLAs(ctx, kubeClient, postgresPodClient, clusterKey, adminCreds, "appdb", fixtureStateSQL)
 			Expect(preUpgradeState).To(HavePrefix(fmt.Sprintf("%d:", seedTableRowCount)))
 			AddReportEntry("pre-upgrade fixture state", preUpgradeState)
 
@@ -209,9 +208,9 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 			// Read back through the published RW endpoint: a successful query proves
 			// the endpoint is still usable and the seeded data survived together.
 			By("verifying the database is reachable and the seeded data is unchanged")
-			Expect(runSQL(ctx, kubeClient, deployment, clusterKey, "appdb", "SHOW server_version")).To(HavePrefix(pgUpgradeTargetVersion))
-			Expect(runSQLAs(ctx, kubeClient, deployment, clusterKey, adminCreds, "appdb", fixtureStateSQL)).To(Equal(preUpgradeState))
-			Expect(runSQLAs(ctx, kubeClient, deployment, clusterKey, adminCreds, "appdb",
+			Expect(runSQL(ctx, kubeClient, clusterKey, "appdb", "SHOW server_version")).To(HavePrefix(pgUpgradeTargetVersion))
+			Expect(pgtesthelpers.RunSQLAs(ctx, kubeClient, postgresPodClient, clusterKey, adminCreds, "appdb", fixtureStateSQL)).To(Equal(preUpgradeState))
+			Expect(pgtesthelpers.RunSQLAs(ctx, kubeClient, postgresPodClient, clusterKey, adminCreds, "appdb",
 				"SELECT count(*) FROM upgrade_fixture_view")).To(Equal(fmt.Sprintf("%d", seedTableRowCount/2)))
 
 			By("verifying managed roles remain available and PostgresDatabase is Ready")
@@ -231,12 +230,12 @@ CREATE OR REPLACE VIEW upgrade_fixture_view AS SELECT id, payload FROM upgrade_f
 			// the identity it logged in as. The rw role additionally reads the
 			// fixture, proving its inherited privileges survived the upgrade.
 			By("verifying the managed roles can still log in with their published credentials")
-			postAdminCreds, postRWCreds := managedRoleCredentials(ctx, kubeClient, dbKey, "appdb")
-			Expect(runSQLAs(ctx, kubeClient, deployment, clusterKey, postAdminCreds, "appdb",
-				"SELECT current_user")).To(Equal(postAdminCreds.user))
-			Expect(runSQLAs(ctx, kubeClient, deployment, clusterKey, postRWCreds, "appdb",
-				"SELECT current_user")).To(Equal(postRWCreds.user))
-			Expect(runSQLAs(ctx, kubeClient, deployment, clusterKey, postRWCreds, "appdb",
+			postAdminCreds, postRWCreds := pgtesthelpers.ManagedRoleCredentials(ctx, kubeClient, dbKey, "appdb")
+			Expect(pgtesthelpers.RunSQLAs(ctx, kubeClient, postgresPodClient, clusterKey, postAdminCreds, "appdb",
+				"SELECT current_user")).To(Equal(postAdminCreds.User))
+			Expect(pgtesthelpers.RunSQLAs(ctx, kubeClient, postgresPodClient, clusterKey, postRWCreds, "appdb",
+				"SELECT current_user")).To(Equal(postRWCreds.User))
+			Expect(pgtesthelpers.RunSQLAs(ctx, kubeClient, postgresPodClient, clusterKey, postRWCreds, "appdb",
 				"SELECT count(*) FROM upgrade_fixture")).To(Equal(fmt.Sprintf("%d", seedTableRowCount)))
 		},
 	)
@@ -480,58 +479,9 @@ func majorOf(version string) string {
 	return major
 }
 
-// pgCredentials is a username/password pair a psql connection can authenticate
-// with, resolved from what the operator publishes rather than reconstructed.
-type pgCredentials struct {
-	user     string
-	password string
-}
-
-// managedRoleCredentials resolves the login credentials of a database's managed
-// admin and rw roles from PostgresDatabase status. Both the username and the
-// password come out of the published Secret, so the test never has to guess role
-// names or key conventions.
-func managedRoleCredentials(ctx SpecContext, kubeClient client.Client, dbKey types.NamespacedName, database string) (admin, rw pgCredentials) {
-	GinkgoHelper()
-
-	pd := &platformv1alpha1.PostgresDatabase{}
-	Expect(kubeClient.Get(ctx, dbKey, pd)).To(Succeed())
-
-	var info *platformv1alpha1.DatabaseInfo
-	for i := range pd.Status.Databases {
-		if pd.Status.Databases[i].Name == database {
-			info = &pd.Status.Databases[i]
-			break
-		}
-	}
-	Expect(info).NotTo(BeNil(), "PostgresDatabase %s publishes no status for database %q", dbKey.Name, database)
-
-	return readRoleSecret(ctx, kubeClient, dbKey.Namespace, info.AdminUserSecretRef),
-		readRoleSecret(ctx, kubeClient, dbKey.Namespace, info.RWUserSecretRef)
-}
-
-func readRoleSecret(ctx SpecContext, kubeClient client.Client, ns string, ref *corev1.SecretKeySelector) pgCredentials {
-	GinkgoHelper()
-	Expect(ref).NotTo(BeNil(), "PostgresDatabase status has no managed role Secret reference")
-
-	secret := &corev1.Secret{}
-	Expect(kubeClient.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: ns}, secret)).To(Succeed())
-
-	passwordKey := ref.Key
-	if passwordKey == "" {
-		passwordKey = "password"
-	}
-	user, ok := secret.Data["username"]
-	Expect(ok).To(BeTrue(), "managed role Secret %s has no username key", ref.Name)
-	password, ok := secret.Data[passwordKey]
-	Expect(ok).To(BeTrue(), "managed role Secret %s has no %q key", ref.Name, passwordKey)
-
-	return pgCredentials{user: string(user), password: string(password)}
-}
-
 // runSQL executes statements as the cluster superuser advertised in
-// PostgresCluster status. See runSQLAs for the connection mechanics.
-func runSQL(ctx SpecContext, kubeClient client.Client, deployment *testenv.Deployment, clusterKey types.NamespacedName, database, sql string) string {
+// PostgresCluster status, using the shared independent-client SQL transport.
+func runSQL(ctx SpecContext, kubeClient client.Client, clusterKey types.NamespacedName, database, sql string) string {
 	GinkgoHelper()
 
 	pc := &platformv1alpha1.PostgresCluster{}
@@ -542,20 +492,11 @@ func runSQL(ctx SpecContext, kubeClient client.Client, deployment *testenv.Deplo
 	user := connectionConfigMap(ctx, kubeClient, clusterKey, pc).Data["SUPER_USER_NAME"]
 	Expect(user).NotTo(BeEmpty(), "connection ConfigMap has no SUPER_USER_NAME")
 
-	secret := &corev1.Secret{}
-	Expect(kubeClient.Get(ctx, types.NamespacedName{
-		Name:      pc.Status.Resources.SuperUserSecretRef.Name,
-		Namespace: clusterKey.Namespace,
-	}, secret)).To(Succeed())
-
-	passwordKey := pc.Status.Resources.SuperUserSecretRef.Key
-	if passwordKey == "" {
-		passwordKey = "password"
+	ref := pc.Status.Resources.SuperUserSecretRef.DeepCopy()
+	if ref.Key == "" {
+		ref.Key = "password"
 	}
-	password, ok := secret.Data[passwordKey]
-	Expect(ok).To(BeTrue(), "superuser Secret %s has no %q key", secret.Name, passwordKey)
-
-	return runSQLAs(ctx, kubeClient, deployment, clusterKey, pgCredentials{user: user, password: string(password)}, database, sql)
+	return pgtesthelpers.RunSQLAs(ctx, kubeClient, postgresPodClient, clusterKey, pgtesthelpers.SQLCredentials{User: user, PasswordSecretRef: ref}, database, sql)
 }
 
 func connectionConfigMap(ctx SpecContext, kubeClient client.Client, clusterKey types.NamespacedName, pc *platformv1alpha1.PostgresCluster) *corev1.ConfigMap {
@@ -569,56 +510,4 @@ func connectionConfigMap(ctx SpecContext, kubeClient client.Client, clusterKey t
 		Namespace: clusterKey.Namespace,
 	}, connInfo)).To(Succeed())
 	return connInfo
-}
-
-// runSQLAs executes statements against the given database through the cluster's
-// published RW endpoint as creds. psql runs inside the CNPG primary pod because
-// that is the only pod guaranteed to have a client; the connection itself still
-// goes through the Service, so a failure here means the endpoint is unusable.
-// Returns trimmed stdout, so single-value queries come back as a bare value.
-func runSQLAs(ctx SpecContext, kubeClient client.Client, deployment *testenv.Deployment, clusterKey types.NamespacedName, creds pgCredentials, database, sql string) string {
-	GinkgoHelper()
-
-	pc := &platformv1alpha1.PostgresCluster{}
-	Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
-
-	connInfo := connectionConfigMap(ctx, kubeClient, clusterKey, pc)
-	endpoint := connInfo.Data["CLUSTER_RW_ENDPOINT"]
-	port := connInfo.Data["DEFAULT_CLUSTER_PORT"]
-	Expect(endpoint).NotTo(BeEmpty(), "connection ConfigMap has no CLUSTER_RW_ENDPOINT")
-	Expect(port).NotTo(BeEmpty(), "connection ConfigMap has no DEFAULT_CLUSTER_PORT")
-	Expect(creds.user).NotTo(BeEmpty(), "no username to connect as")
-
-	dsn := fmt.Sprintf("postgresql://%s@%s:%s/%s?sslmode=require", creds.user, endpoint, port, database)
-
-	// Credentials and SQL both travel on stdin rather than argv so the password
-	// never lands in the pod's process list. The heredoc is quoted, so the shell
-	// performs no expansion on the SQL body.
-	script := fmt.Sprintf(`set -e
-export PGPASSWORD='%s'
-psql '%s' --no-psqlrc --tuples-only --no-align --quiet --single-transaction -v ON_ERROR_STOP=1 <<'SPLUNK_E2E_SQL'
-%s
-SPLUNK_E2E_SQL
-`, shellSingleQuoteEscape(creds.password), shellSingleQuoteEscape(dsn), sql)
-
-	resolvePrimary := func(attemptCtx context.Context) (string, error) {
-		cnpg := &cnpgv1.Cluster{}
-		if err := kubeClient.Get(attemptCtx, clusterKey, cnpg); err != nil {
-			return "", fmt.Errorf("getting CNPG Cluster primary: %w", err)
-		}
-		if cnpg.Status.CurrentPrimary == "" {
-			return "", fmt.Errorf("CNPG Cluster %s has no current primary", clusterKey)
-		}
-		return cnpg.Status.CurrentPrimary, nil
-	}
-
-	stdout, stderr, err := pgtesthelpers.ExecutePostgresPodCommand(ctx, deployment, resolvePrimary, []string{"/bin/sh"}, script)
-	Expect(err).To(Succeed(), "psql exec failed: %s", stderr)
-	return strings.TrimSpace(stdout)
-}
-
-// shellSingleQuoteEscape makes a value safe to embed inside single quotes in a
-// POSIX shell by closing, escaping, and reopening the quoted run.
-func shellSingleQuoteEscape(value string) string {
-	return strings.ReplaceAll(value, `'`, `'\''`)
 }

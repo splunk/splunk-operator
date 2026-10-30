@@ -119,3 +119,22 @@ func PostgresClusterSuperuserSecretUID(
 	}, secret)).To(Succeed())
 	return secret.UID
 }
+
+// DeletePostgresClusterAndWait verifies Delete policy removes the backend and
+// its workload storage before namespace teardown can hide leaked resources.
+func DeletePostgresClusterAndWait(ctx context.Context, kubeClient client.Client, cluster *platformv1alpha1.PostgresCluster) {
+	GinkgoHelper()
+	key := client.ObjectKeyFromObject(cluster)
+	Expect(kubeClient.Delete(ctx, cluster)).To(Succeed())
+	Eventually(func(g Gomega) {
+		g.Expect(apierrors.IsNotFound(kubeClient.Get(ctx, key, &platformv1alpha1.PostgresCluster{}))).To(BeTrue())
+		g.Expect(apierrors.IsNotFound(kubeClient.Get(ctx, key, &cnpgv1.Cluster{}))).To(BeTrue())
+		pods := &corev1.PodList{}
+		claims := &corev1.PersistentVolumeClaimList{}
+		opts := []client.ListOption{client.InNamespace(key.Namespace), client.MatchingLabels{"cnpg.io/cluster": key.Name}}
+		g.Expect(kubeClient.List(ctx, pods, opts...)).To(Succeed())
+		g.Expect(pods.Items).To(BeEmpty(), "CNPG pods remain after cluster deletion")
+		g.Expect(kubeClient.List(ctx, claims, opts...)).To(Succeed())
+		g.Expect(claims.Items).To(BeEmpty(), "CNPG PVCs remain after cluster deletion")
+	}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
+}

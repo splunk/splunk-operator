@@ -57,6 +57,15 @@ cluster. See the [CI image inputs](../../gitlab-ci/README.md#merge-request-lane)
 for overrides and switching to public Splunk-built images. Direct private-registry
 runs still need the namespace-local credentials described above.
 
+The PostgreSQL database happy path also checks generated admin/rw credentials
+with independent client Jobs over the published RW endpoint using `verify-full`
+TLS. Upgrade checks share this SQL transport; logs are read through the Kubernetes
+API from completed Pods owned by the client Job. Namespace teardown removes successful
+Jobs; failure preservation keeps them for diagnostics. Cluster/database Delete
+specs check published child resources and cluster PVC removal before teardown.
+
+`CLUSTER_PROVIDER` controls shell provider defaults; `TEST_CLUSTER_PLATFORM` selects cluster setup and Go test provider behavior. Kraken sets both to `kraken`.
+
 ## What E2E Tests Exist
 
 The Ginkgo suites live in `test/`. Most feature directories are one suite;
@@ -682,7 +691,7 @@ ginkgo -v --focus="forced timeout recycles member" ./test/shc_detention -- \
 
 ### Run a Specific Test by Name or Label
 
-Use `--focus` with a regex on the `It` description, or `--label-filter` with a Ginkgo label expression. Always target a **specific suite directory** — using `-r ./test/` recurses into all suites, triggering their `BeforeSuite` blocks (including cloud setup) even when filters exclude their tests.
+Use `--focus` with a regex on the `It` description, or `--label-filter` with a Ginkgo label expression. Prefer a **specific suite directory**: `-r ./test/` compiles all discovered suites and runs setup for each suite with matching specs. Suites with no matching specs skip `BeforeSuite`.
 
 ```bash
 ginkgo -v \

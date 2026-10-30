@@ -19,12 +19,15 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	pgtesthelpers "github.com/splunk/splunk-operator/test/postgrescontrollers/helpers"
 	"github.com/splunk/splunk-operator/test/testenv"
+	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
 var (
-	testenvInstance *testenv.TestEnv
-	testSuiteName   = "pgctrl-" + testenv.RandomDNSName(3)
+	postgresPodClient coreclient.CoreV1Interface
+	testenvInstance   *testenv.TestEnv
+	testSuiteName     = "pgctrl-" + testenv.RandomDNSName(3)
 )
 
 func TestPostgresControllers(t *testing.T) {
@@ -40,6 +43,9 @@ var _ = BeforeSuite(func() {
 	var err error
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).To(Succeed(), "Failed to initialize test environment")
+	apiClient, err := pgtesthelpers.NewMetricsClient()
+	Expect(err).To(Succeed(), "Failed to initialize Kubernetes API client")
+	postgresPodClient = apiClient.CoreV1()
 })
 
 var _ = AfterSuite(func() {

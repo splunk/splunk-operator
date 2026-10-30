@@ -49,7 +49,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 	})
 
 	It("postgrescontrollers, integration, postgres-database: can deploy a PostgresDatabase and reach Ready",
-		Label("tier:e2e-full", "tier:e2e-pr", "sva:s1", "cloud:aws", "feature:postgres"),
+		Label("tier:e2e-full", "tier:e2e-pr", "sva:s1", "cloud:aws", "cloud:kraken", "feature:postgres"),
 		NodeTimeout(testenv.ShortTimeout),
 		func(ctx SpecContext) {
 			ns := testcaseEnvInst.GetName()
@@ -114,11 +114,17 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
 				g.Expect(presentRoleNames(pc)).To(ContainElements("appdb_admin", "appdb_rw"))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
+
+			By("connecting over the RW Service with generated application credentials and verify-full TLS")
+			Expect(kubeClient.Get(ctx, dbKey, pgDB)).To(Succeed())
+			pgtesthelpers.VerifyPostgresDatabaseConnectivity(ctx, kubeClient, postgresPodClient, pgDB, clusterKey)
+			GinkgoWriter.Println("Authenticated direct TLS SQL passed for admin and rw roles; sentinel rows verified.")
+
 		},
 	)
 
 	It("postgrescontrollers, integration, postgres-database: removes child resources when PostgresDatabase is deleted with Delete policy",
-		Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:postgres"),
+		Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:kraken", "feature:postgres"),
 		NodeTimeout(testenv.ShortTimeout),
 		func(ctx SpecContext) {
 			ns := testcaseEnvInst.GetName()
@@ -166,23 +172,10 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 				g.Expect(*pd.Status.Phase).To(Equal("Ready"))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
-			// Naming matches configMapName/roleSecretName in
-			// pkg/postgresql/database/core/database.go: "<postgresDB>-<db>-config" and
-			// "<postgresDB>-<db>-<role>".
-			accessConfigMapKey := types.NamespacedName{Name: "del-db-dropme-config", Namespace: ns}
-			roleSecretKeys := []types.NamespacedName{
-				{Name: "del-db-dropme-admin", Namespace: ns},
-				{Name: "del-db-dropme-rw", Namespace: ns},
-			}
-
-			By("verifying the database's access ConfigMap and role Secrets were provisioned")
-			Eventually(func(g Gomega) {
-				g.Expect(kubeClient.Get(ctx, accessConfigMapKey, &corev1.ConfigMap{})).To(Succeed())
-
-				for _, key := range roleSecretKeys {
-					g.Expect(kubeClient.Get(ctx, key, &corev1.Secret{})).To(Succeed())
-				}
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
+			By("verifying published provider, connection and credential resources exist")
+			Expect(kubeClient.Get(ctx, dbKey, pgDB)).To(Succeed())
+			children := pgtesthelpers.PostgresDatabaseChildResources(pgDB)
+			pgtesthelpers.ExpectPostgresDatabaseChildrenPresent(ctx, kubeClient, children)
 
 			By("deleting PostgresDatabase")
 			Expect(kubeClient.Delete(ctx, pgDB)).To(Succeed())
@@ -206,15 +199,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
 			By("verifying the database's access ConfigMap and role Secrets are deleted, not leaked")
-			Eventually(func(g Gomega) {
-				err := kubeClient.Get(ctx, accessConfigMapKey, &corev1.ConfigMap{})
-				g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected access ConfigMap to be deleted")
-
-				for _, key := range roleSecretKeys {
-					err := kubeClient.Get(ctx, key, &corev1.Secret{})
-					g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected role Secret %s to be deleted", key.Name)
-				}
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
+			pgtesthelpers.ExpectPostgresDatabaseChildrenDeleted(ctx, kubeClient, children)
 		},
 	)
 })
