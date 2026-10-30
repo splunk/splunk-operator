@@ -25,6 +25,21 @@ tests:
           path: metadata.name
           value: splunk-operator-cross-version-field-protection
 
+  - it: should keep webhook configuration names unchanged for cluster-wide installs
+    set:
+      splunkOperator.clusterWideAccess: true
+      splunkOperator.featureGates:
+        ValidationWebhook: true
+    asserts:
+      - equal:
+          path: metadata.name
+          value: splunk-operator-cross-version-field-protection
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: splunk-operator-validating-webhook-configuration
+        documentIndex: 1
+
   - it: should not render the guard when CrossVersionFieldProtection is false
     set:
       splunkOperator.featureGates:
@@ -184,7 +199,11 @@ tests:
       splunkOperator.watchNamespaces: "ignored"
       splunkOperator.featureGates:
         ValidationWebhook: true
+        CrossVersionFieldProtection: false
     asserts:
+      - equal:
+          path: metadata.name
+          value: splunk-operator-validating-webhook-configuration-splunk-operator
       - equal:
           path: webhooks[0].namespaceSelector
           value:
@@ -197,6 +216,9 @@ tests:
       splunkOperator.clusterWideAccess: false
     asserts:
       - equal:
+          path: metadata.name
+          value: splunk-operator-cross-version-field-protection-splunk-operator
+      - equal:
           path: webhooks[0].namespaceSelector
           value:
             matchLabels:
@@ -204,6 +226,15 @@ tests:
       - equal:
           path: webhooks[0].clientConfig.service.namespace
           value: other-ns
+
+  - it: should include nameOverride in a namespace-mode webhook configuration name
+    set:
+      splunkOperator.nameOverride: sok-custom
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - equal:
+          path: metadata.name
+          value: sok-custom-cross-version-field-protection-splunk-operator
 
   - it: should select watchNamespaces when set
     set:
