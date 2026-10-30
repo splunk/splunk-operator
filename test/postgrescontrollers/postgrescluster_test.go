@@ -46,7 +46,7 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 	})
 
 	It("postgrescontrollers, integration, postgres: can deploy a PostgresCluster and reach Ready",
-		Label("tier:e2e-full", "tier:e2e-pr", "sva:s1", "cloud:aws", "feature:postgres"),
+		Label("tier:e2e-full", "tier:e2e-pr", "sva:s1", "cloud:aws", "cloud:kraken", "feature:postgres"),
 		NodeTimeout(testenv.ShortTimeout),
 		func(ctx SpecContext) {
 			ns := testcaseEnvInst.GetName()
@@ -83,12 +83,14 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 				cnpg := &cnpgv1.Cluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, cnpg)).To(Succeed())
 				g.Expect(cnpg.Status.Phase).To(Equal(cnpgv1.PhaseHealthy))
+				g.Expect(cnpg.Spec.ImageName).To(Equal(string(pgCluster.Spec.Images.PostgreSQL[platformv1alpha1.DefaultPostgresVersion])))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
+
 		},
 	)
 
 	It("postgrescontrollers, integration, postgres: deletes CNPG Cluster when PostgresCluster is deleted with Delete policy",
-		Label("tier:e2e-full", "sva:s1", "cloud:aws", "feature:postgres"),
+		Label("tier:e2e-full", "sva:s1", "cloud:aws", "cloud:kraken", "feature:postgres"),
 		NodeTimeout(testenv.ShortTimeout),
 		func(ctx SpecContext) {
 			ns := testcaseEnvInst.GetName()
@@ -117,20 +119,8 @@ var _ = Describe("postgrescontrollers, integration, postgres", Label("tier:e2e-f
 				g.Expect(*pc.Status.Phase).To(Equal("Ready"))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
-			By("deleting PostgresCluster")
-			Expect(kubeClient.Delete(ctx, pgCluster)).To(Succeed())
-
-			By("waiting for PostgresCluster to be removed")
-			Eventually(func() error {
-				pc := &platformv1alpha1.PostgresCluster{}
-				return kubeClient.Get(ctx, clusterKey, pc)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Satisfy(apierrors.IsNotFound))
-
-			By("verifying underlying CNPG Cluster was also deleted")
-			Eventually(func() error {
-				cnpg := &cnpgv1.Cluster{}
-				return kubeClient.Get(ctx, clusterKey, cnpg)
-			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Satisfy(apierrors.IsNotFound))
+			By("deleting the cluster and verifying its CNPG workloads and PVCs disappear")
+			pgtesthelpers.DeletePostgresClusterAndWait(ctx, kubeClient, pgCluster)
 		},
 	)
 

@@ -152,7 +152,7 @@ scheck: ## Run static check against code
 vet: setup/ginkgo	 ## Run go vet against code.
 	go vet ./...
 
-UNIT_TEST_PACKAGES ?= ./pkg/... ./internal/controller/...
+UNIT_TEST_PACKAGES ?= ./pkg/... ./internal/controller/... ./test/postgrescontrollers/helpers
 
 test: manifests generate fmt vet setup-envtest ## Run tests.
 	REPORT_FILE="$${UNIT_TEST_REPORT_FILE:-unit_test.xml}"; \
@@ -581,8 +581,8 @@ int-test:
 # ---------------------------------------------------------------------------
 
 .PHONY: test-unit
-test-unit: ## Run unit tests only (./pkg/splunk/...). No cluster required.
-	go test ./pkg/splunk/... -count=1
+test-unit: ## Run Splunk package and PostgreSQL helper unit tests. No cluster required.
+	go test ./pkg/splunk/... ./test/postgrescontrollers/helpers -count=1
 
 .PHONY: test-integration
 test-integration: manifests generate fmt vet setup-envtest ## Run all controller envtest specs, including Postgres controllers.
