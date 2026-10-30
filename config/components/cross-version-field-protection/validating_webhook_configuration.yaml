@@ -26,6 +26,8 @@ webhooks:
     - UPDATE
     - DELETE
     resources:
+    - standalones
+    - standalones/*
     - indexerclusters
     - indexerclusters/*
     - searchheadclusters

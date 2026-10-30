@@ -6,14 +6,15 @@ has_children: true
 permalink: /docs/postgresql/
 ---
 
-Guides for deploying and operating PostgreSQL databases managed by the Splunk Operator,
-including backups, upgrades, TLS connectivity, managed database roles, and observability.
+These guides describe how to deploy and operate PostgreSQL databases with the Splunk Operator.
+They cover backups, upgrades, TLS connections, database roles, and observability.
 
-New to integrating a workload with the operator? Start with the
-[Integration & Onboarding Guide](integration-patterns.md).
+Start with the [Integration & Onboarding Guide](integration-patterns.md) for cluster and database setup.
+For a process inside the Splunk container, use
+[Database connections for Splunk sidecars](splunk-sidecar-database-connections.md).
 
 ## Design documentation
 
-- [Architecture overview](architecture-overview.md) — component, reconcile-flow, and lifecycle diagrams.
-- [RFC summary](rfc-summary.md) — problem statement, considered alternatives, and chosen approach.
-- [Architecture Decision Records](adr/README.md) — the decisions behind the design.
+- [Architecture overview](architecture-overview.md) describes reconciliation and resource lifecycles.
+- [RFC summary](rfc-summary.md) explains the problem and the alternatives considered.
+- [Architecture Decision Records](adr/README.md) explain the design decisions.
