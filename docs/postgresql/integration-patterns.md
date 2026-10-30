@@ -41,8 +41,8 @@ PostgresDatabase        (namespaced, application databases + roles on that clust
 - **`PostgresDatabase`** declares one or more application databases (and their login roles) on an
   existing `PostgresCluster` in the *same namespace*.
 
-The rest of this guide walks through each layer in order, then covers two cross-cutting use cases:
-connection pooling, and shared vs. dedicated clusters.
+This guide explains how to configure each resource.
+It also covers connection pooling, shared versus dedicated clusters, and Splunk-managed sidecars.
 
 For deep dives on specific operational topics not covered here, see:
 [Connecting with TLS](connecting-to-postgres-with-TLS.md),
@@ -704,6 +704,16 @@ Required fields and impact:
   leaving one workload able to read another's database credentials.
 - Relying on `NetworkPolicy` alone for tenant isolation — it controls network reachability, not who
   can read database passwords or what a database role can do after connecting.
+
+## Splunk-managed sidecars
+
+A Splunk-managed sidecar runs alongside `splunkd` inside the `splunk` container.
+For Enterprise `v4` `Standalone` and `SearchHeadCluster` workloads, add `spec.postgresDatabaseMounts` to mount an existing database's connection files.
+The operator mounts connection metadata, a read-write password, and a CA certificate from resources in the same namespace.
+Add `includeAdmin: true` only when the sidecar needs database-owner credentials.
+
+See [Database connections for Splunk sidecars](splunk-sidecar-database-connections.md) for resource examples and TLS configuration.
+The mount does not start the sidecar or configure its database client.
 
 ## No cross-namespace access
 

@@ -48,6 +48,15 @@ type StandaloneSpec struct {
 
 	// Splunk Enterprise App repository. Specifies remote App location and scope for Splunk App management
 	AppFrameworkConfig AppFrameworkSpec `json:"appRepo,omitempty"`
+
+	// PostgresDatabaseMounts mounts published database metadata and credentials
+	// read-only under $SPLUNK_HOME/var/run/supervisor/postgresok.
+	// Consumers must reload updated files.
+	// +optional
+	// +kubebuilder:validation:MaxItems=10
+	// +listType=map
+	// +listMapKey=name
+	PostgresDatabaseMounts []PostgresDatabaseMountSpec `json:"postgresDatabaseMounts,omitempty"`
 }
 
 // StandaloneStatus defines the observed state of a Splunk Enterprise standalone instances.

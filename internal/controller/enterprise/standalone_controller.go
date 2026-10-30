@@ -78,6 +78,7 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&enterpriseApi.Standalone{}).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
+			postgresDatabaseChangedPredicate(),
 			common.AnnotationChangedPredicate(),
 			common.LabelChangedPredicate(),
 			common.SecretChangedPredicate(),
@@ -140,6 +141,10 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: enterpriseApi.TotalWorker,
 		})
+
+	if err := setupPostgresDatabaseWatch(mgr, bldr, &enterpriseApi.Standalone{}, func() client.ObjectList { return &enterpriseApi.StandaloneList{} }); err != nil {
+		return err
+	}
 
 	if config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
 		bldr = bldr.Watches(&corev1.Secret{},

@@ -71,6 +71,8 @@ func ValidateSearchHeadClusterCreate(obj *enterpriseApi.SearchHeadCluster) field
 			"SearchHeadCluster requires at least 3 replicas"))
 	}
 
+	allErrs = append(allErrs, validatePostgresDatabaseMounts(obj.Spec.PostgresDatabaseMounts, obj.Spec.Volumes)...)
+
 	// Validate common spec
 	allErrs = append(allErrs, validateCommonSplunkSpec(&obj.Spec.CommonSplunkSpec, field.NewPath("spec"))...)
 

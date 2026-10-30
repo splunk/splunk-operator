@@ -217,24 +217,15 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 		result = true
 	}
 
-	// Check for changes in Init containers
-	if len(current.InitContainers) != len(revised.InitContainers) {
-		scopedLog.InfoContext(ctx, "pod init containers  differ",
-			"current", len(current.InitContainers),
-			"revised", len(revised.InitContainers))
-		current.InitContainers = revised.InitContainers
-		result = true
-	} else {
-		for idx := range current.InitContainers {
-			// check Image
-			if current.InitContainers[idx].Image != revised.InitContainers[idx].Image {
-				scopedLog.InfoContext(ctx, "init Container Images differ",
-					"current", current.InitContainers[idx].Image,
-					"revised", revised.InitContainers[idx].Image)
-				current.InitContainers[idx].Image = revised.InitContainers[idx].Image
-				result = true
-			}
+	// Init-container order and complete specifications determine startup behavior.
+	if !initContainersEqual(current.InitContainers, revised.InitContainers) {
+		// Do not log specifications, which can contain credential environment values.
+		scopedLog.InfoContext(ctx, "pod init containers differ")
+		current.InitContainers = make([]corev1.Container, len(revised.InitContainers))
+		for i := range revised.InitContainers {
+			revised.InitContainers[i].DeepCopyInto(&current.InitContainers[i])
 		}
+		result = true
 	}
 
 	// check for changes in container images; assume that the ordering is same for pods with > 1 container
