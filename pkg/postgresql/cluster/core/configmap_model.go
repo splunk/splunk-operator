@@ -26,6 +26,7 @@ import (
 	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
 	clusteridentity "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/identity"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
+	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -188,7 +189,7 @@ func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Sch
 	}
 	caSecretRefValue := ""
 	if ok {
-		caSecretRefValue = fmt.Sprintf("%s/%s", caSecretRef.Name, caSecretRef.Key)
+		caSecretRefValue = pgconninfo.FormatSecretReference(caSecretRef.Name, caSecretRef.Key)
 	}
 
 	endpoints, err := pgcnpg.ResolveConnectionEndpoints(
