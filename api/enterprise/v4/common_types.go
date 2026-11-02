@@ -372,6 +372,29 @@ type CommonSplunkSpec struct {
 	StartupProbe *Probe `json:"startupProbe,omitempty"`
 }
 
+// SplunkUser declares a Splunk user whose password is read from a Secret in
+// the same namespace as the custom resource.
+// +kubebuilder:validation:XValidation:rule="self.name != 'admin'",message="name must not be admin"
+type SplunkUser struct {
+	// Name is the Splunk username. Splunk usernames are case-insensitive, so only lowercase names are accepted.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`^[a-z0-9_-]+$`
+	Name string `json:"name"`
+
+	// Roles assigned to the user. They must already exist in Splunk.
+	// +kubebuilder:validation:Required
+	// +listType=set
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:items:MinLength=1
+	Roles []string `json:"roles"`
+
+	// PasswordSecretRef names a Secret, in the same namespace, whose
+	// "password" key holds the user's password.
+	// +kubebuilder:validation:Required
+	PasswordSecretRef corev1.LocalObjectReference `json:"passwordSecretRef"`
+}
+
 // StorageClassSpec defines storage class configuration
 // +kubebuilder:validation:XValidation:rule="!(has(self.storageClassName) && size(self.storageClassName) > 0 && self.ephemeralStorage == true)",message="storageClassName and ephemeralStorage are mutually exclusive"
 // +kubebuilder:validation:XValidation:rule="!(has(self.storageCapacity) && size(self.storageCapacity) > 0 && self.ephemeralStorage == true)",message="storageCapacity and ephemeralStorage are mutually exclusive"

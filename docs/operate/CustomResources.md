@@ -519,6 +519,50 @@ the `IngestorCluster` resource provides the following `Spec` configuration param
 | replicas   | integer | No | The number of ingestor pods (defaults to 1) |
 | queueRef   | corev1.ObjectReference | Yes | Message queue reference |
 | objectStorageRef   | corev1.ObjectReference | Yes | Object storage reference |
+| users | []SplunkUser | No | Additional Splunk users to create or update on every pod. See [Additional Users](#additional-users) |
+
+### Additional Users
+
+`spec.users` declares Splunk users other than `admin`. Each entry has a `name`, a list of `roles`, and a `passwordSecretRef` naming a Secret in the same namespace whose `password` key holds the user's password:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: observability-user
+stringData:
+  password: s3cr3t-value
+---
+apiVersion: enterprise.splunk.com/v4
+kind: IngestorCluster
+metadata:
+  name: ic
+spec:
+  replicas: 3
+  queueRef:
+    name: queue
+  objectStorageRef:
+    name: os
+  users:
+    - name: internal_observability
+      roles: [observability_role]
+      passwordSecretRef:
+        name: observability-user
+```
+
+| Key | Type | Required | Description |
+| --- | ---- | -------- | ----------- |
+| name | string | Yes | Splunk username. Lowercase letters, digits, `_` and `-` only, unique within the list, and not `admin` |
+| roles | []string | Yes | At least one non-empty, unique role. Roles must already exist in Splunk, either built in or defined through Splunk configuration |
+| passwordSecretRef.name | string | Yes | Name of a Secret in the same namespace. Must be a non-empty DNS-1123 subdomain (enforced by the validating webhook) |
+
+SOK reads each referenced Secret and writes the users into the CR's credentials Secret (`sok-ingestorcluster-creds-<hash>`), which is mounted into the pods and appended last to `SPLUNK_DEFAULTS_URL`. splunk-ansible then creates or updates each user through the splunkd REST API after splunkd starts.
+
+- SOK only reads the referenced Secrets. It does not add owner references to them, modify them, or delete them.
+- Changing a password, the roles, or the list of users produces a new credentials Secret, so the ingestor pods roll and pick up the change.
+- The roles in `spec.users` replace the user's roles on every pod start. Changes made outside the CR, for example in Splunk Web, are reverted the next time the pods roll.
+- Removing an entry from `spec.users` does not delete the user from Splunk.
+- If a referenced Secret is missing, or has no non-empty `password` key, the CR enters the `Error` phase with a terminal failure and a `ResolveUsersFailed` event. SOK watches the referenced Secrets and resumes when one is created or fixed.
 
 ### Queue and ObjectStorage Reference Updates
 
@@ -803,6 +847,7 @@ Some failure states are non-recoverable without external intervention. When the 
 | The CR spec fails validation during reconciliation (e.g. missing required field, invalid value) | `<CR type> spec validation failed` | All |
 | The Queue or ObjectStorage CR referenced by an IndexerCluster or IngestorCluster cannot be found | `Referenced Queue or ObjectStorage CR not found` | IndexerCluster, IngestorCluster |
 | `clusterManagerRef` is empty at the point where it is required at runtime | `empty Cluster Manager reference` | IndexerCluster |
+| A Secret referenced by `spec.users[].passwordSecretRef` is missing or has no non-empty `password` key | `referenced spec.users password Secret not found or missing its password key` | IngestorCluster |
 
 **Detecting a terminal failure**
 
@@ -844,6 +889,11 @@ For a malformed TLS Secret:
 For a missing Queue or ObjectStorage CR (IndexerCluster, IngestorCluster):
 1. Create the missing CR in the namespace specified by the corresponding object reference, or in the cluster's namespace when no reference namespace is set.
 2. The operator resumes automatically on the next reconcile cycle.
+
+For a missing or incomplete `spec.users` password Secret (IngestorCluster):
+1. Read the `ResolveUsersFailed` event with `kubectl describe` to find the user and Secret name.
+2. Create the Secret in the CR's namespace, or add a non-empty `password` key to it.
+3. The operator detects the Secret change and resumes automatically.
 
 For a spec validation failure:
 1. Check the `Stalled` condition `message` and operator logs to identify the invalid field.
