@@ -28,6 +28,7 @@ import (
 	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splunkconfig "github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
+	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig/smartbus"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
@@ -337,7 +338,7 @@ func applyIngestorCluster(ctx context.Context, client splcommon.ControllerClient
 		}
 	}
 
-	// Ensure the SOK defaults resources exist: a ConfigMap for structural SmartBus
+	// Ensure the SOK defaults resources exist: a ConfigMap for non-sensitive SmartBus
 	// config and a Secret for the credentials (both mounted via SPLUNK_DEFAULTS_URL).
 	defaultsConfigMap, defaultsSecret, err := ensureIngestorDefaults(ctx, client, cr)
 	if err != nil {
@@ -480,7 +481,7 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 
 // ensureIngestorDefaults resolves the IngestorCluster's SmartBus queue/object-storage
 // configuration once and ensures both SOK defaults resources exist:
-//   - a content-addressed ConfigMap holding the structural SmartBus config, and
+//   - a content-addressed ConfigMap holding the non-sensitive SmartBus config, and
 //   - a content-addressed Secret holding only the credentials (access_key/secret_key).
 //
 // Both are immutable and mounted into every container via SPLUNK_DEFAULTS_URL.
@@ -496,7 +497,9 @@ func ensureIngestorDefaults(ctx context.Context, c splcommon.ControllerClient, c
 	if err != nil {
 		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, fmt.Errorf("resolve queue config: %w", err)
 	}
-	builder, err := splunkconfig.NewSmartBusConfBuilder(&qosCfg.Queue, &qosCfg.OS)
+	set, err := splunkconfig.ForRole(splcommon.SplunkIngestor).
+		With(smartbus.Conf(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)).
+		Build()
 	if err != nil {
 		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 	}
@@ -504,16 +507,16 @@ func ensureIngestorDefaults(ctx context.Context, c splcommon.ControllerClient, c
 	owner := splcommon.AsOwner(cr, true)
 
 	var configMap resources.DefaultsConfigMap
-	if entries := splunkconfig.IngestorConf(builder); len(entries) > 0 {
-		configMap, err = configworkflow.EnsureConfigMap(ctx, c, cr, entries, &owner, resources.WithDictionaryConf())
+	if len(set.NonSensitive) > 0 {
+		configMap, err = configworkflow.EnsureConfigMap(ctx, c, cr, set.NonSensitive, &owner)
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 		}
 	}
 
 	var secret resources.DefaultsSecret
-	if entries := splunkconfig.IngestorCredentialsConf(builder, qosCfg.AccessKey, qosCfg.SecretKey); len(entries) > 0 {
-		secret, err = configworkflow.EnsureSecret(ctx, c, cr, entries, &owner, resources.WithDictionaryConf())
+	if len(set.Secrets) > 0 {
+		secret, err = configworkflow.EnsureSecret(ctx, c, cr, set.Secrets, &owner)
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 		}

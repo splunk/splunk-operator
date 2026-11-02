@@ -227,7 +227,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 			Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "IndexerCluster not ready after ref update")
 
 			// Both IngestorCluster and IndexerCluster now deliver SmartBus config declaratively
-			// via content-addressed ConfigMap (structural) + Secret (credentials). A ref change
+			// via content-addressed ConfigMap (non-sensitive) + Secret (credentials). A ref change
 			// produces new resource names and rolls the pods — verified via conf files below.
 			// Neither CR tracks applied refs in status any more; readiness is the signal.
 			Expect(deployment.GetInstance(ctx, ingest.Name, ingest)).To(Succeed(), "Failed to re-fetch IngestorCluster")
@@ -464,7 +464,7 @@ var _ = Describe("Index and Ingestion Separation test", func() {
 
 // smartBusConfPath returns the on-pod path of a SmartBus conf file for the given pod.
 //
-// Both IngestorCluster and IndexerCluster deliver their structural SmartBus config declaratively
+// Both IngestorCluster and IndexerCluster deliver their non-sensitive SmartBus config declaratively
 // through a content-addressed ConfigMap mounted via SPLUNK_DEFAULTS_URL, which splunk-ansible
 // renders into the dedicated app directory 100-sok/local. Credentials (access_key/secret_key)
 // live separately in 101-sok-creds/local and are not asserted here.

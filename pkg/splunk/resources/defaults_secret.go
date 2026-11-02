@@ -42,7 +42,7 @@ func SecretMountPath() string {
 // only sensitive credentials (e.g. SmartBus access_key/secret_key, or a Noah pass4SymmKey),
 // together with the knowledge of how to mount itself onto a Splunk StatefulSet.
 //
-// It is a credential-only analog of DefaultsConfigMap: structural config lives in a ConfigMap,
+// It is a credential-only analog of DefaultsConfigMap: non-sensitive config lives in a ConfigMap,
 // while credentials live here so they are never written into a ConfigMap. Both are mounted and
 // joined into SPLUNK_DEFAULTS_URL. In the array conf format, each renders its stanza into a
 // distinct app directory and Splunk's btool layering unions the disjoint keys at runtime; in

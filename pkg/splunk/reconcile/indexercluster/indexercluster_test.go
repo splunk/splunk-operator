@@ -3107,7 +3107,7 @@ func (m *mockEventRecorder) AnnotatedEventf(object pkgruntime.Object, annotation
 
 // --- Declarative SmartBus credential delivery -------------------------------
 //
-// SmartBus queue/pipeline config (structural) is delivered through a
+// SmartBus queue/pipeline config (non-sensitive) is delivered through a
 // content-addressed ConfigMap, and the static access_key/secret_key credentials
 // through a separate content-addressed Secret. Both are mounted and joined into
 // SPLUNK_DEFAULTS_URL, so a change to either produces a new resource name and the
