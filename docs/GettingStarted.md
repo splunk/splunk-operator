@@ -21,9 +21,9 @@ Splunk Operator for Kubernetes. It is divided into the following sections:
 
 ## Support Resources
 
-SPLUNK SUPPORTED: The Splunk Operator for Kubernetes is a supported method for deploying distributed Splunk Enterprise environments using containers. The Splunk Operator is categorized as an Extension and subject to the support terms found [here](https://www.splunk.com/en_us/legal/splunk-software-support-policy.html).  Splunk Enterprise deployed using the Splunk Operator is subject to the applicable support level offered [here](https://www.splunk.com/en_us/customer-success/support-programs.html).
+SPLUNK SUPPORTED: The Splunk Operator for Kubernetes is a supported method for deploying distributed Splunk Enterprise environments using containers. Splunk supports the Splunk Operator up to the P1 support level, as described on the [Splunk Support Program](https://www.splunk.com/en_us/customer-success/support-programs.html) page.
 
-COMMUNITY DEVELOPED: Splunk Operator for Kubernetes is an open source product developed by Splunkers with contributions from the community of partners and customers. The primary reason why Splunk is taking this approach is to push product development closer to those that use and depend upon it. This direct connection will help us all be more successful and move at a rapid pace.
+COMMUNITY DEVELOPED: The Splunk Operator for Kubernetes is an open source product developed by Splunkers with contributions from the community of partners and customers, to push product development closer to those that use and depend upon it.
 
 If you're interested in contributing to the SOK open source project, review the [Contributing to the Project](develop/Contributing) page.
 
