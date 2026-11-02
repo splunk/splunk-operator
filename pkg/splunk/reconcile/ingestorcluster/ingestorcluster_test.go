@@ -613,15 +613,25 @@ func TestEnsureIngestorCredentialsSecret_CreatesMountsAndRotates(t *testing.T) {
 	}
 
 	// A queueRef with static credentials produces a non-empty, content-addressed Secret.
-	_, credsSecret, err := ensureIngestorDefaults(ctx, c, cr)
+	defaultsConfigMap, credsSecret, err := ensureIngestorDefaults(ctx, c, cr)
 	require.NoError(t, err)
+	require.NotEmpty(t, defaultsConfigMap.Name, "non-sensitive defaults ConfigMap should be created")
 	require.NotEmpty(t, credsSecret.Name, "credentials Secret should be created when static creds are present")
 	assert.Regexp(t, regexp.MustCompile(`^sok-ingestorcluster-creds-[0-9a-f]{6}$`), credsSecret.Name)
+
+	// The ConfigMap and Secret both contribute outputs.conf. Use the list form so
+	// splunk-ansible can retain both entries when it merges SPLUNK_DEFAULTS_URLs.
+	var storedConfigMap corev1.ConfigMap
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: "test", Name: defaultsConfigMap.Name}, &storedConfigMap))
+	assert.Contains(t, storedConfigMap.Data["conf-defaults.yml"], "- key: outputs",
+		"non-sensitive outputs.conf must use the mergeable list form")
 
 	var stored corev1.Secret
 	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: "test", Name: credsSecret.Name}, &stored))
 	require.NotNil(t, stored.Immutable)
 	assert.True(t, *stored.Immutable, "credentials Secret must be immutable")
+	assert.Contains(t, string(stored.Data["conf-defaults.yml"]), "- key: outputs",
+		"credential outputs.conf must use the mergeable list form")
 
 	// The Secret mounts into the pod and joins SPLUNK_DEFAULTS_URL.
 	ss := &appsv1.StatefulSet{

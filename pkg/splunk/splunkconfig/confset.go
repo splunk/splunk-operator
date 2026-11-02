@@ -36,8 +36,8 @@ type ConfSet struct {
 }
 
 // ConfFeature is one configuration concern, constructed with its own resolved
-// inputs. The builder owns placement, so a directory the feature sets on an entry
-// is ignored.
+// inputs. A directory it sets on an entry is only a default the builder may
+// override.
 type ConfFeature interface {
 	Name() string
 
@@ -51,8 +51,9 @@ type RoleConfBuilder struct {
 	role     common.InstanceType
 	features []ConfFeature
 
-	nonSensitiveDir string
-	secretsDir      string
+	// nil means "keep whatever the feature chose".
+	nonSensitiveDir *string
+	secretsDir      *string
 }
 
 type confTarget struct {
@@ -61,24 +62,25 @@ type confTarget struct {
 }
 
 func ForRole(role common.InstanceType) *RoleConfBuilder {
+	tmpAppDir := SOKAppDir
+	tmpSecretsAppDir := SOKSecretsAppDir
 	return &RoleConfBuilder{
 		role:            role,
-		nonSensitiveDir: SOKAppDir,
-		secretsDir:      SOKSecretsAppDir,
+		nonSensitiveDir: &tmpAppDir,
+		secretsDir:      &tmpSecretsAppDir,
 	}
 }
 
-// NonSensitiveConfDir replaces SOKAppDir as the app directory of every
-// non-sensitive entry. "" selects Splunk's default $SPLUNK_HOME/etc/system/local.
+// NonSensitiveConfDir overrides the app directory of every non-sensitive entry.
+// "" selects Splunk's default $SPLUNK_HOME/etc/system/local.
 func (builder *RoleConfBuilder) NonSensitiveConfDir(dir string) *RoleConfBuilder {
-	builder.nonSensitiveDir = dir
+	builder.nonSensitiveDir = &dir
 	return builder
 }
 
-// SecretsConfDir replaces SOKSecretsAppDir as the app directory of every secret
-// entry.
+// SecretsConfDir overrides the app directory of every secret entry.
 func (builder *RoleConfBuilder) SecretsConfDir(dir string) *RoleConfBuilder {
-	builder.secretsDir = dir
+	builder.secretsDir = &dir
 	return builder
 }
 
@@ -91,10 +93,9 @@ func (builder *RoleConfBuilder) With(feature ConfFeature) *RoleConfBuilder {
 	return builder
 }
 
-// Build runs every injected feature and concatenates the results. Both halves claim
-// out of one map because a claim is on a physical file: one conf file may appear in
-// both halves only while the halves resolve to different directories, which is what
-// the defaults do.
+// Build runs every injected feature and concatenates the results. Claims are
+// shared across both halves because entries with the same target path overwrite
+// one another when rendered, even if they ship as different resources.
 func (builder *RoleConfBuilder) Build() (ConfSet, error) {
 	var set ConfSet
 	claims := map[confTarget]string{}
@@ -135,12 +136,14 @@ func (builder *RoleConfBuilder) Build() (ConfSet, error) {
 	return set, nil
 }
 
-// place moves every entry into dir and rejects two entries resolving to the same
-// file, where the later write would silently destroy the earlier one.
-func place(entries []common.ConfFileEntry, dir string, claims map[confTarget]string, featureName string) ([]common.ConfFileEntry, error) {
+// place applies the overridden directory and rejects two entries resolving to the
+// same file, where the later write would silently destroy the earlier one.
+func place(entries []common.ConfFileEntry, overrideDir *string, claims map[confTarget]string, featureName string) ([]common.ConfFileEntry, error) {
 	placed := make([]common.ConfFileEntry, 0, len(entries))
 	for _, entry := range entries {
-		entry.Value.Directory = dir
+		if overrideDir != nil {
+			entry.Value.Directory = *overrideDir
+		}
 
 		target := confTarget{directory: entry.Value.Directory, confFileName: entry.ConfFileName}
 		if claimedBy, taken := claims[target]; taken {

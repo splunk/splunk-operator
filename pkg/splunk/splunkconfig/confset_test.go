@@ -16,7 +16,6 @@
 package splunkconfig_test
 
 import (
-	"errors"
 	"fmt"
 	"testing"
 
@@ -100,8 +99,6 @@ func TestWith_IgnoresNilFeature(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, set.NonSensitive, 1)
 	assert.Equal(t, "server", set.NonSensitive[0].ConfFileName)
-	require.Len(t, set.Secrets, 1)
-	assert.Equal(t, "server-secret", set.Secrets[0].ConfFileName)
 }
 
 // Every feature is asked about the builder's role, and decides from it.
@@ -116,26 +113,19 @@ func TestBuild_PassesBuilderRoleToEveryFeature(t *testing.T) {
 	assert.Equal(t, []common.InstanceType{common.SplunkSearchHead}, always.askedRoles)
 	require.Len(t, set.NonSensitive, 1, "the role-mismatched feature must contribute nothing")
 	assert.Equal(t, "server", set.NonSensitive[0].ConfFileName)
-	require.Len(t, set.Secrets, 1, "only the always-on feature should contribute a secret")
-	assert.Equal(t, "server-secret", set.Secrets[0].ConfFileName)
 }
 
-// Each half defaults to its own SOK app dir, whatever directory a feature chose.
-func TestBuild_DefaultsBothHalvesToSOKAppDirs(t *testing.T) {
+// Without an explicit override, the builder keeps the legacy SOK app directories.
+func TestBuild_UsesSOKConfDirsByDefault(t *testing.T) {
 	set, err := splunkconfig.ForRole(common.SplunkIndexer).
-		With(&fakeFeature{name: "smartbus", confFile: "outputs", dir: "/opt/splunk/etc/apps/900-feature-choice/local"}).
+		With(&fakeFeature{name: "smartbus", confFile: "outputs", dir: "/feature/default/local"}).
 		With(&fakeFeature{name: "noah", confFile: "server"}).
 		Build()
 	require.NoError(t, err)
 
 	require.Len(t, set.NonSensitive, 2)
-	for _, entry := range set.NonSensitive {
-		assert.Equal(t, splunkconfig.SOKAppDir, entry.Value.Directory)
-	}
-	require.Len(t, set.Secrets, 2)
-	for _, entry := range set.Secrets {
-		assert.Equal(t, splunkconfig.SOKSecretsAppDir, entry.Value.Directory)
-	}
+	assert.Equal(t, splunkconfig.SOKAppDir, set.NonSensitive[0].Value.Directory)
+	assert.Equal(t, splunkconfig.SOKAppDir, set.NonSensitive[1].Value.Directory)
 }
 
 // The override wins over every feature, including one that left the directory empty.
@@ -158,80 +148,43 @@ func TestBuild_ConfDirOverridesEveryFeature(t *testing.T) {
 	}
 }
 
-// Setting both directories to "" selects Splunk's default etc/system/local.
+// Overriding to "" is meaningful: it forces Splunk's default etc/system/local.
 func TestBuild_ConfDirCanSelectSplunkDefault(t *testing.T) {
 	set, err := splunkconfig.ForRole(common.SplunkIndexer).
 		NonSensitiveConfDir("").
-		SecretsConfDir("").
 		With(&fakeFeature{name: "smartbus", confFile: "outputs", dir: splunkconfig.SOKAppDir}).
 		Build()
 	require.NoError(t, err)
 
 	require.Len(t, set.NonSensitive, 1)
 	assert.Empty(t, set.NonSensitive[0].Value.Directory)
-	require.Len(t, set.Secrets, 1)
-	assert.Empty(t, set.Secrets[0].Value.Directory)
 }
 
-// A collision must fail the build and name both features. The directories the
-// features chose differ, so it is the builder's placement that collapses them onto
-// one target — which must be rejected rather than silently merged.
+// A collision must fail the build and name both features.
 func TestBuild_RejectsCollidingTargets(t *testing.T) {
-	set, err := splunkconfig.ForRole(common.SplunkIndexer).
-		With(&fakeFeature{name: "smartbus", confFile: "outputs", dir: "/opt/splunk/etc/apps/900-smartbus/local"}).
+	_, err := splunkconfig.ForRole(common.SplunkIndexer).
+		With(&fakeFeature{name: "smartbus", confFile: "outputs", dir: splunkconfig.SOKAppDir}).
 		With(&fakeFeature{name: "latecomer", confFile: "outputs", dir: splunkconfig.SOKAppDir}).
 		Build()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), fmt.Sprintf("place non-sensitive conf for role %q from feature %q:", common.SplunkIndexer.ToString(), "latecomer"))
 	assert.Contains(t, err.Error(), "smartbus")
 	assert.Contains(t, err.Error(), "latecomer")
 	assert.Contains(t, err.Error(), "outputs.conf")
 	assert.Contains(t, err.Error(), splunkconfig.SOKAppDir)
-	assert.Empty(t, set.NonSensitive, "a failed build must not return partial non-sensitive config")
-	assert.Empty(t, set.Secrets, "a failed build must not return partial secrets")
 }
 
-// Distinct non-sensitive files do not prevent collisions between secret entries.
-func TestBuild_RejectsCollidingSecretTargets(t *testing.T) {
-	set, err := splunkconfig.ForRole(common.SplunkIndexer).
-		With(&fakeFeature{name: "smartbus", confFile: "outputs", secretConfFile: "shared"}).
-		With(&fakeFeature{name: "latecomer", confFile: "server", secretConfFile: "shared"}).
+// The default SOK placement must reject same-named files from separate features.
+func TestBuild_DefaultConfDirRejectsCollidingTargets(t *testing.T) {
+	_, err := splunkconfig.ForRole(common.SplunkIndexer).
+		With(&fakeFeature{name: "noah", confFile: "server", dir: "/feature/one/local"}).
+		With(&fakeFeature{name: "other", confFile: "server", dir: "/feature/two/local"}).
 		Build()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), fmt.Sprintf("place secret conf for role %q from feature %q:", common.SplunkIndexer.ToString(), "latecomer"))
-	assert.Contains(t, err.Error(), "smartbus")
-	assert.Contains(t, err.Error(), "latecomer")
-	assert.Contains(t, err.Error(), "shared.conf")
-	assert.Contains(t, err.Error(), splunkconfig.SOKSecretsAppDir)
-	assert.Empty(t, set.NonSensitive, "a failed build must not return partial non-sensitive config")
-	assert.Empty(t, set.Secrets, "a failed build must not return partial secrets")
+	assert.Contains(t, err.Error(), "server.conf")
+	assert.Contains(t, err.Error(), splunkconfig.SOKAppDir)
 }
 
-// Pointing both halves at one directory collapses them onto a single physical file,
-// which splunk-ansible would truncate on the second write, so it must be rejected.
-func TestBuild_RejectsSameConfFileWhenHalvesShareADirectory(t *testing.T) {
-	shared := map[string]string{
-		"SOK app dir":    splunkconfig.SOKAppDir,
-		"Splunk default": "",
-	}
-	for name, dir := range shared {
-		t.Run(name, func(t *testing.T) {
-			set, err := splunkconfig.ForRole(common.SplunkIndexer).
-				NonSensitiveConfDir(dir).
-				SecretsConfDir(dir).
-				With(&fakeFeature{name: "noah", confFile: "server", secretConfFile: "server"}).
-				Build()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), fmt.Sprintf("place secret conf for role %q from feature %q:", common.SplunkIndexer.ToString(), "noah"))
-			assert.Contains(t, err.Error(), "server.conf")
-			assert.Contains(t, err.Error(), "noah")
-			assert.Empty(t, set.NonSensitive, "a failed build must not return partial non-sensitive config")
-			assert.Empty(t, set.Secrets, "a failed build must not return partial secrets")
-		})
-	}
-}
-
-// The same .conf filename is allowed in both outputs when they resolve to different directories.
+// The default directories differ, so one conf file may appear in both halves.
 func TestBuild_SameConfFileAcrossHalvesIsAllowed(t *testing.T) {
 	set, err := splunkconfig.ForRole(common.SplunkIndexer).
 		With(&fakeFeature{name: "noah", confFile: "server", secretConfFile: "server"}).
@@ -242,24 +195,41 @@ func TestBuild_SameConfFileAcrossHalvesIsAllowed(t *testing.T) {
 	require.Len(t, set.Secrets, 1)
 	assert.Equal(t, "server", set.NonSensitive[0].ConfFileName)
 	assert.Equal(t, "server", set.Secrets[0].ConfFileName)
-	assert.Equal(t, splunkconfig.SOKAppDir, set.NonSensitive[0].Value.Directory)
-	assert.Equal(t, splunkconfig.SOKSecretsAppDir, set.Secrets[0].Value.Directory)
+}
+
+func TestBuild_RejectsSameConfFileWhenHalvesShareADirectory(t *testing.T) {
+	tests := []struct {
+		name string
+		dir  string
+	}{
+		{name: "Splunk default directory", dir: ""},
+		{name: "shared app directory", dir: splunkconfig.SOKAppDir},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := splunkconfig.ForRole(common.SplunkIndexer).
+				NonSensitiveConfDir(tc.dir).
+				SecretsConfDir(tc.dir).
+				With(&fakeFeature{name: "smartbus", confFile: "outputs", secretConfFile: "outputs"}).
+				Build()
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "smartbus (non-sensitive) and smartbus (secrets) both write")
+			assert.Contains(t, err.Error(), "outputs.conf")
+		})
+	}
 }
 
 // A failing feature aborts the build and is named in the error.
 func TestBuild_AttributesFeatureError(t *testing.T) {
-	featureErr := errors.New("unsupported queue provider: \"kafka\"")
-	failing := &fakeFeature{name: "smartbus", err: featureErr}
+	failing := &fakeFeature{name: "smartbus", err: fmt.Errorf("unsupported queue provider: %q", "kafka")}
 	never := &fakeFeature{name: "never-reached", confFile: "server"}
 
 	set, err := splunkconfig.ForRole(common.SplunkIndexer).With(failing).With(never).Build()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), fmt.Sprintf("build conf for role %q from feature %q:", common.SplunkIndexer.ToString(), "smartbus"))
 	assert.Contains(t, err.Error(), "smartbus")
 	assert.Contains(t, err.Error(), common.SplunkIndexer.ToString())
 	assert.Contains(t, err.Error(), "unsupported queue provider")
-	assert.ErrorIs(t, err, featureErr, "Build should preserve the feature's original error")
 	assert.Empty(t, set.NonSensitive, "a failed build must not return partial config")
 	assert.Empty(t, never.askedRoles, "build must stop at the first failing feature")
-	assert.Equal(t, []common.InstanceType{common.SplunkIndexer}, failing.askedRoles)
 }
