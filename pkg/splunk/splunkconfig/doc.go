@@ -14,9 +14,17 @@
 // limitations under the License.
 
 /*
-Package splunkconfig builds Splunk configuration entries (default.yml ConfFileEntry values)
-for SOK-managed roles. It encodes Splunk domain knowledge — role-specific pipeline stanzas,
-queue provider stanza structures — as pure functions with no I/O and no Kubernetes types.
+Package splunkconfig composes the Splunk configuration entries (default.yml
+ConfFileEntry values) for one SOK-managed role out of independent features.
+
+This package owns composition only. Splunk domain knowledge — which stanzas a
+role needs, how a queue provider spells its fields — lives in the ConfFeature
+implementations under this directory, one per configuration concern. A feature is
+constructed with its own already-resolved inputs and injected into a
+RoleConfBuilder, so adding a feature requires no change here.
+
+Reconcilers call ForRole, inject the features that apply to their CR, and deliver
+the resulting ConfSet: NonSensitive through a ConfigMap, Secrets through a Secret.
 
 Allowed imports from pkg/splunk/: common/, util/
 */

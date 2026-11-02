@@ -32,6 +32,7 @@ import (
 	upgrade "github.com/splunk/splunk-operator/pkg/splunk/reconcile/upgrade"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splunkconfig "github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
+	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig/smartbus"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
@@ -276,7 +277,7 @@ func applyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		return result, fmt.Errorf("apply service: %w", err)
 	}
 
-	// ensure the SOK defaults resources exist: a ConfigMap for structural SmartBus
+	// ensure the SOK defaults resources exist: a ConfigMap for non-sensitive SmartBus
 	// config and a Secret for the credentials (both mounted via SPLUNK_DEFAULTS_URL)
 	defaultsConfigMap, defaultsSecret, err := ensureIndexerDefaults(ctx, client, cr)
 	if err != nil {
@@ -616,7 +617,7 @@ func applyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		return result, fmt.Errorf("apply service: %w", err)
 	}
 
-	// ensure the SOK defaults resources exist: a ConfigMap for structural SmartBus
+	// ensure the SOK defaults resources exist: a ConfigMap for non-sensitive SmartBus
 	// config and a Secret for the credentials (both mounted via SPLUNK_DEFAULTS_URL)
 	defaultsConfigMap, credentialsSecret, err := ensureIndexerDefaults(ctx, client, cr)
 	if err != nil {
@@ -1230,7 +1231,7 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 
 // ensureIndexerDefaults resolves the IndexerCluster's SmartBus queue/object-storage
 // configuration once and ensures both SOK defaults resources exist:
-//   - a content-addressed ConfigMap holding the structural SmartBus config, and
+//   - a content-addressed ConfigMap holding the non-sensitive SmartBus config, and
 //   - a content-addressed Secret holding only the credentials (access_key/secret_key).
 //
 // Both are immutable and mounted into every container via SPLUNK_DEFAULTS_URL.
@@ -1262,7 +1263,9 @@ func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr
 	if err != nil {
 		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, fmt.Errorf("resolve queue config: %w", err)
 	}
-	structuralEntries, credentialEntries, err := splunkconfig.BuildSmartBusConfig(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)
+	set, err := splunkconfig.ForRole(splcommon.SplunkIndexer).
+		With(smartbus.Conf(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)).
+		Build()
 	if err != nil {
 		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 	}
@@ -1270,16 +1273,16 @@ func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr
 	owner := splcommon.AsOwner(cr, true)
 
 	var configMap resources.DefaultsConfigMap
-	if entries := structuralEntries; len(entries) > 0 {
-		configMap, err = configworkflow.EnsureConfigMap(ctx, c, cr, entries, &owner)
+	if len(set.NonSensitive) > 0 {
+		configMap, err = configworkflow.EnsureConfigMap(ctx, c, cr, set.NonSensitive, &owner)
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 		}
 	}
 
 	var secret resources.DefaultsSecret
-	if entries := credentialEntries; len(entries) > 0 {
-		secret, err = configworkflow.EnsureSecret(ctx, c, cr, entries, &owner)
+	if len(set.Secrets) > 0 {
+		secret, err = configworkflow.EnsureSecret(ctx, c, cr, set.Secrets, &owner)
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 		}
