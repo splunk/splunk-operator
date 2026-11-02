@@ -205,7 +205,7 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	// same path; splunk-ansible's own defaults loader deep-merges the two
 	// files' nested maps, so the structural and credential fields union into
 	// one [noahService] stanza before Ansible ever runs.
-	credentialsSecret, err := configworkflow.EnsureSecret(ctx, client, cr, splunkconfig.NoahCredentialsConf(pass4SymmKey), &owner, resources.WithDictionaryConf())
+	credentialsSecret, err := configworkflow.EnsureSecret(ctx, client, cr, splunkconfig.NoahCredentialsConf(pass4SymmKey), nil, &owner, resources.WithDictionaryConf())
 	if err != nil {
 		return enterpriseApi.PhaseError, deployerPhase, nil, fmt.Errorf("ensure Noah SearchHeadCluster credentials: %w", err)
 	}

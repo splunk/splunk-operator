@@ -33,6 +33,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/internal/controller/common"
 	"github.com/splunk/splunk-operator/pkg/config"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	metrics "github.com/splunk/splunk-operator/pkg/splunk/client/metrics"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	ingestorcluster "github.com/splunk/splunk-operator/pkg/splunk/reconcile/ingestorcluster"
@@ -82,6 +83,15 @@ func (r *IngestorClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&enterpriseApi.IngestorCluster{},
+		indexIngestorClusterUserSecrets,
+		extractIngestorClusterUserSecretNames,
+	); err != nil {
+		return err
+	}
+
 	bldr := ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.IngestorCluster{}).
 		WithEventFilter(predicate.Or(
@@ -157,6 +167,9 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 				return reqs
 			}),
+		).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.mapUserSecretToIngestorClusters),
 		).
 		Watches(&corev1.Pod{},
 			handler.EnqueueRequestForOwner(
@@ -268,4 +281,43 @@ func (r *IngestorClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return bldr.
 		Named("ingestor-cluster-controller").
 		Complete(r)
+}
+
+const indexIngestorClusterUserSecrets = ".spec.users.passwordSecretRef.name"
+
+func extractIngestorClusterUserSecretNames(obj client.Object) []string {
+	ic, ok := obj.(*enterpriseApi.IngestorCluster)
+	if !ok {
+		return nil
+	}
+	var names []string
+	for _, user := range ic.Spec.Users {
+		names = append(names, user.PasswordSecretRef.Name)
+	}
+	return names
+}
+
+// mapUserSecretToIngestorClusters requeues the IngestorClusters that read a user password from the Secret.
+func (r *IngestorClusterReconciler) mapUserSecretToIngestorClusters(ctx context.Context, obj client.Object) []reconcile.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return nil
+	}
+
+	var ingestorClusters enterpriseApi.IngestorClusterList
+	if err := r.Client.List(ctx, &ingestorClusters,
+		client.InNamespace(secret.Namespace),
+		client.MatchingFields{indexIngestorClusterUserSecrets: secret.Name},
+	); err != nil {
+		logging.FromContext(ctx).ErrorContext(ctx, "failed to map user password Secret to IngestorClusters", "error", err)
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, ic := range ingestorClusters.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{Name: ic.Name, Namespace: ic.Namespace},
+		})
+	}
+	return requests
 }

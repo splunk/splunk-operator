@@ -69,7 +69,7 @@ func differentCredEntries() []common.ConfFileEntry {
 
 func desiredSecretName(t *testing.T, crKind, crName string, entries []common.ConfFileEntry) string {
 	t.Helper()
-	name, err := resources.DefaultsSecretName(crKind, crName, entries)
+	name, err := resources.DefaultsSecretName(crKind, crName, entries, nil)
 	require.NoError(t, err)
 	return name
 }
@@ -80,7 +80,7 @@ func TestEnsureSecret_CreatesOnFirstCall(t *testing.T) {
 	c := fakeClient()
 	ctx := context.Background()
 
-	ref, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), someCredEntries(), nil)
+	ref, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), someCredEntries(), nil, nil)
 	require.NoError(t, err)
 	assert.NotEmpty(t, ref.Name)
 
@@ -94,10 +94,10 @@ func TestEnsureSecret_SecondCallWithSameEntriesIsNoop(t *testing.T) {
 	ctx := context.Background()
 	entries := someCredEntries()
 
-	ref1, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), entries, nil)
+	ref1, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), entries, nil, nil)
 	require.NoError(t, err)
 
-	ref2, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), entries, nil)
+	ref2, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), entries, nil, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, ref1.Name, ref2.Name, "same entries must return the same name")
@@ -111,10 +111,10 @@ func TestEnsureSecret_ChangedEntriesReturnNewName(t *testing.T) {
 	c := fakeClient()
 	ctx := context.Background()
 
-	ref1, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), someCredEntries(), nil)
+	ref1, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), someCredEntries(), nil, nil)
 	require.NoError(t, err)
 
-	ref2, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), differentCredEntries(), nil)
+	ref2, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), differentCredEntries(), nil, nil)
 	require.NoError(t, err)
 
 	assert.NotEqual(t, ref1.Name, ref2.Name, "changed entries must produce a different name")
@@ -138,7 +138,7 @@ func TestEnsureSecret_ContentMismatchReturnsError(t *testing.T) {
 	}
 	c := fakeClient(impostor)
 
-	_, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), entries, nil)
+	_, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), entries, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "content mismatch")
 	assert.True(t, errors.Is(err, reconcile.TerminalError(nil)), "collision error must be terminal")
@@ -148,7 +148,7 @@ func TestEnsureSecret_SecretIsImmutable(t *testing.T) {
 	c := fakeClient()
 	ctx := context.Background()
 
-	ref, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), someCredEntries(), nil)
+	ref, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), someCredEntries(), nil, nil)
 	require.NoError(t, err)
 
 	var s corev1.Secret
@@ -161,7 +161,7 @@ func TestEnsureSecret_LabelsCarryCRIdentity(t *testing.T) {
 	c := fakeClient()
 	ctx := context.Background()
 
-	ref, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), someCredEntries(), nil)
+	ref, err := configworkflow.EnsureSecret(ctx, c, fakeCR("ns", "IndexerCluster", "my-indexer"), someCredEntries(), nil, nil)
 	require.NoError(t, err)
 
 	var s corev1.Secret

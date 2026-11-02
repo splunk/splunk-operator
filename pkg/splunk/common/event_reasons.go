@@ -68,6 +68,7 @@ const (
 
 	// Warning event reasons — cluster operations
 	EventReasonResolveQueueObjectStorageFailed EventReason = "ResolveQueueObjectStorageFailed"
+	EventReasonResolveUsersFailed              EventReason = "ResolveUsersFailed"
 	EventReasonImmutableRefsModified           EventReason = "ImmutableRefsModified"
 	EventReasonEmptyClusterManagerRef          EventReason = "EmptyClusterManagerRef"
 	EventReasonRemoteVolumeKeyCheckFailed      EventReason = "RemoteVolumeKeyCheckFailed"

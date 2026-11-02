@@ -54,18 +54,18 @@ type DefaultsSecret struct {
 }
 
 // NewDefaultsSecret builds a DefaultsSecret for the given CR, computing its
-// content-addressed name from entries. owner, when non-nil, is set as an owner
-// reference on the Secret; pass splcommon.AsOwner(cr, true) from the reconciler.
-func NewDefaultsSecret(cr CRObject, entries []common.ConfFileEntry, owner *metav1.OwnerReference, opts ...DefaultsConfigMapOption) (DefaultsSecret, error) {
+// content-addressed name from entries and users. users may be nil. owner, when non-nil,
+// is set as an owner reference on the Secret; pass splcommon.AsOwner(cr, true) from the reconciler.
+func NewDefaultsSecret(cr CRObject, entries []common.ConfFileEntry, users map[string]common.UserDefault, owner *metav1.OwnerReference, opts ...DefaultsConfigMapOption) (DefaultsSecret, error) {
 	namespace := cr.GetNamespace()
 	crKind := cr.GetObjectKind().GroupVersionKind().Kind
 	crName := cr.GetName()
 
-	name, err := DefaultsSecretName(crKind, crName, entries, opts...)
+	name, err := DefaultsSecretName(crKind, crName, entries, users, opts...)
 	if err != nil {
 		return DefaultsSecret{}, err
 	}
-	data, err := marshalDefaultYML(entries, opts...)
+	data, err := marshalSecretDefaultYML(entries, users, opts...)
 	if err != nil {
 		return DefaultsSecret{}, fmt.Errorf("marshal defaults for %s/%s: %w", crKind, crName, err)
 	}
@@ -111,8 +111,8 @@ func (s DefaultsSecret) AsStatefulSetOption() StatefulSetOption {
 // DefaultsSecretName returns the content-addressed name for a credentials Secret.
 // The name embeds the first 6 hex characters of the SHA-256 of the serialized entries,
 // giving a stable, change-sensitive identifier.
-func DefaultsSecretName(crKind, crName string, entries []common.ConfFileEntry, opts ...DefaultsConfigMapOption) (string, error) {
-	data, err := marshalDefaultYML(entries, opts...)
+func DefaultsSecretName(crKind, crName string, entries []common.ConfFileEntry, users map[string]common.UserDefault, opts ...DefaultsConfigMapOption) (string, error) {
+	data, err := marshalSecretDefaultYML(entries, users, opts...)
 	if err != nil {
 		return "", fmt.Errorf("marshal defaults for %s/%s: %w", crKind, crName, err)
 	}

@@ -82,7 +82,8 @@ type dictionaryDefaultYML struct {
 }
 
 type dictionarySplunkDefault struct {
-	Conf map[string]common.ConfFileValue `yaml:"conf"`
+	Conf  map[string]common.ConfFileValue `yaml:"conf,omitempty"`
+	Users map[string]common.UserDefault   `yaml:"users,omitempty"`
 }
 
 // NewDefaultsConfigMap builds a DefaultsConfigMap for the given CR, computing its
@@ -156,6 +157,12 @@ func defaultsConfigMapName(crKind, crName string, data []byte) string {
 
 // marshalDefaultYML serializes entries into the splunk-ansible defaults.yml YAML bytes.
 func marshalDefaultYML(entries []common.ConfFileEntry, opts ...DefaultsConfigMapOption) ([]byte, error) {
+	return marshalSecretDefaultYML(entries, nil, opts...)
+}
+
+// marshalSecretDefaultYML is marshalDefaultYML plus splunk.users, which carry passwords and so
+// must only be written to Secrets.
+func marshalSecretDefaultYML(entries []common.ConfFileEntry, users map[string]common.UserDefault, opts ...DefaultsConfigMapOption) ([]byte, error) {
 	options := defaultsConfigMapOptions{}
 	for _, opt := range opts {
 		opt(&options)
@@ -169,12 +176,12 @@ func marshalDefaultYML(entries []common.ConfFileEntry, opts ...DefaultsConfigMap
 			conf[entry.ConfFileName] = entry.Value
 		}
 		return yaml.Marshal(dictionaryDefaultYML{
-			Splunk: dictionarySplunkDefault{Conf: conf},
+			Splunk: dictionarySplunkDefault{Conf: conf, Users: users},
 		})
 	}
 
 	d := common.DefaultYML{
-		Splunk: common.SplunkDefault{Conf: entries},
+		Splunk: common.SplunkDefault{Conf: entries, Users: users},
 	}
 	return yaml.Marshal(d)
 }

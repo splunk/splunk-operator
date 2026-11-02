@@ -2746,6 +2746,60 @@ spec:
                   - whenUnsatisfiable
                   type: object
                 type: array
+              users:
+                description: |-
+                  Users lists additional Splunk users to create or update on each pod.
+                  The admin user is managed separately and cannot be declared here.
+                  Each user's roles are replaced on every pod start, so this list is the
+                  source of truth for them. Removing an entry does not delete the user.
+                items:
+                  description: |-
+                    SplunkUser declares a Splunk user whose password is read from a Secret in
+                    the same namespace as the custom resource.
+                  properties:
+                    name:
+                      description: Name is the Splunk username. Splunk usernames are
+                        case-insensitive, so only lowercase names are accepted.
+                      minLength: 1
+                      pattern: ^[a-z0-9_-]+$
+                      type: string
+                    passwordSecretRef:
+                      description: |-
+                        PasswordSecretRef names a Secret, in the same namespace, whose
+                        "password" key holds the user's password.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    roles:
+                      description: Roles assigned to the user. They must already exist
+                        in Splunk.
+                      items:
+                        minLength: 1
+                        type: string
+                      minItems: 1
+                      type: array
+                      x-kubernetes-list-type: set
+                  required:
+                  - name
+                  - passwordSecretRef
+                  - roles
+                  type: object
+                  x-kubernetes-validations:
+                  - message: name must not be admin
+                    rule: self.name != 'admin'
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               varVolumeStorageConfig:
                 description: Storage configuration for /opt/splunk/var volume
                 properties:
