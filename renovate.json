@@ -28,6 +28,9 @@
       "dependency-update"
     ]
   },
+  "addLabels": [
+    "sok-review-ready"
+  ],
   "prConcurrentLimit": 2,
   "prHourlyLimit": 2,
   "ignorePaths": [
@@ -108,19 +111,6 @@
     }
   ],
   "assignAutomerge": true,
-  "reviewers": [
-    "gabrielm",
-    "igorg",
-    "jbuczak",
-    "kkoziol",
-    "patrykw",
-    "rlieberman",
-    "donjanellr",
-    "anudeeps",
-    "baov",
-    "tvestal",
-    "venkatad"
-  ],
   "packageRules": [
     {
       "description": "Group all SCS Loki deploy image references",
