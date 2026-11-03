@@ -23,7 +23,14 @@ type DefaultYML struct {
 
 // SplunkDefault holds the splunk-ansible configuration entries.
 type SplunkDefault struct {
-	Conf []ConfFileEntry `yaml:"conf"`
+	Conf  []ConfFileEntry        `yaml:"conf"`
+	Users map[string]UserDefault `yaml:"users,omitempty"`
+}
+
+// UserDefault is one splunk.users entry in the splunk-ansible default.yml.
+type UserDefault struct {
+	Password string   `yaml:"password"`
+	Roles    []string `yaml:"roles"`
 }
 
 // ConfFileEntry represents a single .conf file entry in the splunk-ansible default.yml.

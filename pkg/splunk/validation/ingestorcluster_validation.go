@@ -17,6 +17,9 @@ limitations under the License.
 package validation
 
 import (
+	"strings"
+
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -38,6 +41,15 @@ func ValidateIngestorClusterCreate(obj *enterpriseApi.IngestorCluster) field.Err
 		allErrs = append(allErrs, field.Required(
 			field.NewPath("spec").Child("objectStorageRef").Child("name"),
 			"objectStorageRef.name is required"))
+	}
+
+	// The CRD only checks that passwordSecretRef.name is non-empty: a CEL
+	// DNS-1123 rule on an unbounded list exceeds the CRD cost budget.
+	for i, user := range obj.Spec.Users {
+		if msgs := k8svalidation.IsDNS1123Subdomain(user.PasswordSecretRef.Name); len(msgs) > 0 {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec").Child("users").Index(i).Child("passwordSecretRef").Child("name"), user.PasswordSecretRef.Name, strings.Join(msgs, "; ")))
+		}
 	}
 
 	// Validate common spec

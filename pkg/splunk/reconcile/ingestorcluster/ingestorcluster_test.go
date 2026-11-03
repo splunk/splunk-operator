@@ -22,14 +22,9 @@ import (
 	"regexp"
 	"testing"
 
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
-	"github.com/splunk/splunk-operator/pkg/splunk/resources"
-	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -40,6 +35,13 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 func init() {
@@ -613,7 +615,7 @@ func TestEnsureIngestorCredentialsSecret_CreatesMountsAndRotates(t *testing.T) {
 	}
 
 	// A queueRef with static credentials produces a non-empty, content-addressed Secret.
-	defaultsConfigMap, credsSecret, err := ensureIngestorDefaults(ctx, c, cr)
+	defaultsConfigMap, credsSecret, err := ensureIngestorDefaults(ctx, c, cr, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, defaultsConfigMap.Name, "non-sensitive defaults ConfigMap should be created")
 	require.NotEmpty(t, credsSecret.Name, "credentials Secret should be created when static creds are present")
@@ -661,7 +663,7 @@ func TestEnsureIngestorCredentialsSecret_CreatesMountsAndRotates(t *testing.T) {
 	rotated.Data["s3_secret_key"] = []byte("rotated-secret")
 	require.NoError(t, c.Update(ctx, rotated))
 
-	_, rotatedSecret, err := ensureIngestorDefaults(ctx, c, cr)
+	_, rotatedSecret, err := ensureIngestorDefaults(ctx, c, cr, nil)
 	require.NoError(t, err)
 	assert.NotEqual(t, credsSecret.Name, rotatedSecret.Name, "rotated credentials must produce a new Secret name")
 }
@@ -682,7 +684,7 @@ func TestEnsureIngestorCredentialsSecret_NoQueueRef(t *testing.T) {
 		Spec:       enterpriseApi.IngestorClusterSpec{Replicas: 1},
 	}
 
-	_, credsSecret, err := ensureIngestorDefaults(ctx, c, cr)
+	_, credsSecret, err := ensureIngestorDefaults(ctx, c, cr, nil)
 	require.NoError(t, err)
 	assert.Empty(t, credsSecret.Name, "no queueRef → no credentials Secret")
 }
@@ -742,7 +744,7 @@ func TestEnsureIngestorCredentialsSecret_IRSAProducesNoStaticCreds(t *testing.T)
 		},
 	}
 
-	_, credsSecret, err := ensureIngestorDefaults(ctx, c, cr)
+	_, credsSecret, err := ensureIngestorDefaults(ctx, c, cr, nil)
 	require.NoError(t, err)
 	assert.Empty(t, credsSecret.Name, "no VolList → no static credentials Secret")
 }
@@ -887,6 +889,154 @@ func TestApplyIngestorCluster_QueueCredsSecretLifecycle(t *testing.T) {
 	credsList = listIngestorCredsSecrets(t, ctx, c, crName)
 	require.Len(t, credsList, 1, "stale credentials Secret must be garbage-collected after rotation")
 	assert.NotEqual(t, firstName, credsList[0].Name, "rotated credentials must produce a new Secret name")
+}
+
+// TestEnsureIngestorDefaults_UsersOnlySecret verifies that spec.users alone (IRSA, so no
+// static queue credentials) still produces a credentials Secret carrying splunk.users,
+// and that rotating a password produces a new Secret name.
+func TestEnsureIngestorDefaults_UsersOnlySecret(t *testing.T) {
+	ctx := context.Background()
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+	c := spltest.NewFakeClientBuilder(sch).Build()
+
+	cr := &enterpriseApi.IngestorCluster{
+		TypeMeta:   metav1.TypeMeta{Kind: "IngestorCluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+		Spec:       enterpriseApi.IngestorClusterSpec{Replicas: 1},
+	}
+	users := map[string]splcommon.UserDefault{
+		"internal_observability": {Password: "observability-pw", Roles: []string{"observability_role"}},
+	}
+
+	_, credsSecret, err := ensureIngestorDefaults(ctx, c, cr, users)
+	require.NoError(t, err)
+	require.NotEmpty(t, credsSecret.Name, "users alone must produce a credentials Secret")
+
+	var stored corev1.Secret
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: "test", Name: credsSecret.Name}, &stored))
+	assert.Equal(t, "splunk:\n    conf: []\n    users:\n        internal_observability:\n            password: observability-pw\n            roles:\n                - observability_role\n",
+		string(stored.Data["conf-defaults.yml"]))
+
+	users["internal_observability"] = splcommon.UserDefault{Password: "rotated-pw", Roles: []string{"observability_role"}}
+	_, rotated, err := ensureIngestorDefaults(ctx, c, cr, users)
+	require.NoError(t, err)
+	assert.NotEqual(t, credsSecret.Name, rotated.Name, "a rotated password must produce a new Secret name")
+}
+
+// TestApplyIngestorCluster_UsersLifecycle drives the reconciler with spec.users: a missing
+// password Secret is a terminal ResolveUsersFailed error; once it exists the users land in
+// the mounted credentials Secret without SOK taking ownership of the user Secret; rotating
+// the password rolls to a new credentials Secret and collects the stale one.
+func TestApplyIngestorCluster_UsersLifecycle(t *testing.T) {
+	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+
+	ctx := context.Background()
+	recorder := &spltest.MockEventRecorder{}
+	eventPublisher, _ := k8sops.NewK8EventPublisherWithRecorder(recorder, &enterpriseApi.IngestorCluster{})
+	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
+
+	sch := pkgruntime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(sch))
+	utilruntime.Must(enterpriseApi.AddToScheme(sch))
+	c := spltest.NewFakeClientBuilder(sch).
+		WithStatusSubresource(&enterpriseApi.IngestorCluster{}).
+		Build()
+
+	require.NoError(t, c.Create(ctx, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-test-probe-configmap", Namespace: "test"},
+	}))
+	queue, objStorage := newIngestorQueueOSFixture(t, ctx, c, "queue", "queue-secrets")
+
+	crName := "ing1"
+	cr := &enterpriseApi.IngestorCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: "test"},
+		Spec: enterpriseApi.IngestorClusterSpec{
+			Replicas:         1,
+			CommonSplunkSpec: enterpriseApi.CommonSplunkSpec{Mock: true},
+			QueueRef:         corev1.ObjectReference{Name: queue.Name, Namespace: queue.Namespace},
+			ObjectStorageRef: corev1.ObjectReference{Name: objStorage.Name, Namespace: objStorage.Namespace},
+			Users: []enterpriseApi.SplunkUser{{
+				Name:              "internal_observability",
+				Roles:             []string{"observability_role"},
+				PasswordSecretRef: corev1.LocalObjectReference{Name: "observability-user"},
+			}},
+		},
+		Status: enterpriseApi.IngestorClusterStatus{TelAppInstalled: true},
+	}
+	require.NoError(t, c.Create(ctx, cr))
+
+	// password Secret does not exist yet ---
+	_, err := ApplyIngestorCluster(ctx, c, cr)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, reconcile.TerminalError(nil)), "missing user Secret must be terminal, got %v", err)
+	reason, _ := splcommon.TerminalReason(err)
+	assert.Equal(t, splcommon.EventReasonResolveUsersFailed, reason)
+	assert.Equal(t, enterpriseApi.PhaseError, cr.Status.Phase)
+	var sawEvent bool
+	for _, event := range recorder.Events {
+		if event.Reason == splcommon.EventReasonResolveUsersFailed {
+			sawEvent = true
+			assert.Contains(t, event.Message, "internal_observability")
+		}
+	}
+	assert.True(t, sawEvent, "a ResolveUsersFailed event must be emitted")
+	assert.Empty(t, listIngestorCredsSecrets(t, ctx, c, crName), "no credentials Secret may be created before users resolve")
+
+	// password Secret is created ---
+	userSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "observability-user", Namespace: "test"},
+		Data:       map[string][]byte{"password": []byte("observability-pw")},
+	}
+	require.NoError(t, c.Create(ctx, userSecret))
+
+	_, err = ApplyIngestorCluster(ctx, c, cr)
+	require.NoError(t, err)
+
+	credsList := listIngestorCredsSecrets(t, ctx, c, crName)
+	require.Len(t, credsList, 1)
+	firstName := credsList[0].Name
+	var rendered struct {
+		Splunk struct {
+			Conf  []splcommon.ConfFileEntry        `yaml:"conf"`
+			Users map[string]splcommon.UserDefault `yaml:"users"`
+		} `yaml:"splunk"`
+	}
+	require.NoError(t, yaml.Unmarshal(credsList[0].Data["conf-defaults.yml"], &rendered))
+	require.Len(t, rendered.Splunk.Conf, 1)
+	assert.Equal(t, "outputs", rendered.Splunk.Conf[0].ConfFileName, "queue credentials must still be rendered")
+	assert.Equal(t, map[string]splcommon.UserDefault{
+		"internal_observability": {Password: "observability-pw", Roles: []string{"observability_role"}},
+	}, rendered.Splunk.Users)
+
+	sts := &appsv1.StatefulSet{}
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: "test", Name: splutil.GetSplunkStatefulsetName(splcommon.SplunkIngestor, crName)}, sts))
+	var mounted bool
+	for _, v := range sts.Spec.Template.Spec.Volumes {
+		if v.Secret != nil && v.Secret.SecretName == firstName {
+			mounted = true
+		}
+	}
+	assert.True(t, mounted, "ingestor StatefulSet must mount the credentials Secret")
+
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: "test", Name: "observability-user"}, userSecret))
+	assert.Empty(t, userSecret.OwnerReferences, "SOK must not own the user password Secret")
+
+	// rotate the password ---
+	userSecret.Data["password"] = []byte("rotated-pw")
+	require.NoError(t, c.Update(ctx, userSecret))
+
+	_, err = ApplyIngestorCluster(ctx, c, cr)
+	require.NoError(t, err)
+
+	credsList = listIngestorCredsSecrets(t, ctx, c, crName)
+	require.Len(t, credsList, 1, "stale credentials Secret must be garbage-collected after rotation")
+	assert.NotEqual(t, firstName, credsList[0].Name, "a rotated password must produce a new Secret name")
+
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: "test", Name: "observability-user"}, userSecret))
+	assert.Empty(t, userSecret.OwnerReferences, "SOK must not own the user password Secret")
 }
 
 // TestIngScaledUpScaledDownEvents checks that scale-up/down events are emitted
@@ -1240,6 +1390,7 @@ func TestIngQueueRefChangeRollsPodsDeclarative(t *testing.T) {
 		assert.NotEqual(t, "IngestorsRestarted", event.Reason, "declarative path must not emit IngestorsRestarted on ref change")
 	}
 }
+
 func TestGetIngestorStatefulSetPreStop(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()

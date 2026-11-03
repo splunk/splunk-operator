@@ -31,7 +31,7 @@ import (
 )
 
 // EnsureSecret ensures that an immutable defaults.yml Secret for the given CR
-// and config entries exists in the cluster.
+// and config entries exists in the cluster. users may be nil.
 //
 // It returns a DefaultsSecret whose name is content-addressed, so a different
 // config produces a different name and a new Secret is created.
@@ -42,8 +42,8 @@ import (
 // If a Secret with the desired name already exists its content is verified
 // against the desired entries. A mismatch indicates a hash collision and is
 // returned as an error — the caller should treat this as a hard failure.
-func EnsureSecret(ctx context.Context, c client.Client, cr client.Object, entries []common.ConfFileEntry, owner *metav1.OwnerReference, opts ...resources.DefaultsConfigMapOption) (resources.DefaultsSecret, error) {
-	desired, err := resources.NewDefaultsSecret(cr, entries, owner, opts...)
+func EnsureSecret(ctx context.Context, c client.Client, cr client.Object, entries []common.ConfFileEntry, users map[string]common.UserDefault, owner *metav1.OwnerReference, opts ...resources.DefaultsConfigMapOption) (resources.DefaultsSecret, error) {
+	desired, err := resources.NewDefaultsSecret(cr, entries, users, owner, opts...)
 	if err != nil {
 		return resources.DefaultsSecret{}, err
 	}

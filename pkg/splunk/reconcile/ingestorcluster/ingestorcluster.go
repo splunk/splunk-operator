@@ -338,9 +338,20 @@ func applyIngestorCluster(ctx context.Context, client splcommon.ControllerClient
 		}
 	}
 
+	users, err := configworkflow.ResolveUsers(ctx, client, cr.GetNamespace(), cr.Spec.Users)
+	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve spec.users password Secrets")
+		if configworkflow.IsUserDependencyError(err) {
+			eventPublisher.Warning(ctx, splcommon.EventReasonResolveUsersFailed, err.Error())
+			return reconcile.Result{}, splcommon.NewTerminalError(splcommon.EventReasonResolveUsersFailed, "referenced spec.users password Secret not found or missing its password key", err)
+		}
+		eventPublisher.Warning(ctx, splcommon.EventReasonResolveUsersFailed, "Failed to resolve spec.users password Secrets. Check operator logs for details.")
+		return result, fmt.Errorf("resolve users: %w", err)
+	}
+
 	// Ensure the SOK defaults resources exist: a ConfigMap for non-sensitive SmartBus
-	// config and a Secret for the credentials (both mounted via SPLUNK_DEFAULTS_URL).
-	defaultsConfigMap, defaultsSecret, err := ensureIngestorDefaults(ctx, client, cr)
+	// config and a Secret for the credentials and users (both mounted via SPLUNK_DEFAULTS_URL).
+	defaultsConfigMap, defaultsSecret, err := ensureIngestorDefaults(ctx, client, cr, users)
 	if err != nil {
 		eventPublisher.Warning(ctx, "EnsureDefaultsFailed", "Failed to ensure defaults ConfigMap/Secret. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure defaults ConfigMap/Secret")
@@ -482,41 +493,42 @@ func validateIngestorClusterSpec(ctx context.Context, c splcommon.ControllerClie
 // ensureIngestorDefaults resolves the IngestorCluster's SmartBus queue/object-storage
 // configuration once and ensures both SOK defaults resources exist:
 //   - a content-addressed ConfigMap holding the non-sensitive SmartBus config, and
-//   - a content-addressed Secret holding only the credentials (access_key/secret_key).
+//   - a content-addressed Secret holding only the credentials (access_key/secret_key) and the resolved spec.users.
 //
 // Both are immutable and mounted into every container via SPLUNK_DEFAULTS_URL.
 // Returns a zero-value DefaultsConfigMap when smartbus is not configured, and a zero-value
-// DefaultsSecret when no static credentials were resolved (e.g. IRSA / workload identity,
-// where the Queue VolList is empty).
-func ensureIngestorDefaults(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster) (resources.DefaultsConfigMap, resources.DefaultsSecret, error) {
-	if cr.Spec.QueueRef.Name == "" {
-		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, nil
-	}
-
-	qosCfg, err := configworkflow.ResolveQueueAndObjectStorage(ctx, c, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef)
-	if err != nil {
-		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, fmt.Errorf("resolve queue config: %w", err)
-	}
-	set, err := splunkconfig.ForRole(splcommon.SplunkIngestor).
-		With(smartbus.Conf(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)).
-		Build()
-	if err != nil {
-		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
-	}
-
+// DefaultsSecret when there are no users and no static credentials were resolved (e.g.
+// IRSA / workload identity, where the Queue VolList is empty).
+func ensureIngestorDefaults(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IngestorCluster, users map[string]splcommon.UserDefault) (resources.DefaultsConfigMap, resources.DefaultsSecret, error) {
 	owner := splcommon.AsOwner(cr, true)
 
 	var configMap resources.DefaultsConfigMap
-	if len(set.NonSensitive) > 0 {
-		configMap, err = configworkflow.EnsureConfigMap(ctx, c, cr, set.NonSensitive, &owner)
+	var secretEntries []splcommon.ConfFileEntry
+	if cr.Spec.QueueRef.Name != "" {
+		qosCfg, err := configworkflow.ResolveQueueAndObjectStorage(ctx, c, cr, cr.Spec.QueueRef, cr.Spec.ObjectStorageRef)
+		if err != nil {
+			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, fmt.Errorf("resolve queue config: %w", err)
+		}
+		set, err := splunkconfig.ForRole(splcommon.SplunkIngestor).
+			With(smartbus.Conf(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)).
+			Build()
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 		}
+
+		if len(set.NonSensitive) > 0 {
+			configMap, err = configworkflow.EnsureConfigMap(ctx, c, cr, set.NonSensitive, &owner)
+			if err != nil {
+				return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
+			}
+		}
+		secretEntries = set.Secrets
 	}
 
 	var secret resources.DefaultsSecret
-	if len(set.Secrets) > 0 {
-		secret, err = configworkflow.EnsureSecret(ctx, c, cr, set.Secrets, &owner)
+	if len(secretEntries) > 0 || len(users) > 0 {
+		var err error
+		secret, err = configworkflow.EnsureSecret(ctx, c, cr, secretEntries, users, &owner)
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 		}

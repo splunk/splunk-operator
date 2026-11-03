@@ -263,7 +263,7 @@ func ensureNoahIndexerDefaults(ctx context.Context, client splcommon.ControllerC
 	if err != nil {
 		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 	}
-	secret, err := configworkflow.EnsureSecret(ctx, client, cr, credentialEntries, &owner, resources.WithDictionaryConf())
+	secret, err := configworkflow.EnsureSecret(ctx, client, cr, credentialEntries, nil, &owner, resources.WithDictionaryConf())
 	if err != nil {
 		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 	}
