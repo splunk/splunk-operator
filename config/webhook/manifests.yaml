@@ -28,6 +28,7 @@ webhooks:
     - clustermanagers
     - licensemanagers
     - monitoringconsoles
+    - ingestorclusters
   - apiGroups:
     - platform.splunk.com
     apiVersions:

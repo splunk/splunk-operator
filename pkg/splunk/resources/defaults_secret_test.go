@@ -61,29 +61,29 @@ func differentCredEntries() []common.ConfFileEntry {
 // --- DefaultsSecretName ------------------------------------------------------
 
 func TestDefaultsSecretName_StableForSameInput(t *testing.T) {
-	name1, err := resources.DefaultsSecretName("IndexerCluster", "my-indexer", someCredEntries())
+	name1, err := resources.DefaultsSecretName("IndexerCluster", "my-indexer", someCredEntries(), nil)
 	require.NoError(t, err)
-	name2, err := resources.DefaultsSecretName("IndexerCluster", "my-indexer", someCredEntries())
+	name2, err := resources.DefaultsSecretName("IndexerCluster", "my-indexer", someCredEntries(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, name1, name2)
 }
 
 func TestDefaultsSecretName_ChangesWithEntries(t *testing.T) {
-	name1, err := resources.DefaultsSecretName("IndexerCluster", "cr", someCredEntries())
+	name1, err := resources.DefaultsSecretName("IndexerCluster", "cr", someCredEntries(), nil)
 	require.NoError(t, err)
-	name2, err := resources.DefaultsSecretName("IndexerCluster", "cr", differentCredEntries())
+	name2, err := resources.DefaultsSecretName("IndexerCluster", "cr", differentCredEntries(), nil)
 	require.NoError(t, err)
 	assert.NotEqual(t, name1, name2)
 }
 
 func TestDefaultsSecretName_Format(t *testing.T) {
-	name, err := resources.DefaultsSecretName("IndexerCluster", "my-indexer", someCredEntries())
+	name, err := resources.DefaultsSecretName("IndexerCluster", "my-indexer", someCredEntries(), nil)
 	require.NoError(t, err)
 	assert.Regexp(t, regexp.MustCompile(`^sok-indexercluster-creds-[0-9a-f]{6}$`), name)
 }
 
 func TestDefaultsSecretName_KindIsLowercased(t *testing.T) {
-	name, err := resources.DefaultsSecretName("IngestorCluster", "my-ingestor", someCredEntries())
+	name, err := resources.DefaultsSecretName("IngestorCluster", "my-ingestor", someCredEntries(), nil)
 	require.NoError(t, err)
 	assert.Contains(t, name, "sok-ingestorcluster-creds-")
 }
@@ -91,21 +91,21 @@ func TestDefaultsSecretName_KindIsLowercased(t *testing.T) {
 // --- NewDefaultsSecret -------------------------------------------------------
 
 func TestNewDefaultsSecret_Immutable(t *testing.T) {
-	s, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "cr"), someCredEntries(), nil)
+	s, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "cr"), someCredEntries(), nil, nil)
 	require.NoError(t, err)
 	require.NotNil(t, s.Immutable)
 	assert.True(t, *s.Immutable)
 }
 
 func TestNewDefaultsSecret_DataKey(t *testing.T) {
-	s, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "cr"), someCredEntries(), nil)
+	s, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "cr"), someCredEntries(), nil, nil)
 	require.NoError(t, err)
 	_, ok := s.Data["conf-defaults.yml"]
 	assert.True(t, ok, "Secret must have a 'conf-defaults.yml' data key")
 }
 
 func TestNewDefaultsSecret_YAMLRoundTrip(t *testing.T) {
-	s, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "cr"), someCredEntries(), nil)
+	s, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "cr"), someCredEntries(), nil, nil)
 	require.NoError(t, err)
 
 	var d common.DefaultYML
@@ -117,17 +117,17 @@ func TestNewDefaultsSecret_YAMLRoundTrip(t *testing.T) {
 }
 
 func TestNewDefaultsSecret_Labels(t *testing.T) {
-	s, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "my-indexer"), someCredEntries(), nil)
+	s, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "my-indexer"), someCredEntries(), nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "my-indexer", s.Labels[resources.LabelCRName])
 	assert.Equal(t, "IndexerCluster", s.Labels[resources.LabelCRKind])
 }
 
 func TestNewDefaultsSecret_NameMatchesSecretName(t *testing.T) {
-	s, err := resources.NewDefaultsSecret(fakeCR("my-ns", "IndexerCluster", "cr"), someCredEntries(), nil)
+	s, err := resources.NewDefaultsSecret(fakeCR("my-ns", "IndexerCluster", "cr"), someCredEntries(), nil, nil)
 	require.NoError(t, err)
 
-	expectedName, err := resources.DefaultsSecretName("IndexerCluster", "cr", someCredEntries())
+	expectedName, err := resources.DefaultsSecretName("IndexerCluster", "cr", someCredEntries(), nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, expectedName, s.Name)
@@ -135,9 +135,9 @@ func TestNewDefaultsSecret_NameMatchesSecretName(t *testing.T) {
 }
 
 func TestNewDefaultsSecret_ChangedEntriesProduceDifferentName(t *testing.T) {
-	s1, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "cr"), someCredEntries(), nil)
+	s1, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "cr"), someCredEntries(), nil, nil)
 	require.NoError(t, err)
-	s2, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "cr"), differentCredEntries(), nil)
+	s2, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "cr"), differentCredEntries(), nil, nil)
 	require.NoError(t, err)
 	assert.NotEqual(t, s1.Name, s2.Name)
 }
@@ -152,7 +152,7 @@ func TestSecretStatefulSetOption_NoopForZeroValue(t *testing.T) {
 }
 
 func TestSecretStatefulSetOption_AddsVolumeAndMount(t *testing.T) {
-	s, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "cr"), someCredEntries(), nil)
+	s, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "cr"), someCredEntries(), nil, nil)
 	require.NoError(t, err)
 	ss := makeStatefulSet()
 	s.AsStatefulSetOption()(ss)
@@ -170,7 +170,7 @@ func TestSecretStatefulSetOption_AddsVolumeAndMount(t *testing.T) {
 }
 
 func TestSecretStatefulSetOption_AppendsDefaultsURL(t *testing.T) {
-	s, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "cr"), someCredEntries(), nil)
+	s, err := resources.NewDefaultsSecret(fakeCR("ns", "IndexerCluster", "cr"), someCredEntries(), nil, nil)
 	require.NoError(t, err)
 	ss := makeStatefulSet()
 	s.AsStatefulSetOption()(ss)
@@ -188,4 +188,89 @@ func TestSecretStatefulSetOption_AppendsDefaultsURL(t *testing.T) {
 
 func TestSecretMountPath_HasExpectedValue(t *testing.T) {
 	assert.Equal(t, "/mnt/sok-conf-secrets/conf-defaults.yml", resources.SecretMountPath())
+}
+
+// --- users -------------------------------------------------------------------
+
+func observabilityUser(password string) map[string]common.UserDefault {
+	return map[string]common.UserDefault{
+		"internal_observability": {Password: password, Roles: []string{"observability_role"}},
+	}
+}
+
+const credConfYAML = `splunk:
+    conf:
+        outputs:
+            directory: /opt/splunk/etc/apps/101-sok-secrets/local
+            content:
+                remote_queue:q:
+                    remote_queue.sqs_smartbus.access_key: AKIA
+                    remote_queue.sqs_smartbus.secret_key: shhh
+`
+
+func TestNewDefaultsSecret_Users(t *testing.T) {
+	tests := []struct {
+		name     string
+		entries  []common.ConfFileEntry
+		users    map[string]common.UserDefault
+		wantName string
+		wantYAML string
+	}{
+		{
+			// be3ee9 is the name this input produced before users existed: if it changes,
+			// every IngestorCluster pod rolls on upgrade.
+			name:     "no users",
+			entries:  someCredEntries(),
+			wantName: "sok-ingestorcluster-creds-be3ee9",
+			wantYAML: credConfYAML,
+		},
+		{
+			name:     "empty users",
+			entries:  someCredEntries(),
+			users:    map[string]common.UserDefault{},
+			wantName: "sok-ingestorcluster-creds-be3ee9",
+			wantYAML: credConfYAML,
+		},
+		{
+			name:     "users without conf",
+			users:    observabilityUser("obs-pw"),
+			wantName: "sok-ingestorcluster-creds-42e98e",
+			wantYAML: `splunk:
+    users:
+        internal_observability:
+            password: obs-pw
+            roles:
+                - observability_role
+`,
+		},
+		{
+			name:     "users with conf",
+			entries:  someCredEntries(),
+			users:    observabilityUser("obs-pw"),
+			wantName: "sok-ingestorcluster-creds-afc0c2",
+			wantYAML: credConfYAML + `    users:
+        internal_observability:
+            password: obs-pw
+            roles:
+                - observability_role
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := resources.NewDefaultsSecret(fakeCR("ns", "IngestorCluster", "cr"), tt.entries, tt.users, nil, resources.WithDictionaryConf())
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantName, s.Name)
+			assert.Equal(t, tt.wantYAML, string(s.Data["conf-defaults.yml"]))
+		})
+	}
+}
+
+func TestDefaultsSecretName_ChangesWhenPasswordRotates(t *testing.T) {
+	before, err := resources.DefaultsSecretName("IngestorCluster", "cr", nil, observabilityUser("first-pw"), resources.WithDictionaryConf())
+	require.NoError(t, err)
+	after, err := resources.DefaultsSecretName("IngestorCluster", "cr", nil, observabilityUser("rotated-pw"), resources.WithDictionaryConf())
+	require.NoError(t, err)
+	assert.NotEqual(t, before, after)
 }

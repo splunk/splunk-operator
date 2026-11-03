@@ -1282,7 +1282,7 @@ func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr
 
 	var secret resources.DefaultsSecret
 	if len(set.Secrets) > 0 {
-		secret, err = configworkflow.EnsureSecret(ctx, c, cr, set.Secrets, &owner)
+		secret, err = configworkflow.EnsureSecret(ctx, c, cr, set.Secrets, nil, &owner)
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 		}

@@ -46,6 +46,15 @@ type IngestorClusterSpec struct {
 	// +kubebuilder:validation:Required
 	// Object Storage reference
 	ObjectStorageRef corev1.ObjectReference `json:"objectStorageRef"`
+
+	// Users lists additional Splunk users to create or update on each pod.
+	// The admin user is managed separately and cannot be declared here.
+	// Each user's roles are replaced on every pod start, so this list is the
+	// source of truth for them. Removing an entry does not delete the user.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	Users []SplunkUser `json:"users,omitempty"`
 }
 
 // IngestorClusterStatus defines the observed state of Ingestor Cluster

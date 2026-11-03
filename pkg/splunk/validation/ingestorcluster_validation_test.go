@@ -17,6 +17,7 @@ limitations under the License.
 package validation
 
 import (
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -24,6 +25,21 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/stretchr/testify/assert"
 )
+
+func ingestorClusterWithUserSecret(secretName string) *enterpriseApi.IngestorCluster {
+	return &enterpriseApi.IngestorCluster{
+		Spec: enterpriseApi.IngestorClusterSpec{
+			QueueRef:         corev1.ObjectReference{Name: "my-queue"},
+			ObjectStorageRef: corev1.ObjectReference{Name: "my-storage"},
+			Replicas:         1,
+			Users: []enterpriseApi.SplunkUser{{
+				Name:              "internal_observability",
+				Roles:             []string{"observability_role"},
+				PasswordSecretRef: corev1.LocalObjectReference{Name: secretName},
+			}},
+		},
+	}
+}
 
 func TestValidateIngestorClusterCreate(t *testing.T) {
 	tests := []struct {
@@ -110,6 +126,35 @@ func TestValidateIngestorClusterCreate(t *testing.T) {
 				},
 			},
 			wantErrCount: 0,
+		},
+		{
+			name:         "valid - users passwordSecretRef.name",
+			obj:          ingestorClusterWithUserSecret("observability-user.v1"),
+			wantErrCount: 0,
+		},
+		{
+			name:         "invalid - users passwordSecretRef.name empty",
+			obj:          ingestorClusterWithUserSecret(""),
+			wantErrCount: 1,
+			wantErrField: "spec.users[0].passwordSecretRef.name",
+		},
+		{
+			name:         "invalid - users passwordSecretRef.name uppercase",
+			obj:          ingestorClusterWithUserSecret("Observability-User"),
+			wantErrCount: 1,
+			wantErrField: "spec.users[0].passwordSecretRef.name",
+		},
+		{
+			name:         "invalid - users passwordSecretRef.name underscore",
+			obj:          ingestorClusterWithUserSecret("observability_user"),
+			wantErrCount: 1,
+			wantErrField: "spec.users[0].passwordSecretRef.name",
+		},
+		{
+			name:         "invalid - users passwordSecretRef.name over 253 chars",
+			obj:          ingestorClusterWithUserSecret(strings.Repeat("a", 254)),
+			wantErrCount: 1,
+			wantErrField: "spec.users[0].passwordSecretRef.name",
 		},
 	}
 
