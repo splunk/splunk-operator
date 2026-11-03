@@ -58,7 +58,8 @@
               "storage": "25Gi"
             }
           },
-          "storageClassName": "gp2"
+          "storageClassName": "gp2",
+          "volumeAttributesClassName": "encrypted"
         },
         "status": {}
       },
@@ -76,7 +77,8 @@
               "storage": "35Gi"
             }
           },
-          "storageClassName": "gp3"
+          "storageClassName": "gp3",
+          "volumeAttributesClassName": "high-throughput"
         },
         "status": {}
       }

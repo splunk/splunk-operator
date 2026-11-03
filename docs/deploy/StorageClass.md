@@ -16,7 +16,7 @@ The Splunk Operator for Kubernetes uses Kubernetes [Storage Classes](https://kub
 
 By default, a 10GiB volume will be created for `/opt/splunk/etc`, and a 100GiB volume will be created for `/opt/splunk/var`. 
 
-You can customize the storage capacity and storage class name used by the `/opt/splunk/etc ` and `/opt/splunk/var` volumes by modifying the `storageCapacity` and `storageClassName` fields under the `etcVolumeStorageConfig` and `varVolumeStorageConfig` spec. If no `storageClassName` is provided, the default Storage Class for your Kubernetes cluster will be used.
+You can customize the storage capacity, storage class, and CSI volume attributes class used by the `/opt/splunk/etc` and `/opt/splunk/var` volumes by modifying the `storageCapacity`, `storageClassName`, and `volumeAttributesClassName` fields under the `etcVolumeStorageConfig` and `varVolumeStorageConfig` spec. If no `storageClassName` is provided, the default Storage Class for your Kubernetes cluster will be used.
 
 For example:
 
@@ -30,9 +30,11 @@ metadata:
 spec:
   etcVolumeStorageConfig:
     storageClassName: gp2
+    volumeAttributesClassName: encrypted
     storageCapacity: 15Gi
   varVolumeStorageConfig:
     storageClassName: customStorageClass
+    volumeAttributesClassName: high-throughput
     storageCapacity: 25Gi
 ```
 To see which Storage Classes are available in your Kubernetes cluster, use the `storageclass` command:
@@ -44,6 +46,19 @@ gp2 (default)   kubernetes.io/aws-ebs   176d
 ```
 
 If no storageClassName is provided, the default Storage Class for your Kubernetes cluster will be used.
+
+`volumeAttributesClassName` selects a Kubernetes
+[VolumeAttributesClass](https://kubernetes.io/docs/concepts/storage/volume-attributes-classes/)
+for CSI-driver-specific volume attributes. It is optional, is applied to the
+generated PersistentVolumeClaims, and cannot be used with `ephemeralStorage`.
+VolumeAttributesClass is stable in Kubernetes 1.34 and later. On Kubernetes
+1.32 and 1.33, enable the `VolumeAttributesClass` feature gate before using
+this field.
+
+Set persistent storage fields before the operator creates the workload's
+StatefulSet. Updating `volumeAttributesClassName` on an existing Splunk custom
+resource does not update its existing StatefulSet volume claim templates or
+PersistentVolumeClaims.
 
 The following `kubectl` command can be use to verify space allocated to the etc and var directories on your POD. 
 Replace the [POD_NAME] with your Splunk pod name.
