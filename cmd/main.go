@@ -369,6 +369,7 @@ func main() {
 
 		if err := (&platformController.PostgresDatabaseReconciler{
 			Client:           mgr.GetClient(),
+			APIReader:        mgr.GetAPIReader(),
 			Scheme:           mgr.GetScheme(),
 			Recorder:         mgr.GetEventRecorderFor("postgresdatabase-controller"),
 			Metrics:          pgMetricsRecorder,
