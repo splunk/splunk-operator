@@ -290,3 +290,37 @@ func testKVServicePostgresReconciliationLifecycle(t *testing.T) {
 	require.NotNil(t, stalled)
 	assert.Equal(t, metav1.ConditionFalse, stalled.Status)
 }
+
+// Runs under the existing reconciliation test's legal-terms fixture.
+func testKVServicePostgresTLSReconciliation(t *testing.T) {
+	featuregatetesting.SetFeatureGateDuringTest(t, config.DefaultMutableFeatureGate, config.CertManagement, true)
+	cr, _, _, c := postgresReadinessFixture(t, false)
+	cr.Spec.Certs = []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "serving-cert"}, Role: enterpriseApi.CertRoleServer}}
+	require.NoError(t, c.Update(t.Context(), cr))
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "serving-cert", Namespace: cr.Namespace},
+		Type:       corev1.SecretTypeTLS,
+		Data:       map[string][]byte{"tls.crt": []byte("test-cert"), "tls.key": []byte("test-key")},
+	}
+	require.NoError(t, c.Create(t.Context(), secret))
+	_, err := Apply(t.Context(), c, client.ObjectKeyFromObject(cr), events.NewFakeRecorder(20))
+	require.NoError(t, err)
+	deployment := &appsv1.Deployment{}
+	key := types.NamespacedName{Namespace: cr.Namespace, Name: splutil.GetSplunkDeploymentName(splcommon.SplunkKVService, cr.Name)}
+	require.NoError(t, c.Get(t.Context(), key, deployment))
+	container := deployment.Spec.Template.Spec.Containers[0]
+	assert.Equal(t, "/mnt/tls/splunk-server-tls-cert/tls.crt", envValue(container.Env, "TLS_CERTIFICATE"))
+	assert.Equal(t, "/mnt/tls/splunk-server-tls-cert/tls.key", envValue(container.Env, "TLS_PRIVATE_KEY"))
+	assert.Equal(t, "true", envValue(container.Env, "KVSERVICE_SINGLE_TENANT_K8S_MODE"))
+	assert.Equal(t, corev1.URISchemeHTTPS, container.ReadinessProbe.HTTPGet.Scheme)
+	assert.Equal(t, corev1.URISchemeHTTPS, container.LivenessProbe.HTTPGet.Scheme)
+	assert.NotEmpty(t, deployment.Spec.Template.Annotations["enterprise.splunk.com/kvservice-postgres-config"])
+	assert.NotEmpty(t, deployment.Spec.Template.Annotations["enterprise.splunk.com/kvservice-pass4-secret"])
+	mounted := false
+	for _, volume := range deployment.Spec.Template.Spec.Volumes {
+		if volume.Secret != nil && volume.Secret.SecretName == secret.Name {
+			mounted = true
+		}
+	}
+	assert.True(t, mounted, "the Postgres-backed workload must mount the TLS Secret")
+}

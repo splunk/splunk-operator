@@ -134,7 +134,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 		apiVersion, _ := schema.ParseGroupVersion("enterprise.splunk.com/v4")
 		mockCalls["Update"] = []spltest.MockFuncCall{{MetaName: fmt.Sprintf("*%s.%s-%s-%s", apiVersion.Version, cr.GetObjectKind().GroupVersionKind().Kind, cr.GetNamespace(), cr.GetName())}}
 	}
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	c.ListObj = &pvcList
 	deleted, err := delete(cr, c)
 	if deleted != wantDeleted || err != nil {
@@ -144,7 +144,11 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 
 func newFakeClientBuilder(scheme *pkgruntime.Scheme) *fake.ClientBuilder {
 	return fake.NewClientBuilder().
-		WithScheme(scheme).
+		WithScheme(scheme).WithObjects(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "shc-namespace"}},
+	).
 		WithObjectTracker(clienttesting.NewObjectTracker(scheme, serializer.NewCodecFactory(scheme).UniversalDecoder())).
 		WithInterceptorFuncs(interceptor.Funcs{
 			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {

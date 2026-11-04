@@ -157,27 +157,15 @@ func ValidateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 	if spec.ReadinessInitialDelaySeconds < 0 {
 		return fmt.Errorf("negative value (%d) is not allowed for Readiness probe initial delay", spec.ReadinessInitialDelaySeconds)
 	}
+
 	if err := ValidateSplunkGeneralTerms(); err != nil {
 		return err
 	}
 	if err := ValidateImagePullSecrets(ctx, c, cr, spec); err != nil {
 		return err
 	}
-	if err := ValidateKVStoreDefaultTypeExtraEnv(spec.ExtraEnv); err != nil {
-		return err
-	}
 	resources.SetVolumeDefaults(spec)
 	return ValidateSpec(&spec.Spec, splutil.SplunkDefaultResources())
-}
-
-// ValidateKVStoreDefaultTypeExtraEnv validates the supported KV Store type.
-func ValidateKVStoreDefaultTypeExtraEnv(extraEnv []corev1.EnvVar) error {
-	for _, env := range extraEnv {
-		if env.Name == "SPLUNK_KVSTORE_DEFAULT_TYPE" && env.Value != "local" {
-			return fmt.Errorf("SPLUNK_KVSTORE_DEFAULT_TYPE must be %q", "local")
-		}
-	}
-	return nil
 }
 
 // ValidateImagePullSecrets sets default values for imagePullSecrets if not provided.

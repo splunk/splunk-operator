@@ -47,6 +47,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	reconciletest "github.com/splunk/splunk-operator/pkg/splunk/test/reconcile"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
@@ -162,6 +163,13 @@ func TestApplySearchHeadCluster(t *testing.T) {
 
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[10], funcCalls[12], funcCalls[13], funcCalls[17], funcCalls[19]}, "Update": {funcCalls[0]}, "List": {listmockCall[0], listmockCall[0], shcPodListMockCall}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Update": {createFuncCalls[6], createFuncCalls[18]}, "List": {listmockCall[0], listmockCall[0], shcPodListMockCall}}
+	// Cleanup now lists the defaults maps owned by this CR after applying its StatefulSet.
+	gcListCall := spltest.MockFuncCall{ListOpts: []client.ListOption{
+		client.InNamespace("test"),
+		client.MatchingLabels{resources.LabelCRKind: "SearchHeadCluster", resources.LabelCRName: "stack1"},
+	}}
+	createCalls["List"] = append(createCalls["List"], gcListCall)
+	updateCalls["List"] = append(updateCalls["List"], gcListCall)
 	statefulSet := enterpriseApi.SearchHeadCluster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "SearchHeadCluster",
@@ -183,6 +191,7 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		_, err := ApplySearchHeadCluster(context.TODO(), c, cr.(*enterpriseApi.SearchHeadCluster))
 		return err
 	}
+	reconciletest.ExpectLocalKVStoreDefaultsCalls(t, &statefulSet, createCalls, updateCalls)
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplySearchHeadCluster", &statefulSet, revised, createCalls, updateCalls, reconcile, true)
 
 	// test deletion
@@ -207,7 +216,7 @@ func TestGetSearchHeadStatefulSet(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
@@ -293,7 +302,7 @@ func TestGetDeployerStatefulSet(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
@@ -412,7 +421,7 @@ func TestApplySearchHeadClusterDeployerPodTerminalFailure(t *testing.T) {
 	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	c := spltest.NewFakeClientBuilder(scheme).
+	c := spltest.NewFakeClientBuilder(scheme).WithObjects(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}).
 		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
 		Build()
 
@@ -485,7 +494,7 @@ func TestApplySearchHeadClusterUpgradePathSoftWait(t *testing.T) {
 	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	c := spltest.NewFakeClientBuilder(scheme).
+	c := spltest.NewFakeClientBuilder(scheme).WithObjects(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}).
 		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		Build()
@@ -634,7 +643,7 @@ func TestAppFrameworkSearchHeadClusterShouldNotFail(t *testing.T) {
 		},
 	}
 
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
@@ -1045,7 +1054,7 @@ func TestApplySearchHeadClusterDeletion(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
@@ -1321,7 +1330,7 @@ func TestSearchHeadClusterWithReadyState(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := spltest.NewFakeClientBuilder(sch).
+	builder := spltest.NewFakeClientBuilder(sch).WithObjects(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).

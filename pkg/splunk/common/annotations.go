@@ -38,3 +38,6 @@ const ConfigMapRestartOptOutAnnotation = "enterprise.splunk.com/configmap-restar
 // PostgresDatabaseBindingAnnotation identifies the requested producer bindings
 // for which the stored pod projection was resolved. It contains no credentials.
 const PostgresDatabaseBindingAnnotation = "enterprise.splunk.com/postgres-database-bindings"
+
+// AnnotationKVServiceAddr supplies the KVService address as provided by the namespace owner.
+const AnnotationKVServiceAddr = "platform.splunk.com/kvservice-addr"

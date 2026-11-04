@@ -20,20 +20,14 @@ import (
 	"fmt"
 	"regexp"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/validation/field"
-
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/config"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
 // storageCapacityRegex validates storage capacity format (e.g., "10Gi", "100Gi")
 var storageCapacityRegex = regexp.MustCompile(`^[0-9]+Gi$`)
-
-const (
-	splunkKVStoreDefaultTypeEnv = "SPLUNK_KVSTORE_DEFAULT_TYPE"
-	splunkKVStoreTypeLocal      = "local"
-)
 
 // validateCommonSplunkSpec validates fields common to all Splunk CRDs
 func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *field.Path) field.ErrorList {
@@ -68,13 +62,6 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *fie
 			seenEnvNames[env.Name] = i
 		}
 
-		if env.Name == splunkKVStoreDefaultTypeEnv &&
-			env.Value != splunkKVStoreTypeLocal {
-			allErrs = append(allErrs, field.NotSupported(
-				fldPath.Child("extraEnv").Index(i).Child("value"),
-				env.Value,
-				[]string{splunkKVStoreTypeLocal}))
-		}
 	}
 
 	// Validate imagePullSecrets uniqueness by Name

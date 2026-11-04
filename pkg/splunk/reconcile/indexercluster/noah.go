@@ -207,7 +207,11 @@ func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerC
 	}
 
 	noahSpec := podManager.runtime.Spec()
-	defaultsConfigMap, defaultsSecret, err := ensureNoahIndexerDefaults(ctx, client, cr, noahSpec, string(podManager.runtime.Credential()))
+	kvEntries, err := configworkflow.ResolveKVServiceClientConfig(ctx, client, cr, splcommon.SplunkIndexer)
+	if err != nil {
+		return nil, enterpriseApi.PhaseError, fmt.Errorf("resolve KVService configuration: %w", err)
+	}
+	defaultsConfigMap, defaultsSecret, err := ensureNoahIndexerDefaults(ctx, client, cr, noahSpec, string(podManager.runtime.Credential()), kvEntries...)
 	if err != nil {
 		return nil, enterpriseApi.PhaseError, fmt.Errorf("ensure indexer defaults: %w", err)
 	}
@@ -232,8 +236,11 @@ func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerC
 	return statefulSet, phase, nil
 }
 
-func ensureNoahIndexerDefaults(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, noahSpec enterpriseApi.NoahClusterSpec, credential string) (resources.DefaultsConfigMap, resources.DefaultsSecret, error) {
-	structuralEntries := splunkconfig.NoahIndexerConf(noahSpec.Endpoint, noahSpec.Tenant)
+func ensureNoahIndexerDefaults(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, noahSpec enterpriseApi.NoahClusterSpec, credential string, kvEntries ...splcommon.ConfFileEntry) (resources.DefaultsConfigMap, resources.DefaultsSecret, error) {
+	structuralEntries, err := splunkconfig.MergeConfEntries(append(splunkconfig.NoahIndexerConf(noahSpec.Endpoint, noahSpec.Tenant), kvEntries...)...)
+	if err != nil {
+		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, fmt.Errorf("merge Noah and KVService configuration: %w", err)
+	}
 	credentialEntries := splunkconfig.NoahCredentialsConf(credential)
 
 	if (cr.Spec.QueueRef != nil && cr.Spec.QueueRef.Name != "") ||

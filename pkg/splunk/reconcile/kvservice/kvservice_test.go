@@ -227,6 +227,7 @@ func TestKVServicePostgresInitializesNamespaceSecretAndPreservesPendingMessage(t
 	assert.Equal(t, metav1.ConditionFalse, ready.Status)
 	assert.Equal(t, wantMessage, ready.Message)
 	t.Run("PostgreSQL reconciliation lifecycle", testKVServicePostgresReconciliationLifecycle)
+	t.Run("PostgreSQL with TLS", testKVServicePostgresTLSReconciliation)
 }
 
 func TestEnsurePostgresReadyWaitsForCurrentNonDeletingDatabase(t *testing.T) {

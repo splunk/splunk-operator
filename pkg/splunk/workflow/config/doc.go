@@ -15,7 +15,8 @@
 /*
 Package config resolves Kubernetes-backed configuration dependencies and
 delivers generated configuration through immutable ConfigMaps and Secrets.
-It also garbage-collects superseded configuration resources.
+It also resolves namespace-selected KVService client settings and
+garbage-collects superseded configuration resources.
 
 It is workload-neutral. External protocol behavior remains in client packages,
 while workload lifecycle decisions remain in their respective workflow
@@ -23,6 +24,6 @@ packages.
 
 Allowed imports from pkg/splunk/:
 
-	common/, util/, resources/, client/
+	common/, util/, resources/, k8sops/, client/, splunkconfig/
 */
 package config

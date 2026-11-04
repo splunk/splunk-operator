@@ -430,7 +430,12 @@ func applySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	cr.Status.DeployerPhase = phase
 
 	// create or update statefulset for the search heads
-	statefulSet, err = getSearchHeadStatefulSet(ctx, client, cr)
+	defaultsConfigMap, err := configworkflow.EnsureKVServiceDefaults(ctx, client, cr, splcommon.SplunkSearchHead)
+	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure KVService defaults")
+		return result, err
+	}
+	statefulSet, err = getSearchHeadStatefulSet(ctx, client, cr, defaultsConfigMap.AsStatefulSetOption())
 	if errors.Is(err, configworkflow.ErrPostgresDatabasePending) {
 		setPhaseAndConditions(enterpriseApi.PhasePending, err.Error())
 		return result, nil
@@ -461,6 +466,7 @@ func applySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Search Head pods")
 		return result, err
 	}
+	configworkflow.GarbageCollectConfigMaps(ctx, client, cr, defaultsConfigMap.Name, statefulSet.Spec.Selector)
 	setPhaseAndConditions(phase, "")
 
 	var finalResult *reconcile.Result
