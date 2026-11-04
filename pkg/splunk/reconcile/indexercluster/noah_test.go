@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -123,7 +124,7 @@ func newNoahIndexerScaleOutTestFixture(t *testing.T, options noahIndexerScaleOut
 		options.peerStart = time.Now().Unix()
 	}
 
-	fixture := &noahIndexerScaleOutTestFixture{client: spltest.NewMockClient()}
+	fixture := &noahIndexerScaleOutTestFixture{client: spltest.NewMockClientWithNamespaces("test", "default")}
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		fixture.mutex.Lock()
 		defer fixture.mutex.Unlock()
@@ -341,7 +342,7 @@ type noahIndexerScaleDownTestFixture struct {
 
 func newNoahIndexerScaleDownTestFixture(t *testing.T) *noahIndexerScaleDownTestFixture {
 	t.Helper()
-	fixture := &noahIndexerScaleDownTestFixture{client: spltest.NewMockClient()}
+	fixture := &noahIndexerScaleDownTestFixture{client: spltest.NewMockClientWithNamespaces("test", "default")}
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		fixture.mutex.Lock()
 		defer fixture.mutex.Unlock()
@@ -598,7 +599,7 @@ func (fixture *noahIndexerScaleDownTestFixture) completeScaleIn(t *testing.T) {
 
 func newNoahIndexerRolloutTestFixture(t *testing.T) *noahIndexerRolloutTestFixture {
 	t.Helper()
-	fixture := &noahIndexerRolloutTestFixture{client: spltest.NewMockClient()}
+	fixture := &noahIndexerRolloutTestFixture{client: spltest.NewMockClientWithNamespaces("test", "default")}
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
 			t.Errorf("unexpected Noah rollout request method: %s", request.Method)
@@ -1260,7 +1261,7 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 	t.Setenv(resources.ClusterDomainEnvName, "corp.example")
 
 	ctx := t.Context()
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 	cr := &enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "enterprise.splunk.com/v4",
@@ -1398,7 +1399,7 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 }
 func TestApplyNoahIndexerResourcesDefersBeforeDefaultsGarbageCollection(t *testing.T) {
 	ctx := t.Context()
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 	cr := &enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{APIVersion: "enterprise.splunk.com/v4", Kind: "IndexerCluster"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1474,7 +1475,7 @@ func TestApplyNoahIndexerResourcesDefersBeforeDefaultsGarbageCollection(t *testi
 
 func TestApplyNoahIndexerClusterReportsMissingDependency(t *testing.T) {
 	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 	cr := newNoahIndexerDependencyTestCR(7, "missing-noah")
 	require.NoError(t, client.Create(t.Context(), cr.DeepCopy()))
 
@@ -1509,7 +1510,7 @@ func TestApplyNoahIndexerClusterDeletionDoesNotRequireNoahDependency(t *testing.
 
 func TestApplyNoahIndexerClusterPreservesPeerStatusOnUnknownDependencyReadFailure(t *testing.T) {
 	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 	cr := newNoahIndexerDependencyTestCR(4, "noah")
 	cr.Status.Conditions = splcommon.UpsertCondition(cr.Status.Conditions, metav1.Condition{
 		Type:    string(enterpriseApi.ConditionNoahDependencyResolved),
@@ -1543,7 +1544,7 @@ func TestApplyNoahIndexerClusterPreservesPeerStatusOnUnknownDependencyReadFailur
 
 func TestApplyNoahIndexerClusterReportsResolvedDependency(t *testing.T) {
 	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 	client.AddObject(&enterpriseApi.NoahCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah", Namespace: "test"},
 		Spec: enterpriseApi.NoahClusterSpec{
@@ -1572,7 +1573,7 @@ func TestApplyNoahIndexerClusterReportsResolvedDependency(t *testing.T) {
 
 func TestApplyNoahIndexerClusterDependencyLossClearsStalePeersReady(t *testing.T) {
 	t.Setenv("SPLUNK_GENERAL_TERMS", acceptedGeneralTerms)
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 	cr := newNoahIndexerDependencyTestCR(3, "missing-noah")
 	cr.Status.Conditions = splcommon.UpsertCondition(cr.Status.Conditions, newNoahPeersReadyCondition(
 		metav1.ConditionTrue, enterpriseApi.ReasonNoahPeersReady, "All expected Noah peers are up"))
@@ -2595,7 +2596,7 @@ func TestNoahIndexerResourcesRecoverAfterDependencyRecreation(t *testing.T) {
 	t.Setenv(resources.ClusterDomainEnvName, "corp.example")
 
 	ctx := t.Context()
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Two IndexerClusters share one NoahCluster, so deletion must block both.
 	first := &enterpriseApi.IndexerCluster{
@@ -2712,4 +2713,62 @@ func TestNoahIndexerResourcesRecoverAfterDependencyRecreation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []byte("rotated-noah-key"), runtime.Credential(),
 		"recreation under the same name must revalidate and pick up new data")
+}
+
+func TestNoahNamespaceKVServiceDefaultsUseSystemLocalDictionary(t *testing.T) {
+	t.Setenv("WATCH_NAMESPACE", "")
+	for _, enabled := range []bool{false, true} {
+		name := "disabled"
+		if enabled {
+			name = "enabled"
+		}
+		t.Run(name, func(t *testing.T) {
+			c := spltest.NewMockClient()
+			namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "workload"}}
+			if enabled {
+				namespace.Labels = map[string]string{splcommon.LabelKVService: "enabled", splcommon.LabelTenant: "kv-tenant"}
+				namespace.Annotations = map[string]string{splcommon.AnnotationKVServiceAddr: "shared.backend:8066"}
+			}
+			c.AddObject(namespace)
+			cr := &enterpriseApi.IndexerCluster{
+				TypeMeta:   metav1.TypeMeta{APIVersion: enterpriseApi.GroupVersion.String(), Kind: "IndexerCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "consumer", Namespace: "workload", UID: "consumer"},
+			}
+			kvEntries, err := configworkflow.ResolveKVServiceClientConfig(t.Context(), c, cr, splcommon.SplunkIndexer)
+			require.NoError(t, err)
+			noahSpec := enterpriseApi.NoahClusterSpec{Endpoint: "https://noah.example:8080", Tenant: "noah-tenant"}
+			configMap, secret, err := ensureNoahIndexerDefaults(t.Context(), c, cr, noahSpec, "test-key", kvEntries...)
+			require.NoError(t, err)
+			var credentials struct {
+				Splunk struct {
+					Conf map[string]splcommon.ConfFileValue `yaml:"conf"`
+				} `yaml:"splunk"`
+			}
+			require.NoError(t, yaml.Unmarshal(secret.Data["conf-defaults.yml"], &credentials))
+			require.Len(t, credentials.Splunk.Conf, 1)
+			assert.Equal(t, splcommon.ConfFileStanzas{"noahService": {"pass4SymmKey": "test-key"}}, credentials.Splunk.Conf["server"].Stanzas)
+			assert.Empty(t, credentials.Splunk.Conf["server"].Directory)
+			var defaults struct {
+				Splunk struct {
+					Conf map[string]splcommon.ConfFileValue `yaml:"conf"`
+				} `yaml:"splunk"`
+			}
+			require.NoError(t, yaml.Unmarshal([]byte(configMap.Data["conf-defaults.yml"]), &defaults))
+			require.Len(t, defaults.Splunk.Conf, 1)
+			require.Contains(t, defaults.Splunk.Conf, "server")
+			server := defaults.Splunk.Conf["server"]
+			assert.Empty(t, server.Directory, "Noah and KVService share the implicit system/local target")
+			assert.Equal(t, noahSpec.Endpoint, server.Stanzas["noahService"]["uri"])
+			assert.Equal(t, noahSpec.Tenant, server.Stanzas["noahService"]["tenant"])
+			assert.NotContains(t, server.Stanzas["noahService"], "pass4SymmKey")
+			if enabled {
+				assert.Equal(t, splcommon.StanzaFields{"defaultKVStoreType": "external", "kvserviceConnectionString": "shared.backend:8066"}, server.Stanzas["kvstore"])
+				assert.Equal(t, splcommon.StanzaFields{"tenant": "kv-tenant", "mvl-enabled": "true"}, server.Stanzas["scs"])
+			} else {
+				assert.Equal(t, splcommon.StanzaFields{"defaultKVStoreType": "local", "postgresMigrateOnStartup": "false"}, server.Stanzas["kvstore"])
+				assert.NotContains(t, server.Stanzas, "scs")
+			}
+			assert.NotContains(t, configMap.Data["conf-defaults.yml"], "test-key")
+		})
+	}
 }

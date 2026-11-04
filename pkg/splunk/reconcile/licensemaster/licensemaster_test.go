@@ -43,7 +43,9 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/reconcile/clustermaster"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	reconciletest "github.com/splunk/splunk-operator/pkg/splunk/test/reconcile"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
@@ -104,6 +106,13 @@ func TestApplyLicenseMaster(t *testing.T) {
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[7], funcCalls[10], funcCalls[12]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
 	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[11], funcCalls[13], funcCalls[14]}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[11]}, "List": {listmockCall[0]}}
+	// Cleanup now lists the defaults maps owned by this CR after applying its StatefulSet.
+	gcListCall := spltest.MockFuncCall{ListOpts: []client.ListOption{
+		client.InNamespace("test"),
+		client.MatchingLabels{resources.LabelCRKind: "LicenseMaster", resources.LabelCRName: "stack1"},
+	}}
+	createCalls["List"] = append(createCalls["List"], gcListCall)
+	updateCalls["List"] = append(updateCalls["List"], gcListCall)
 	current := enterpriseApiV3.LicenseMaster{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseMaster",
@@ -120,6 +129,7 @@ func TestApplyLicenseMaster(t *testing.T) {
 		_, err := ApplyLicenseMaster(context.Background(), c, cr.(*enterpriseApiV3.LicenseMaster))
 		return err
 	}
+	reconciletest.ExpectLocalKVStoreDefaultsCalls(t, &current, createCalls, updateCalls)
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyLicenseMaster", &current, revised, createCalls, updateCalls, reconcile, true)
 
 	// test deletion
@@ -133,7 +143,7 @@ func TestApplyLicenseMaster(t *testing.T) {
 	spltest.SplunkDeletionTester(t, revised, deleteFunc)
 
 	// Negative testing
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	ctx := context.TODO()
 	current.Spec.LivenessInitialDelaySeconds = -1
 	_, err := ApplyLicenseMaster(ctx, c, &current)
@@ -173,7 +183,7 @@ func TestGetLicenseMasterStatefulSet(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
@@ -271,7 +281,7 @@ func TestLicenseMasterSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	}
 
 	// Create a mock client
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Attempt to apply the license master spec
 	_, err := ApplyLicenseMaster(ctx, c, &lm)
@@ -325,7 +335,7 @@ func TestAppFrameworkApplyLicenseMasterShouldNotFail(t *testing.T) {
 		},
 	}
 
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
@@ -733,7 +743,7 @@ func TestApplyLicenseMasterDeletion(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
@@ -767,7 +777,7 @@ func TestApplyLicenseMasterDeletion(t *testing.T) {
 
 	_, err = ApplyLicenseMaster(ctx, c, &lm)
 	if err != nil {
-		t.Errorf("ApplyLicenseMaster should not have returned error here.")
+		t.Errorf("ApplyLicenseMaster should not have returned error here: %v", err)
 	}
 }
 
@@ -916,7 +926,7 @@ func TestLicenseMasterWithReadyState(t *testing.T) {
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 	utilruntime.Must(enterpriseApiV3.AddToScheme(sch))
 
-	builder := spltest.NewFakeClientBuilder(sch).
+	builder := spltest.NewFakeClientBuilder(sch).WithObjects(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).

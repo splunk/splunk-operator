@@ -514,6 +514,7 @@ spec:
           verbs:
           - get
           - list
+          - watch
         - apiGroups:
           - ""
           resources:

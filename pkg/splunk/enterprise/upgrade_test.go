@@ -971,7 +971,7 @@ func TestUpgradeBlockedVersionMismatchEvent(t *testing.T) {
 
 func newFakeClientBuilder(scheme *pkgruntime.Scheme) *fake.ClientBuilder {
 	return fake.NewClientBuilder().
-		WithScheme(scheme).
+		WithScheme(scheme).WithObjects(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}).
 		WithObjectTracker(clienttesting.NewObjectTracker(scheme, serializer.NewCodecFactory(scheme).UniversalDecoder())).
 		WithInterceptorFuncs(interceptor.Funcs{
 			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {

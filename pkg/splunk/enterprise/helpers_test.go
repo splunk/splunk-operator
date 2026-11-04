@@ -18,6 +18,9 @@ package enterprise
 import (
 	"context"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	clienttesting "k8s.io/client-go/testing"
@@ -31,7 +34,7 @@ func newFakeClientBuilder(scheme *runtime.Scheme) *fake.ClientBuilder {
 	// The controller-runtime v0.24 fake client defaults to a managed-fields
 	// tracker, which rejects the uint64 fields used by Splunk CR specs.
 	return fake.NewClientBuilder().
-		WithScheme(scheme).
+		WithScheme(scheme).WithObjects(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}).
 		WithObjectTracker(clienttesting.NewObjectTracker(
 			scheme,
 			serializer.NewCodecFactory(scheme).UniversalDecoder(),

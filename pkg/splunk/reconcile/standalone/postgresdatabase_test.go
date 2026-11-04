@@ -47,6 +47,7 @@ func TestPostgresDatabaseStandaloneMounts(t *testing.T) {
 	resources.SetVolumeDefaults(&cr.Spec.CommonSplunkSpec)
 	f := spltest.NewPostgresDatabaseBundleFixture(t)
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(f.Objects()...).Build()
+	require.NoError(t, c.Create(t.Context(), &corev1.Namespace{Name: cr.Namespace}))
 	_, err := k8sops.ApplySplunkConfig(t.Context(), c, cr, cr.Spec.CommonSplunkSpec, splcommon.SplunkStandalone)
 	require.NoError(t, err)
 	ss, err := GetStandaloneStatefulSet(t.Context(), c, cr)

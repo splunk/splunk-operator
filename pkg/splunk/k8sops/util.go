@@ -81,10 +81,8 @@ const (
 	SplunkLicenseManager    = splcommon.SplunkLicenseManager
 	SplunkMonitoringConsole = splcommon.SplunkMonitoringConsole
 
-	livenessProbeDriverPathEnv  = "SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH"
-	smartStoreConfigRev         = "SmartStoreConfigRev"
-	splunkKVStoreDefaultTypeEnv = "SPLUNK_KVSTORE_DEFAULT_TYPE"
-	splunkKVStoreTypeLocal      = "local"
+	livenessProbeDriverPathEnv = "SPLUNK_OPERATOR_K8_LIVENESS_DRIVER_FILE_PATH"
+	smartStoreConfigRev        = "SmartStoreConfigRev"
 )
 
 // ReadFile is retained for compatibility with callers of the legacy helper location.

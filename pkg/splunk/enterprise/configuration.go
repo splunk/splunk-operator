@@ -48,11 +48,6 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 )
 
-const (
-	splunkKVStoreDefaultTypeEnv = "SPLUNK_KVSTORE_DEFAULT_TYPE"
-	splunkKVStoreTypeLocal      = "local"
-)
-
 var defaultLivenessProbe corev1.Probe = corev1.Probe{
 	InitialDelaySeconds: livenessProbeDefaultDelaySec,
 	TimeoutSeconds:      livenessProbeTimeoutSec,
@@ -353,25 +348,9 @@ func ValidateCommonSplunkSpec(ctx context.Context, c splcommon.ControllerClient,
 		return err
 	}
 
-	if err = validateKVStoreDefaultTypeExtraEnv(spec.ExtraEnv); err != nil {
-		return err
-	}
-
 	resources.SetVolumeDefaults(spec)
 
 	return ValidateSpec(&spec.Spec, splutil.SplunkDefaultResources())
-}
-
-func validateKVStoreDefaultTypeExtraEnv(extraEnv []corev1.EnvVar) error {
-	for _, env := range extraEnv {
-		if env.Name != splunkKVStoreDefaultTypeEnv {
-			continue
-		}
-		if env.Value != splunkKVStoreTypeLocal {
-			return fmt.Errorf("%s must be %q", splunkKVStoreDefaultTypeEnv, splunkKVStoreTypeLocal)
-		}
-	}
-	return nil
 }
 
 // ValidateImagePullSecrets sets default values for imagePullSecrets if not provided
@@ -1033,9 +1012,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: "SPLUNK_GENERAL_TERMS", Value: os.Getenv("SPLUNK_GENERAL_TERMS")},
 		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
 		{Name: "SPLUNK_NODE_SIDECAR_POSTGRES_DISABLED", Value: "true"},
-	}
-	if instanceType != SplunkIngestor {
-		env = append(env, corev1.EnvVar{Name: splunkKVStoreDefaultTypeEnv, Value: splunkKVStoreTypeLocal})
 	}
 
 	// update variables for licensing, if configured

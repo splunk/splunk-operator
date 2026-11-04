@@ -54,6 +54,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	reconciletest "github.com/splunk/splunk-operator/pkg/splunk/test/reconcile"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 )
@@ -156,7 +157,7 @@ func TestApplyIndexerClusterTerminalFailures(t *testing.T) {
 
 func TestApplyIndexerClusterOld(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	ctx := context.TODO()
 	idxCr := enterpriseApi.IndexerCluster{
 		TypeMeta: metav1.TypeMeta{
@@ -331,6 +332,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 			Namespace: "test",
 		},
 	}
+	reconciletest.ExpectLocalKVStoreDefaultsCalls(t, &current, createCalls, updateCalls)
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyIndexerClusterManager", &current, revised, createCalls, updateCalls, reconcileFn, true, clusterManagerInitObj)
 
 	// // test deletion
@@ -347,7 +349,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 	// spec validation passes because ValidateImagePullSecrets only calls GET when ImagePullSecrets
 	// are configured, which they are not here)
 	ctx := context.TODO()
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	rerr := errors.New(splcommon.Rerr)
 	c.InduceErrorKind[splcommon.MockClientInduceErrorGet] = rerr
 	_, err := ApplyIndexerClusterManager(ctx, c, &current)
@@ -360,7 +362,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 	noRefCR := current.DeepCopy()
 	noRefCR.Spec.ClusterManagerRef = corev1.ObjectReference{}
 	noRefCR.Spec.ClusterMasterRef = corev1.ObjectReference{}
-	_, err = ApplyIndexerClusterManager(ctx, spltest.NewMockClient(), noRefCR)
+	_, err = ApplyIndexerClusterManager(ctx, spltest.NewMockClientWithNamespaces("test", "default"), noRefCR)
 	if !errors.Is(err, reconcile.TerminalError(nil)) {
 		t.Errorf("stalled spec validation failure should return a terminal error, got %v", err)
 	}
@@ -385,7 +387,7 @@ func TestApplyIndexerCluster(t *testing.T) {
 		t.Errorf("Expected error")
 	}
 
-	newc := spltest.NewMockClient()
+	newc := spltest.NewMockClientWithNamespaces("test", "default")
 	nsSec, err := splutil.ApplyNamespaceScopedSecretObject(ctx, newc, "test")
 	if err != nil {
 		t.Errorf("Error creating secret")
@@ -557,7 +559,7 @@ func indexerClusterPodManagerVerifyRFPeersTester(t *testing.T, method string, mg
 	ctx := context.TODO()
 
 	// initialize client
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// test update
 	err := mgr.verifyRFPeers(ctx, c)
@@ -633,7 +635,7 @@ func checkResponseFromUpdateStatus(t *testing.T, method string, mockHandlers []s
 
 	mgr := getIndexerClusterPodManager(method, mockHandlers, mockSplunkClient, replicas)
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	mgr.c = c
 
 	err := mgr.updateStatus(ctx, statefulSet)
@@ -1476,7 +1478,7 @@ func TestGetIndexerStatefulSet(t *testing.T) {
 
 	ctx := context.TODO()
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
@@ -2646,7 +2648,7 @@ func TestClusterQuorumRestoredClusterInitialized(t *testing.T) {
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
 
 	// Use a mock k8s client as in other updateStatus tests
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	mgr.c = c
 
 	// Ensure initial status is not indexing ready so we see a transition
@@ -2755,7 +2757,7 @@ func TestClusterQuorumLostEvent(t *testing.T) {
 	}
 
 	ctx = context.WithValue(ctx, splcommon.EventPublisherKey, eventPublisher)
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	mgr.c = c
 
 	mgr.cr.Status.IndexingReady = false
@@ -4000,7 +4002,10 @@ func TestIdxcQueueRefRemovedGCsResources(t *testing.T) {
 	_, err = ApplyIndexerClusterManager(ctx, c, cr)
 	require.NoError(t, err)
 
-	assert.Empty(t, listCredsConfigMaps(t, ctx, c, crName), "removing QueueRef must GC the stale defaults ConfigMap")
+	remaining := listCredsConfigMaps(t, ctx, c, crName)
+	require.Len(t, remaining, 1, "local KV Store defaults remain after removing QueueRef")
+	assert.Contains(t, remaining[0].Data["conf-defaults.yml"], "defaultKVStoreType: local")
+	assert.NotContains(t, remaining[0].Data["conf-defaults.yml"], "remote_queue")
 	assert.Empty(t, listCredsSecrets(t, ctx, c, crName), "removing QueueRef must GC the stale credentials Secret")
 
 	require.NoError(t, c.Get(ctx, client.ObjectKey{Name: sts.GetName(), Namespace: sts.GetNamespace()}, sts))
@@ -4010,6 +4015,6 @@ func TestIdxcQueueRefRemovedGCsResources(t *testing.T) {
 			defaultsURL = e.Value
 		}
 	}
-	assert.NotContains(t, defaultsURL, resources.DefaultsMountPath(), "SPLUNK_DEFAULTS_URL must not reference the removed defaults ConfigMap mount")
+	assert.Contains(t, defaultsURL, resources.DefaultsMountPath(), "SPLUNK_DEFAULTS_URL retains the local KV Store defaults ConfigMap mount")
 	assert.NotContains(t, defaultsURL, resources.SecretMountPath(), "SPLUNK_DEFAULTS_URL must not reference the removed credentials Secret mount")
 }

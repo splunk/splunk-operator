@@ -43,6 +43,7 @@ import (
 	upgrade "github.com/splunk/splunk-operator/pkg/splunk/reconcile/upgrade"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	reconciletest "github.com/splunk/splunk-operator/pkg/splunk/test/reconcile"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
@@ -129,6 +130,13 @@ func TestApplyClusterManager(t *testing.T) {
 		{ListOpts: listOpts}}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[6], funcCalls[10], funcCalls[5]}, "List": {listmockCall[0]}, "Update": {funcCalls[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
+	// Cleanup now lists the defaults maps owned by this CR after applying its StatefulSet.
+	gcListCall := spltest.MockFuncCall{ListOpts: []runtime.ListOption{
+		runtime.InNamespace("test"),
+		runtime.MatchingLabels{resources.LabelCRKind: "ClusterManager", resources.LabelCRName: "stack1"},
+	}}
+	createCalls["List"] = append(createCalls["List"], gcListCall)
+	updateCalls["List"] = append(updateCalls["List"], gcListCall)
 
 	current := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
@@ -159,6 +167,7 @@ func TestApplyClusterManager(t *testing.T) {
 		_, err := ApplyClusterManager(ctx, c, cr.(*enterpriseApi.ClusterManager), nil)
 		return err
 	}
+	reconciletest.ExpectLocalKVStoreDefaultsCalls(t, &current, createCalls, updateCalls)
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManager", &current, revised, createCalls, updateCalls, reconcileFn, true)
 
 	// test deletion
@@ -175,7 +184,7 @@ func TestApplyClusterManager(t *testing.T) {
 	current.Spec.CommonSplunkSpec.LivenessProbe = &enterpriseApi.Probe{
 		InitialDelaySeconds: -1,
 	}
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_ = errors.New(splcommon.Rerr)
 	current.Kind = "ClusterManager"
 	_, err := ApplyClusterManager(ctx, c, &current, nil)
@@ -475,7 +484,7 @@ func TestGetClusterManagerStatefulSet(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
@@ -597,7 +606,7 @@ func TestSmartstoreApplyClusterManagerFailsOnInvalidSmartStoreConfig(t *testing.
 func TestSmartStoreConfigDoesNotFailOnClusterManagerCR(t *testing.T) {
 	os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.TODO()
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	cr := enterpriseApi.ClusterManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "CM",
@@ -702,6 +711,13 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[12], funcCalls[14]}, "List": {listmockCall[0], listmockCall[0], listmockCall[1]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[15]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
+	// Cleanup now lists the defaults maps owned by this CR after applying its StatefulSet.
+	gcListCall := spltest.MockFuncCall{ListOpts: []runtime.ListOption{
+		runtime.InNamespace("test"),
+		runtime.MatchingLabels{resources.LabelCRKind: "ClusterManager", resources.LabelCRName: "stack1"},
+	}}
+	createCalls["List"] = append(createCalls["List"][:2], gcListCall, createCalls["List"][2])
+	updateCalls["List"] = append(updateCalls["List"], gcListCall)
 
 	current := enterpriseApi.ClusterManager{
 		TypeMeta: metav1.TypeMeta{
@@ -737,7 +753,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 			},
 		},
 	}
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Mock some functions for unit tests
 	savedAddTelApp := telapp.AddTelApp
@@ -802,6 +818,8 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 		},
 	}
 
+	localDefaults := reconciletest.ExpectLocalKVStoreDefaultsCalls(t, &current, createCalls, updateCalls)
+	localDefaults.AsStatefulSetOption()(ss)
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManagerWithSmartstore-0", &current, revised, createCalls, updateCalls, reconcile, true, secret, &smartstoreConfigMap, ss, pod)
 
 	current.Status.BundlePushTracker.NeedToPushManagerApps = true
@@ -894,7 +912,7 @@ func TestAppFrameworkApplyClusterManagerShouldNotFail(t *testing.T) {
 		t.Errorf("Unable to create download directory for apps :%s", appframework.TmpAppDownloadDir)
 	}
 
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
@@ -969,7 +987,7 @@ func TestApplyClusterManagerDeletion(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
@@ -1077,7 +1095,7 @@ func TestChangeClusterManagerAnnotations(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := spltest.NewFakeClientBuilder(sch).
+	builder := spltest.NewFakeClientBuilder(sch).WithObjects(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{})
 	client := builder.Build()
@@ -1148,7 +1166,7 @@ func TestIsClusterManagerReadyForUpgrade(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := spltest.NewFakeClientBuilder(sch).
+	builder := spltest.NewFakeClientBuilder(sch).WithObjects(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{})
 	client := builder.Build()
@@ -1316,7 +1334,7 @@ func TestClusterManagerWitReadyState(t *testing.T) {
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 
-	builder := spltest.NewFakeClientBuilder(sch).
+	builder := spltest.NewFakeClientBuilder(sch).WithObjects(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).
@@ -1735,7 +1753,7 @@ func TestClusterManagerUpdatesMonitoringConsoleAnnotations(t *testing.T) {
 	utilruntime.Must(clientgoscheme.AddToScheme(sch))
 	utilruntime.Must(corev1.AddToScheme(sch))
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
-	builder := spltest.NewFakeClientBuilder(sch).
+	builder := spltest.NewFakeClientBuilder(sch).WithObjects(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).

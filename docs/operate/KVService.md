@@ -6,6 +6,71 @@ corresponding Helm setting.
 
 The controller manages a Deployment and an HTTP Service on port 8066.
 
+## Enterprise client configuration
+
+This applies to v4 Standalone, IndexerCluster, SearchHeadCluster, ClusterManager,
+LicenseManager, and MonitoringConsole, and their v3 counterparts. IngestorCluster
+and SearchHeadCluster deployers do not receive KVService client settings.
+
+Enterprise workloads discover KVService through labels and an address annotation
+on their own Namespace. See [KV Service tenant labels](KVServiceTenantLabels.md)
+for the namespace metadata requirements:
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: workload
+  labels:
+    platform.splunk.com/kvservice: enabled
+    platform.splunk.com/tenant: customer
+  annotations:
+    platform.splunk.com/kvservice-addr: "shared.backend:8066"
+```
+
+Only the exact value `enabled` activates KVService client configuration. The
+`platform.splunk.com/kvservice-addr` annotation supplies the address. The operator
+uses this value unchanged: it does not validate the address format, normalize it,
+or append a port. Supply the address expected by the KVService client, including
+any required port. The address is written directly to
+`[kvstore] kvserviceConnectionString`. The `[scs] tenant` value comes from
+`platform.splunk.com/tenant`, falling back to the workload Namespace name when
+the label is absent or empty.
+
+An enabled namespace with a missing or empty address annotation fails
+reconciliation. Namespace read errors also fail reconciliation. Splunk retries
+connections while the backend starts.
+
+SOK delivers client settings through generated defaults. For an enabled Namespace,
+Ansible renders the following into `$SPLUNK_HOME/etc/system/local/server.conf`:
+
+```ini
+[kvstore]
+defaultKVStoreType = external
+kvserviceConnectionString = shared.backend:8066
+
+[scs]
+tenant = customer
+mvl-enabled = true
+```
+
+SOK does not generate `kvserviceScope` or `[scs] environment` for these clients.
+Use Splunk/Ansible images that support this connection-string configuration.
+KVService client environment variables are not injected or rejected in `spec.extraEnv`.
+
+Changing the address or tenant triggers a rollout of affected workloads. Removing or
+disabling the enable label replaces the generated configuration with
+the following local defaults, with no connection string or tenant:
+
+```ini
+[kvstore]
+defaultKVStoreType = local
+postgresMigrateOnStartup = false
+```
+
+Provision the backend, selected tenant, authentication, and TLS trust separately.
+For TLS, certificates must cover the configured endpoint hostname.
+
 ## Configuration and health
 
 KVService shares workload settings with the Enterprise CRs through

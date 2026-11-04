@@ -28,6 +28,21 @@ func LabelChangedPredicate() predicate.Predicate {
 	}
 }
 
+// KVServiceNamespaceChangedPredicate reacts to changes in KVService client labels
+// and the address annotation, including disabling or removing the enable label.
+func KVServiceNamespaceChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			for _, key := range []string{splcommon.LabelKVService, splcommon.LabelTenant} {
+				if e.ObjectOld.GetLabels()[key] != e.ObjectNew.GetLabels()[key] {
+					return true
+				}
+			}
+			return e.ObjectOld.GetAnnotations()[splcommon.AnnotationKVServiceAddr] != e.ObjectNew.GetAnnotations()[splcommon.AnnotationKVServiceAddr]
+		},
+	}
+}
+
 // GenerationChangedPredicate .
 func GenerationChangedPredicate() predicate.Predicate {
 	return predicate.Funcs{
