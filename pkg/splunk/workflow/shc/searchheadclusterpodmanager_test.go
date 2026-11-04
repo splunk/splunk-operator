@@ -49,10 +49,11 @@ import (
 
 func init() {
 	defaultOperations = Operations{
-		ApplyStatefulSet:             k8sops.ApplyStatefulSet,
-		CheckPodsForTerminalFailures: k8sops.CheckPodsForTerminalFailures,
-		UpdateStatefulSetPods:        k8sops.UpdateStatefulSetPods,
-		ApplySecret:                  k8sops.ApplySecret,
+		ApplyStatefulSet:                k8sops.ApplyStatefulSet,
+		CheckPodsForTerminalFailures:    k8sops.CheckPodsForTerminalFailures,
+		HandleStalePodOrTerminalFailure: k8sops.HandleStalePodOrTerminalFailure,
+		UpdateStatefulSetPods:           k8sops.UpdateStatefulSetPods,
+		ApplySecret:                     k8sops.ApplySecret,
 	}
 }
 
