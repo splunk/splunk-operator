@@ -372,7 +372,7 @@ func TestUpdateStatefulSetPodsUsesOptionalRecycleOrderer(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
 				Namespace: "test",
-				Labels:    map[string]string{"controller-revision-hash": "v0"},
+				Labels:    map[string]string{ControllerRevisionHashLabel: "v0"},
 			},
 			Status: corev1.PodStatus{
 				Phase:             corev1.PodRunning,
@@ -417,7 +417,7 @@ func TestUpdateStatefulSetPodsDoesNotReportReadyWhenLastOrdinalIsDeferred(t *tes
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "splunk-stack1-0",
 			Namespace: "test",
-			Labels:    map[string]string{"controller-revision-hash": "v0"},
+			Labels:    map[string]string{ControllerRevisionHashLabel: "v0"},
 		},
 		Status: corev1.PodStatus{
 			Phase:             corev1.PodRunning,
@@ -452,7 +452,7 @@ func TestUpdateStatefulSetPodsDoesNotFinishUpgradeWhenDeferredOrdinalHasLowerCur
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
 				Namespace: "test",
-				Labels:    map[string]string{"controller-revision-hash": revision},
+				Labels:    map[string]string{ControllerRevisionHashLabel: revision},
 			},
 			Status: corev1.PodStatus{
 				Phase:             corev1.PodRunning,
@@ -529,7 +529,7 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 			Name:      "splunk-stack1-0",
 			Namespace: "test",
 			Labels: map[string]string{
-				"controller-revision-hash": "v0",
+				ControllerRevisionHashLabel: "v0",
 			},
 		},
 		Status: corev1.PodStatus{
@@ -663,7 +663,7 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 		},
 	}
 	pod.ObjectMeta.Labels = make(map[string]string)
-	pod.ObjectMeta.Labels["controller-revision-hash"] = "v2"
+	pod.ObjectMeta.Labels[ControllerRevisionHashLabel] = "v2"
 	c.Create(ctx, pod)
 	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &errPodMgr, 3)
 	if err != nil {
@@ -683,7 +683,7 @@ func TestUpdateStatefulSetPods(t *testing.T) {
 	}
 
 	c.InduceErrorKind[splcommon.MockClientInduceErrorDelete] = nil
-	pod.ObjectMeta.Labels["controller-revision-hash"] = "v1"
+	pod.ObjectMeta.Labels[ControllerRevisionHashLabel] = "v1"
 	c.Update(ctx, pod)
 
 	_, err = UpdateStatefulSetPods(ctx, c, statefulSet, &errPodMgr, 3)
@@ -848,6 +848,389 @@ func TestUpdateStatefulSetPods_TerminalFailure(t *testing.T) {
 	}
 	if !errors.Is(err, reconcile.TerminalError(nil)) {
 		t.Errorf("expected TerminalError so controller-runtime does not requeue, got %T: %v", err, err)
+	}
+}
+
+// TestUpdateStatefulSetPods_RecyclesStaleTerminalPod verifies the OnDelete deadlock fix:
+// once the CR spec is corrected (StatefulSet's UpdateRevision moves on), a Pod that is stuck
+// in a terminal state on the old revision must be recycled instead of repeatedly reporting
+// the same now-stale terminal failure forever.
+func TestUpdateStatefulSetPods_RecyclesStaleTerminalPod(t *testing.T) {
+	mgr := DefaultStatefulSetPodManager{}
+	var replicas int32 = 1
+	selectorLabels := map[string]string{"app": "splunk-stack1"}
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: selectorLabels},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:       replicas,
+			ReadyReplicas:  0,
+			UpdateRevision: "v2",
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"app":                       "splunk-stack1",
+				ControllerRevisionHashLabel: "v1",
+			},
+		},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "splunk",
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{
+							Reason:  "ImagePullBackOff",
+							Message: "Back-off pulling image \"bad-image:notexist\"",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{statefulSet, pod})
+
+	phase, err := UpdateStatefulSetPods(ctx, c, statefulSet, &mgr, 1)
+	if err != nil {
+		t.Errorf("UpdateStatefulSetPods should not have returned error=%s", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Errorf("expected PhaseUpdating for a stale not-ready pod, got phase=%s", phase)
+	}
+
+	var got corev1.Pod
+	err = c.Get(ctx, types.NamespacedName{Namespace: "test", Name: "splunk-stack1-0"}, &got)
+	if !k8serrors.IsNotFound(err) {
+		t.Errorf("expected stale not-ready Pod to be deleted, Get returned err=%v", err)
+	}
+}
+
+// TestUpdateStatefulSetPods_TerminalFailureOnDifferentPod verifies that when the not-ready
+// pod being examined in the ready-loop is merely stale (old revision, but otherwise healthy)
+// while a *different* pod is the one actually stuck in a terminal container state on the
+// current revision, the terminal pod is surfaced/recycled based on its own staleness — not
+// the loop pod's. Recycling the wrong pod would delete a harmless stale pod and mask the real
+// terminal failure.
+func TestUpdateStatefulSetPods_TerminalFailureOnDifferentPod(t *testing.T) {
+	mgr := DefaultStatefulSetPodManager{}
+	var replicas int32 = 2
+	selectorLabels := map[string]string{"app": "splunk-stack1"}
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: selectorLabels},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:       replicas,
+			ReadyReplicas:  replicas, // matches desiredReplicas → reaches the per-pod update loop
+			UpdateRevision: "v1",
+		},
+	}
+	// Not-ready but otherwise-healthy pod on a stale revision; not stuck in any terminal state.
+	// This is the pod the per-pod loop examines first (ordinal readyReplicas-1).
+	stalePod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-1",
+			Namespace: "test",
+			Labels: map[string]string{
+				"app":                       "splunk-stack1",
+				ControllerRevisionHashLabel: "v0",
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodPending,
+		},
+	}
+	// The actual terminal-failure pod, already on the current revision — recycling it would be
+	// wrong, since a fresh Pod would just hit the same bad image again; it must be surfaced.
+	terminalPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"app":                       "splunk-stack1",
+				ControllerRevisionHashLabel: "v1",
+			},
+		},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "splunk",
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{
+							Reason:  "ImagePullBackOff",
+							Message: "Back-off pulling image \"bad-image:notexist\"",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{statefulSet, stalePod, terminalPod})
+
+	phase, err := UpdateStatefulSetPods(ctx, c, statefulSet, &mgr, replicas)
+	if phase != enterpriseApi.PhaseError {
+		t.Errorf("expected PhaseError for terminal pod on current revision, got phase=%s", phase)
+	}
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("expected TerminalError so controller-runtime does not requeue, got %T: %v", err, err)
+	}
+
+	var got corev1.Pod
+	if err := c.Get(ctx, types.NamespacedName{Namespace: "test", Name: "splunk-stack1-1"}, &got); err != nil {
+		t.Errorf("expected stale non-terminal Pod to be left alone, Get returned err=%v", err)
+	}
+}
+
+// blockingPodManager simulates a production pod manager (e.g. searchHeadClusterPodManager)
+// whose PrepareRecycle returns (false, nil) — the exact behaviour when a pod in ImagePullBackOff
+// has never registered as a cluster member (Status == ""). If PrepareRecycle were ever called
+// from recycleStalePod, the blocking return would prevent pod deletion and the test would fail.
+type blockingPodManager struct {
+	DefaultStatefulSetPodManager
+	prepareRecycleCalled bool
+}
+
+func (m *blockingPodManager) PrepareRecycle(_ context.Context, _ int32) (bool, error) {
+	m.prepareRecycleCalled = true
+	return false, nil
+}
+
+// TestRecycleStalePod_SkipsPrepareRecycleForTerminalPod verifies that a pod stuck in a terminal
+// container state on a stale revision is deleted directly without going through PrepareRecycle.
+// PrepareRecycle requires a live Splunk instance and deadlocks for pods that never started.
+func TestRecycleStalePod_SkipsPrepareRecycleForTerminalPod(t *testing.T) {
+	mgr := &blockingPodManager{}
+	var replicas int32 = 1
+	selectorLabels := map[string]string{"app": "splunk-stack1"}
+	statefulSet := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: selectorLabels},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:       replicas,
+			ReadyReplicas:  0,
+			UpdateRevision: "v2",
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-0",
+			Namespace: "test",
+			Labels: map[string]string{
+				"app":                       "splunk-stack1",
+				ControllerRevisionHashLabel: "v1", // stale: v1 != updateRevision v2
+			},
+		},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "splunk",
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{
+							Reason:  "ImagePullBackOff",
+							Message: "Back-off pulling image \"bad-image:notexist\"",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{statefulSet, pod})
+
+	phase, err := UpdateStatefulSetPods(ctx, c, statefulSet, mgr, 1)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Errorf("expected PhaseUpdating, got %s", phase)
+	}
+	if mgr.prepareRecycleCalled {
+		t.Error("PrepareRecycle must NOT be called for a pod in a terminal container state — it never ran Splunk")
+	}
+	var got corev1.Pod
+	if getErr := c.Get(ctx, types.NamespacedName{Namespace: "test", Name: "splunk-stack1-0"}, &got); !k8serrors.IsNotFound(getErr) {
+		t.Errorf("expected stale terminal pod to be deleted, Get returned %v", getErr)
+	}
+}
+
+// makeTerminalPod builds a pod with the given name, revision hash, and container waiting reason,
+// using selectorLabels so findTerminalPod can locate it.
+func makeTerminalPod(name, revision, reason string, selectorLabels map[string]string) *corev1.Pod {
+	labels := make(map[string]string, len(selectorLabels)+1)
+	for k, v := range selectorLabels {
+		labels[k] = v
+	}
+	labels[ControllerRevisionHashLabel] = revision
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test", Labels: labels},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{{
+				State: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{Reason: reason},
+				},
+			}},
+		},
+	}
+}
+
+func makeStatefulSetForHandleTest(updateRevision string, selectorLabels map[string]string) *appsv1.StatefulSet {
+	var replicas int32 = 1
+	return &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1", Namespace: "test"},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: selectorLabels},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:       replicas,
+			ReadyReplicas:  0,
+			UpdateRevision: updateRevision,
+		},
+	}
+}
+
+// TestHandleStalePodOrTerminalFailure_RecyclesStale verifies that a terminal pod whose revision
+// is behind UpdateRevision (i.e. the CR spec was already corrected) is deleted and PhaseUpdating
+// returned — the self-heal path that the early-exit callers (SHC, IndexerCluster) need.
+func TestHandleStalePodOrTerminalFailure_RecyclesStale(t *testing.T) {
+	sel := map[string]string{"app": "splunk-stack1"}
+	sts := makeStatefulSetForHandleTest("v2", sel)
+	pod := makeTerminalPod("splunk-stack1-0", "v1", "ImagePullBackOff", sel) // v1 != v2 → stale
+
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{sts, pod})
+
+	phase, err, handled := HandleStalePodOrTerminalFailure(ctx, c, sts)
+	if !handled {
+		t.Fatal("expected handled=true for a terminal pod")
+	}
+	if err != nil {
+		t.Errorf("expected no error for stale terminal pod, got %v", err)
+	}
+	if phase != enterpriseApi.PhaseUpdating {
+		t.Errorf("expected PhaseUpdating, got %s", phase)
+	}
+	var got corev1.Pod
+	if getErr := c.Get(ctx, types.NamespacedName{Namespace: "test", Name: "splunk-stack1-0"}, &got); !k8serrors.IsNotFound(getErr) {
+		t.Errorf("expected stale terminal pod to be deleted, Get returned %v", getErr)
+	}
+}
+
+// TestHandleStalePodOrTerminalFailure_SurfacesCurrentTerminal verifies that a terminal pod on
+// the current revision is surfaced as a TerminalError — the user has not yet fixed the image.
+func TestHandleStalePodOrTerminalFailure_SurfacesCurrentTerminal(t *testing.T) {
+	sel := map[string]string{"app": "splunk-stack1"}
+	sts := makeStatefulSetForHandleTest("v1", sel)
+	pod := makeTerminalPod("splunk-stack1-0", "v1", "ErrImagePull", sel) // v1 == v1 → current
+
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{sts, pod})
+
+	phase, err, handled := HandleStalePodOrTerminalFailure(ctx, c, sts)
+	if !handled {
+		t.Fatal("expected handled=true for a terminal pod")
+	}
+	if phase != enterpriseApi.PhaseError {
+		t.Errorf("expected PhaseError for current terminal pod, got %s", phase)
+	}
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("expected TerminalError so controller-runtime does not requeue, got %T: %v", err, err)
+	}
+	var got corev1.Pod
+	if getErr := c.Get(ctx, types.NamespacedName{Namespace: "test", Name: "splunk-stack1-0"}, &got); getErr != nil {
+		t.Errorf("current terminal pod must not be deleted, Get returned %v", getErr)
+	}
+}
+
+// TestHandleStalePodOrTerminalFailure_NoTerminalPod verifies that when no pod is in a terminal
+// state the function signals it did not handle anything, leaving the caller to proceed normally.
+// TestHandleStalePodOrTerminalFailure_StaleWithRunningContainer verifies that a stale pod
+// whose sidecar is stuck in a terminal state but whose main container is running is NOT
+// recycled directly. Recycling would bypass PrepareRecycle and kill a live member.
+func TestHandleStalePodOrTerminalFailure_StaleWithRunningContainer(t *testing.T) {
+	sel := map[string]string{"app": "splunk-stack1"}
+	sts := makeStatefulSetForHandleTest("v2", sel) // v2 = UpdateRevision
+
+	labels := map[string]string{"app": "splunk-stack1", ControllerRevisionHashLabel: "v1"} // stale
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "splunk-stack1-0", Namespace: "test", Labels: labels},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name:  "splunk",
+					State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+				},
+				{
+					Name: "sidecar",
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"},
+					},
+				},
+			},
+		},
+	}
+
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{sts, pod})
+
+	phase, err, handled := HandleStalePodOrTerminalFailure(ctx, c, sts)
+	if !handled {
+		t.Fatal("expected handled=true: pod has a terminal sidecar")
+	}
+	if phase != enterpriseApi.PhaseError {
+		t.Errorf("expected PhaseError for stale pod with running Splunk container, got %s", phase)
+	}
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Errorf("expected TerminalError so controller-runtime does not requeue, got %T: %v", err, err)
+	}
+	// The pod must NOT be deleted — Splunk is running.
+	var got corev1.Pod
+	if getErr := c.Get(ctx, types.NamespacedName{Namespace: "test", Name: "splunk-stack1-0"}, &got); getErr != nil {
+		t.Errorf("stale pod with running container must not be deleted, Get returned %v", getErr)
+	}
+}
+
+func TestHandleStalePodOrTerminalFailure_NoTerminalPod(t *testing.T) {
+	sel := map[string]string{"app": "splunk-stack1"}
+	sts := makeStatefulSetForHandleTest("v1", sel)
+	healthyPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "splunk-stack1-0",
+			Namespace: "test",
+			Labels:    sel,
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+
+	ctx := context.TODO()
+	c := spltest.NewMockClient()
+	c.AddObjects([]client.Object{sts, healthyPod})
+
+	_, _, handled := HandleStalePodOrTerminalFailure(ctx, c, sts)
+	if handled {
+		t.Error("expected handled=false when no pod is in a terminal container state")
 	}
 }
 
