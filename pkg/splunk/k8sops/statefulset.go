@@ -45,6 +45,10 @@ const (
 	// ReasonPodTerminalFailure is the machine-readable reason used when a pod is
 	// stuck in a non-recoverable terminal state that requires manual remediation.
 	ReasonPodTerminalFailure splcommon.EventReason = "PodTerminalFailure"
+
+	// ControllerRevisionHashLabel is the Kubernetes label key that StatefulSet
+	// controllers stamp on every pod to record its template revision.
+	ControllerRevisionHashLabel = "controller-revision-hash"
 )
 
 // DefaultStatefulSetPodManager is a simple StatefulSetPodManager that does nothing
@@ -92,38 +96,11 @@ var terminalPodWaitingReasons = map[string]bool{
 	"RunContainerError":          true, // OCI runtime cannot run container (invalid entrypoint, missing binary)
 }
 
-// checkPodsForTerminalFailures lists pods belonging to statefulSet and returns a
-// descriptive error if any container or init-container is stuck in a terminal
-// waiting state. Returns nil if all pods appear healthy or if the List call
-// fails (treated as transient so it does not interrupt reconciliation).
+// checkPodsForTerminalFailures returns the terminal-state error from findTerminalPod,
+// or nil if no pod is stuck.
 func checkPodsForTerminalFailures(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet) error {
-	if statefulSet.Spec.Selector == nil {
-		return nil
-	}
-	podList := &corev1.PodList{}
-	listOpts := []client.ListOption{
-		client.InNamespace(statefulSet.GetNamespace()),
-		client.MatchingLabels(statefulSet.Spec.Selector.MatchLabels),
-	}
-	if err := c.List(ctx, podList, listOpts...); err != nil {
-		return nil // transient API error; don't interrupt reconciliation
-	}
-	for i := range podList.Items {
-		pod := &podList.Items[i]
-		for _, cs := range pod.Status.InitContainerStatuses {
-			if cs.State.Waiting != nil && terminalPodWaitingReasons[cs.State.Waiting.Reason] {
-				return fmt.Errorf("pod %s init-container %q in terminal state %s: %s",
-					pod.Name, cs.Name, cs.State.Waiting.Reason, cs.State.Waiting.Message)
-			}
-		}
-		for _, cs := range pod.Status.ContainerStatuses {
-			if cs.State.Waiting != nil && terminalPodWaitingReasons[cs.State.Waiting.Reason] {
-				return fmt.Errorf("pod %s container %q in terminal state %s: %s",
-					pod.Name, cs.Name, cs.State.Waiting.Reason, cs.State.Waiting.Message)
-			}
-		}
-	}
-	return nil
+	_, err := findTerminalPod(ctx, c, statefulSet)
+	return err
 }
 
 // CheckPodsForTerminalFailures is the exported form of checkPodsForTerminalFailures.
@@ -135,6 +112,94 @@ func CheckPodsForTerminalFailures(ctx context.Context, c splcommon.ControllerCli
 		return splcommon.NewTerminalError(ReasonPodTerminalFailure, "Pod stuck in terminal state — manual fix required", termErr)
 	}
 	return nil
+}
+
+// findTerminalPod lists pods belonging to statefulSet and returns the first Pod that is
+// stuck in a non-recoverable container waiting state, along with a descriptive error.
+// Returns (nil, nil) if no pod is in a terminal state.
+func findTerminalPod(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet) (*corev1.Pod, error) {
+	if statefulSet.Spec.Selector == nil {
+		return nil, nil
+	}
+	podList := &corev1.PodList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(statefulSet.GetNamespace()),
+		client.MatchingLabels(statefulSet.Spec.Selector.MatchLabels),
+	}
+	if err := c.List(ctx, podList, listOpts...); err != nil {
+		return nil, nil // transient API error; don't interrupt reconciliation
+	}
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		for _, cs := range pod.Status.InitContainerStatuses {
+			if cs.State.Waiting != nil && terminalPodWaitingReasons[cs.State.Waiting.Reason] {
+				return pod, fmt.Errorf("pod %s init-container %q in terminal state %s: %s",
+					pod.Name, cs.Name, cs.State.Waiting.Reason, cs.State.Waiting.Message)
+			}
+		}
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.State.Waiting != nil && terminalPodWaitingReasons[cs.State.Waiting.Reason] {
+				return pod, fmt.Errorf("pod %s container %q in terminal state %s: %s",
+					pod.Name, cs.Name, cs.State.Waiting.Reason, cs.State.Waiting.Message)
+			}
+		}
+	}
+	return nil, nil
+}
+
+// isPodStale reports whether pod's revision differs from statefulSet.Status.UpdateRevision.
+func isPodStale(statefulSet *appsv1.StatefulSet, pod *corev1.Pod) bool {
+	return pod != nil && statefulSet.Status.UpdateRevision != "" &&
+		statefulSet.Status.UpdateRevision != pod.GetLabels()[ControllerRevisionHashLabel]
+}
+
+// podNeverRan reports whether no container in pod has ever started. Returns true only when every
+// init-container and container is still in a Waiting state; meaning the pod was never a live
+// cluster member and safe to delete without PrepareRecycle.
+func podNeverRan(pod *corev1.Pod) bool {
+	for _, cs := range pod.Status.InitContainerStatuses {
+		if cs.State.Running != nil || cs.State.Terminated != nil {
+			return false
+		}
+	}
+	for _, cs := range pod.Status.ContainerStatuses {
+		if cs.State.Running != nil || cs.State.Terminated != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// HandleStalePodOrTerminalFailure recycles a stale terminal pod (CR spec corrected) or surfaces
+// a TerminalError (image not yet fixed). Returns (phase, err, true) if a terminal pod was found,
+// (Phase(""), nil, false) otherwise. Use in early-exit paths that bypass UpdateStatefulSetPods.
+func HandleStalePodOrTerminalFailure(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet) (enterpriseApi.Phase, error, bool) {
+	termPod, termErr := findTerminalPod(ctx, c, statefulSet)
+	if termErr == nil {
+		return enterpriseApi.Phase(""), nil, false
+	}
+	if isPodStale(statefulSet, termPod) && podNeverRan(termPod) {
+		phase, err := recycleStalePod(ctx, c, statefulSet, termPod)
+		return phase, err, true
+	}
+	return enterpriseApi.PhaseError, splcommon.NewTerminalError(ReasonPodTerminalFailure, "Pod stuck in terminal state — manual fix required", termErr), true
+}
+
+// recycleStalePod force-deletes pod so the StatefulSet controller recreates it from the latest
+// template. Callers must verify podNeverRan before calling; PrepareRecycle is omitted because
+// an unregistered member (Status == "") deadlocks production managers.
+func recycleStalePod(ctx context.Context, c splcommon.ControllerClient, statefulSet *appsv1.StatefulSet, pod *corev1.Pod) (enterpriseApi.Phase, error) {
+	scopedLog := logging.FromContext(ctx).With("func", "recycleStalePod",
+		"name", statefulSet.GetObjectMeta().GetName(), "namespace", statefulSet.GetObjectMeta().GetNamespace())
+
+	scopedLog.InfoContext(ctx, "recycling stale Pod stuck in terminal state", "podName", pod.GetName(),
+		"statefulSetRevision", statefulSet.Status.UpdateRevision,
+		"podRevision", pod.GetLabels()[ControllerRevisionHashLabel])
+	preconditions := client.Preconditions{UID: &pod.ObjectMeta.UID, ResourceVersion: &pod.ObjectMeta.ResourceVersion}
+	if err := c.Delete(ctx, pod, preconditions); err != nil {
+		return enterpriseApi.PhaseError, fmt.Errorf("unable to delete stale terminal Pod %s: %w", pod.GetName(), err)
+	}
+	return enterpriseApi.PhaseUpdating, nil
 }
 
 // ApplyStatefulSet creates or updates a Kubernetes StatefulSet
@@ -206,12 +271,10 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 	readyReplicas := statefulSet.Status.ReadyReplicas
 	if readyReplicas < replicas {
 		scopedLog.InfoContext(ctx, "waiting for pods to become ready")
-		// Detect terminal container states (wrong image, inaccessible registry, missing
-		// ConfigMap/Secret key) that will never self-heal. Surface them as PhaseError
-		// immediately rather than waiting for the full reconcile timeout.
-		if termErr := checkPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
-			scopedLog.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", termErr)
-			return enterpriseApi.PhaseError, splcommon.NewTerminalError(ReasonPodTerminalFailure, "Pod stuck in terminal state — manual fix required", termErr)
+		// Surface terminal container states immediately rather than waiting for
+		// the full reconcile timeout; if the spec has since been corrected, self-heal.
+		if phase, err, handled := HandleStalePodOrTerminalFailure(ctx, c, statefulSet); handled {
+			return phase, err
 		}
 		if readyReplicas > 0 {
 			return enterpriseApi.PhaseScalingUp, nil
@@ -303,16 +366,15 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			return enterpriseApi.PhaseError, err
 		}
 		if pod.Status.Phase != corev1.PodRunning || len(pod.Status.ContainerStatuses) == 0 || !pod.Status.ContainerStatuses[0].Ready {
-			if termErr := checkPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
-				scopedLog.ErrorContext(ctx, "terminal pod failure detected during update; setting PhaseError", "error", termErr)
-				return enterpriseApi.PhaseError, splcommon.NewTerminalError(ReasonPodTerminalFailure, "Pod stuck in terminal state — manual fix required", termErr)
+			if phase, err, handled := HandleStalePodOrTerminalFailure(ctx, c, statefulSet); handled {
+				return phase, err
 			}
 			scopedLog.ErrorContext(ctx, "waiting for Pod to become ready", "podName", podName, "error", err)
 			return enterpriseApi.PhaseUpdating, err
 		}
 
 		// terminate pod if it has pending updates; k8s will start a new one with revised template
-		needsRecycle := statefulSet.Status.UpdateRevision != "" && statefulSet.Status.UpdateRevision != pod.GetLabels()["controller-revision-hash"]
+		needsRecycle := statefulSet.Status.UpdateRevision != "" && statefulSet.Status.UpdateRevision != pod.GetLabels()[ControllerRevisionHashLabel]
 		if needsRecycle {
 			if orderer, ok := mgr.(splcommon.StatefulSetRecycleOrderer); ok {
 				deferred, err := orderer.DeferRecycle(ctx, n, statefulSet.Status.UpdateRevision)
@@ -351,7 +413,7 @@ func UpdateStatefulSetPods(ctx context.Context, c splcommon.ControllerClient, st
 			// deleting pod will cause StatefulSet controller to create a new one with latest template
 			scopedLog.InfoContext(ctx, "recycling Pod for updates", "podName", podName,
 				"statefulSetRevision", statefulSet.Status.UpdateRevision,
-				"podRevision", pod.GetLabels()["controller-revision-hash"])
+				"podRevision", pod.GetLabels()[ControllerRevisionHashLabel])
 			preconditions := client.Preconditions{UID: &pod.ObjectMeta.UID, ResourceVersion: &pod.ObjectMeta.ResourceVersion}
 			err = c.Delete(context.Background(), &pod, preconditions)
 			if err != nil {

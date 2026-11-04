@@ -2495,6 +2495,12 @@ func TestUpdateWorkflowReportsTerminalPodFailureWhenSecretRolloutStatusRefreshFa
 	ctx := context.Background()
 	c, statefulSet, stalePod, _, mgr := newSecretRotationWorkflowFixture(t, 1)
 
+	// Put the pod on the current revision so it is not recycled by the stale-pod path.
+	// The test intent is that a terminal pod failure on the current revision is surfaced
+	// even when the status refresh fails, rather than being hidden by PhasePending.
+	stalePod.Labels[k8sops.ControllerRevisionHashLabel] = statefulSet.Status.UpdateRevision
+	require.NoError(t, c.Update(ctx, stalePod))
+
 	stalePod.Status.ContainerStatuses[0].State.Waiting = &corev1.ContainerStateWaiting{
 		Reason: "ImagePullBackOff",
 	}
@@ -2509,7 +2515,7 @@ func TestUpdateWorkflowReportsTerminalPodFailureWhenSecretRolloutStatusRefreshFa
 	phase, err := mgr.UpdateWorkflow(ctx, c, statefulSet.DeepCopy(), 1)
 	require.Error(t, err)
 	assert.Equal(t, enterpriseApi.PhaseError, phase)
-	assert.ErrorIs(t, err, reconcile.TerminalError(nil), "terminal pod failures must not be hidden by the pending secret rollout")
+	assert.ErrorIs(t, err, reconcile.TerminalError(nil), "terminal pod failures on the current revision must not be hidden by the pending secret rollout")
 }
 
 func TestUpdateWorkflowWaitsForClusterManagerBeforeSecretRollout(t *testing.T) {

@@ -53,10 +53,11 @@ var GetEventPublisher = func(ctx context.Context, _ splcommon.MetaObject) EventP
 // The reconcile package supplies the implementation so this workflow remains
 // independent of the Kubernetes operations package.
 type Operations struct {
-	ApplyStatefulSet             func(context.Context, splcommon.ControllerClient, *appsv1.StatefulSet) (enterpriseApi.Phase, error)
-	CheckPodsForTerminalFailures func(context.Context, splcommon.ControllerClient, *appsv1.StatefulSet) error
-	UpdateStatefulSetPods        func(context.Context, splcommon.ControllerClient, *appsv1.StatefulSet, splcommon.StatefulSetPodManager, int32) (enterpriseApi.Phase, error)
-	ApplySecret                  func(context.Context, splcommon.ControllerClient, *corev1.Secret) (*corev1.Secret, error)
+	ApplyStatefulSet                func(context.Context, splcommon.ControllerClient, *appsv1.StatefulSet) (enterpriseApi.Phase, error)
+	CheckPodsForTerminalFailures    func(context.Context, splcommon.ControllerClient, *appsv1.StatefulSet) error
+	HandleStalePodOrTerminalFailure func(context.Context, splcommon.ControllerClient, *appsv1.StatefulSet) (enterpriseApi.Phase, error, bool)
+	UpdateStatefulSetPods           func(context.Context, splcommon.ControllerClient, *appsv1.StatefulSet, splcommon.StatefulSetPodManager, int32) (enterpriseApi.Phase, error)
+	ApplySecret                     func(context.Context, splcommon.ControllerClient, *corev1.Secret) (*corev1.Secret, error)
 }
 
 var defaultOperations Operations
@@ -122,7 +123,7 @@ func (mgr *PodManager) Update(ctx context.Context, c splcommon.ControllerClient,
 
 	ops := mgr.operationSet()
 	// update statefulset, if necessary
-	if ops.ApplyStatefulSet == nil || ops.CheckPodsForTerminalFailures == nil || ops.UpdateStatefulSetPods == nil {
+	if ops.ApplyStatefulSet == nil || ops.CheckPodsForTerminalFailures == nil || ops.HandleStalePodOrTerminalFailure == nil || ops.UpdateStatefulSetPods == nil {
 		return enterpriseApi.PhaseError, fmt.Errorf("SHC StatefulSet operations are not configured")
 	}
 	_, err := ops.ApplyStatefulSet(ctx, mgr.Client, statefulSet)
@@ -143,9 +144,8 @@ func (mgr *PodManager) Update(ctx context.Context, c splcommon.ControllerClient,
 	err = mgr.UpdateStatus(ctx, statefulSet)
 	captainElected := mgr.CR.Status.Captain != "" && mgr.CR.Status.CaptainReady
 	if err != nil || mgr.CR.Status.ReadyReplicas == 0 || !mgr.CR.Status.Initialized || !captainElected || !mgr.CR.Status.MinPeersJoined {
-		if termErr := ops.CheckPodsForTerminalFailures(ctx, c, statefulSet); termErr != nil {
-			logger.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", termErr)
-			return enterpriseApi.PhaseError, termErr
+		if phase, termErr, handled := ops.HandleStalePodOrTerminalFailure(ctx, c, statefulSet); handled {
+			return phase, termErr
 		}
 		logger.InfoContext(ctx, "SearchHeadCluster is not ready", "error", err)
 		// A scale up/down can already be underway even while captain election
