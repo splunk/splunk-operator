@@ -52,6 +52,9 @@ func EnsureConfigMap(ctx context.Context, c client.Client, cr client.Object, ent
 	var existing corev1.ConfigMap
 	err = c.Get(ctx, client.ObjectKey{Namespace: ns, Name: desired.Name}, &existing)
 	if err == nil {
+		if owner != nil && !slices.ContainsFunc(existing.OwnerReferences, func(ref metav1.OwnerReference) bool { return ref.UID == owner.UID }) {
+			return resources.DefaultsConfigMap{}, fmt.Errorf("defaults ConfigMap %s/%s is not owned by %s", ns, desired.Name, owner.Name)
+		}
 		if err := verifyContent(&existing, &desired.ConfigMap); err != nil {
 			return resources.DefaultsConfigMap{}, reconcile.TerminalError(fmt.Errorf("defaults ConfigMap %s/%s exists with different content (possible hash collision): %w", ns, desired.Name, err))
 		}

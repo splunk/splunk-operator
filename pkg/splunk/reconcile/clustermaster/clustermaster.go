@@ -34,6 +34,7 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
+	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -219,7 +220,11 @@ func applyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	}
 
 	// create or update statefulset for the cluster manager
-	statefulSet, err := getClusterMasterStatefulSet(ctx, client, cr)
+	defaultsConfigMap, err := configworkflow.EnsureKVServiceDefaults(ctx, client, cr, splcommon.SplunkClusterMaster)
+	if err != nil {
+		return result, err
+	}
+	statefulSet, err := getClusterMasterStatefulSet(ctx, client, cr, defaultsConfigMap.AsStatefulSetOption())
 	if err != nil {
 		return result, err
 	}
@@ -236,6 +241,7 @@ func applyClusterMaster(ctx context.Context, client splcommon.ControllerClient, 
 	if err != nil {
 		return result, err
 	}
+	configworkflow.GarbageCollectConfigMaps(ctx, client, cr, defaultsConfigMap.Name, statefulSet.Spec.Selector)
 	cr.Status.Phase = phase
 
 	//Update MC configmap
@@ -323,14 +329,14 @@ func validateClusterMasterSpec(ctx context.Context, c splcommon.ControllerClient
 }
 
 // getClusterMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise cluster master.
-func getClusterMasterStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster) (*appsv1.StatefulSet, error) {
+func getClusterMasterStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApiV3.ClusterMaster, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
 	var extraEnvVar []corev1.EnvVar
 
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(splcommon.SplunkClusterMaster, cr.GetName(), cr.GetNamespace(), 1)))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
-	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkClusterMaster, 1, extraEnvVar)
+	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkClusterMaster, 1, extraEnvVar, opts...)
 	if err != nil {
 		return ss, err
 	}

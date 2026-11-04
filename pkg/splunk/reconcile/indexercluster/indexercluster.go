@@ -277,9 +277,14 @@ func applyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 		return result, fmt.Errorf("apply service: %w", err)
 	}
 
-	// ensure the SOK defaults resources exist: a ConfigMap for non-sensitive SmartBus
-	// config and a Secret for the credentials (both mounted via SPLUNK_DEFAULTS_URL)
-	defaultsConfigMap, defaultsSecret, err := ensureIndexerDefaults(ctx, client, cr)
+	// Ensure one defaults ConfigMap for KVService and SmartBus settings, plus
+	// a separate credential Secret (both mounted via SPLUNK_DEFAULTS_URL).
+	kvEntries, err := configworkflow.ResolveKVServiceClientConfig(ctx, client, cr, splcommon.SplunkIndexer)
+	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve KVService configuration")
+		return result, err
+	}
+	defaultsConfigMap, defaultsSecret, err := ensureIndexerDefaults(ctx, client, cr, kvEntries...)
 	if err != nil {
 		eventPublisher.Warning(ctx, "EnsureDefaultsFailed", "Failed to ensure defaults ConfigMap/Secret. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure defaults ConfigMap/Secret")
@@ -617,9 +622,14 @@ func applyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 		return result, fmt.Errorf("apply service: %w", err)
 	}
 
-	// ensure the SOK defaults resources exist: a ConfigMap for non-sensitive SmartBus
-	// config and a Secret for the credentials (both mounted via SPLUNK_DEFAULTS_URL)
-	defaultsConfigMap, credentialsSecret, err := ensureIndexerDefaults(ctx, client, cr)
+	// Ensure one defaults ConfigMap for KVService and SmartBus settings, plus
+	// a separate credential Secret (both mounted via SPLUNK_DEFAULTS_URL).
+	kvEntries, err := configworkflow.ResolveKVServiceClientConfig(ctx, client, cr, splcommon.SplunkIndexer)
+	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve KVService configuration")
+		return result, err
+	}
+	defaultsConfigMap, credentialsSecret, err := ensureIndexerDefaults(ctx, client, cr, kvEntries...)
 	if err != nil {
 		eventPublisher.Warning(ctx, "EnsureDefaultsFailed", "Failed to ensure defaults ConfigMap/Secret. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure defaults ConfigMap/Secret")
@@ -1229,29 +1239,20 @@ func (mgr *indexerClusterPodManager) updateStatus(ctx context.Context, statefulS
 	return mgr.workflowManager().UpdateStatus(ctx, statefulSet)
 }
 
-// ensureIndexerDefaults resolves the IndexerCluster's SmartBus queue/object-storage
-// configuration once and ensures both SOK defaults resources exist:
-//   - a content-addressed ConfigMap holding the non-sensitive SmartBus config, and
+// ensureIndexerDefaults combines resolved KVService entries with the IndexerCluster's
+// SmartBus configuration and ensures both SOK defaults resources exist:
+//   - a content-addressed ConfigMap holding KVService and SmartBus settings, and
 //   - a content-addressed Secret holding only the credentials (access_key/secret_key).
 //
 // Both are immutable and mounted into every container via SPLUNK_DEFAULTS_URL.
-// Returns a zero-value DefaultsConfigMap when smartbus is not configured, and a zero-value
+// Returns a zero-value DefaultsConfigMap when neither feature is configured, and a zero-value
 // DefaultsSecret when no static credentials were resolved (e.g. IRSA / workload identity,
 // where the Queue VolList is empty). Resolving once guarantees
 // the ConfigMap and Secret are derived from a single consistent read of the source
 // queue/storage/secret.
-func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster) (resources.DefaultsConfigMap, resources.DefaultsSecret, error) {
-	queueRefName := ""
-	if cr.Spec.QueueRef != nil {
-		queueRefName = cr.Spec.QueueRef.Name
-	}
-	osRefName := ""
-	if cr.Spec.ObjectStorageRef != nil {
-		osRefName = cr.Spec.ObjectStorageRef.Name
-	}
-	if queueRefName == "" && osRefName == "" {
-		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, nil
-	}
+func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.IndexerCluster, extraEntries ...splcommon.ConfFileEntry) (resources.DefaultsConfigMap, resources.DefaultsSecret, error) {
+	structuralEntries := append([]splcommon.ConfFileEntry(nil), extraEntries...)
+	var credentialEntries []splcommon.ConfFileEntry
 	var queueRef, osRef corev1.ObjectReference
 	if cr.Spec.QueueRef != nil {
 		queueRef = *cr.Spec.QueueRef
@@ -1259,35 +1260,37 @@ func ensureIndexerDefaults(ctx context.Context, c splcommon.ControllerClient, cr
 	if cr.Spec.ObjectStorageRef != nil {
 		osRef = *cr.Spec.ObjectStorageRef
 	}
-	qosCfg, err := configworkflow.ResolveQueueAndObjectStorage(ctx, c, cr, queueRef, osRef)
-	if err != nil {
-		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, fmt.Errorf("resolve queue config: %w", err)
-	}
-	set, err := splunkconfig.ForRole(splcommon.SplunkIndexer).
-		With(smartbus.Conf(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)).
-		Build()
-	if err != nil {
-		return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
+	if queueRef.Name != "" || osRef.Name != "" {
+		qosCfg, err := configworkflow.ResolveQueueAndObjectStorage(ctx, c, cr, queueRef, osRef)
+		if err != nil {
+			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, fmt.Errorf("resolve queue config: %w", err)
+		}
+		set, err := splunkconfig.ForRole(splcommon.SplunkIndexer).
+			With(smartbus.Conf(&qosCfg.Queue, &qosCfg.OS, qosCfg.AccessKey, qosCfg.SecretKey)).
+			Build()
+		if err != nil {
+			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
+		}
+		structuralEntries = append(structuralEntries, set.NonSensitive...)
+		credentialEntries = set.Secrets
 	}
 
 	owner := splcommon.AsOwner(cr, true)
-
+	var err error
 	var configMap resources.DefaultsConfigMap
-	if len(set.NonSensitive) > 0 {
-		configMap, err = configworkflow.EnsureConfigMap(ctx, c, cr, set.NonSensitive, &owner)
+	if len(structuralEntries) > 0 {
+		configMap, err = configworkflow.EnsureConfigMap(ctx, c, cr, structuralEntries, &owner)
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 		}
 	}
-
 	var secret resources.DefaultsSecret
-	if len(set.Secrets) > 0 {
-		secret, err = configworkflow.EnsureSecret(ctx, c, cr, set.Secrets, nil, &owner)
+	if len(credentialEntries) > 0 {
+		secret, err = configworkflow.EnsureSecret(ctx, c, cr, credentialEntries, nil, &owner)
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 		}
 	}
-
 	return configMap, secret, nil
 }
 

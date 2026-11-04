@@ -46,14 +46,20 @@ import (
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	reconciletest "github.com/splunk/splunk-operator/pkg/splunk/test/reconcile"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 )
 
 func newFakeClientBuilder(scheme *pkgruntime.Scheme) *fake.ClientBuilder {
-	return fake.NewClientBuilder().WithScheme(scheme)
+	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "shc-namespace"}},
+	)
 }
 
 func init() {
@@ -106,6 +112,13 @@ func TestApplyLicenseManager(t *testing.T) {
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[6], funcCalls[10], funcCalls[11]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
 	updateFuncCalls := []spltest.MockFuncCall{funcCalls[0], funcCalls[1], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[6], funcCalls[9], funcCalls[10], funcCalls[11], funcCalls[12], funcCalls[13], funcCalls[13], funcCalls[14], funcCalls[15]}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[5]}, "List": {listmockCall[0]}}
+	// Cleanup now lists the defaults maps owned by this CR after applying its StatefulSet.
+	gcListCall := spltest.MockFuncCall{ListOpts: []client.ListOption{
+		client.InNamespace("test"),
+		client.MatchingLabels{resources.LabelCRKind: "LicenseManager", resources.LabelCRName: "stack1"},
+	}}
+	createCalls["List"] = append(createCalls["List"], gcListCall)
+	updateCalls["List"] = append(updateCalls["List"], gcListCall)
 	current := enterpriseApi.LicenseManager{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "LicenseManager",
@@ -122,6 +135,7 @@ func TestApplyLicenseManager(t *testing.T) {
 		_, err := ApplyLicenseManager(context.Background(), c, cr.(*enterpriseApi.LicenseManager))
 		return err
 	}
+	reconciletest.ExpectLocalKVStoreDefaultsCalls(t, &current, createCalls, updateCalls)
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyLicenseManager", &current, revised, createCalls, updateCalls, reconcileFn, true)
 
 	// test deletion
@@ -135,7 +149,7 @@ func TestApplyLicenseManager(t *testing.T) {
 	splunkDeletionTester(t, revised, deleteFunc)
 
 	// Negative testing: spec validation failure is a terminal condition — returns nil (no requeue)
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	ctx := context.TODO()
 	current.Spec.LivenessInitialDelaySeconds = -1
 	_, err := ApplyLicenseManager(ctx, c, &current)
@@ -175,7 +189,7 @@ func TestGetLicenseManagerStatefulSet(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
@@ -295,7 +309,7 @@ func TestAppFrameworkApplyLicenseManagerShouldNotFail(t *testing.T) {
 		},
 	}
 
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
@@ -702,7 +716,7 @@ func TestApplyLicenseManagerDeletion(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
@@ -736,7 +750,7 @@ func TestApplyLicenseManagerDeletion(t *testing.T) {
 
 	_, err = ApplyLicenseManager(ctx, c, &lm)
 	if err != nil {
-		t.Errorf("ApplyLicenseManager should not have returned error here.")
+		t.Errorf("ApplyLicenseManager should not have returned error here: %v", err)
 	}
 }
 

@@ -17,13 +17,20 @@ limitations under the License.
 package validation
 
 import (
+	"encoding/json"
 	"testing"
 
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/stretchr/testify/require"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-
-	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestValidateCommonSplunkSpec(t *testing.T) {
@@ -83,7 +90,7 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 			wantErrCount: 2, // VAR1[1] and VAR1[2] are duplicates of VAR1[0]
 		},
 		{
-			name: "extraEnv - KV Store default type local is valid",
+			name: "extraEnv - KV Store default type is allowed",
 			spec: &enterpriseApi.CommonSplunkSpec{
 				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
 					ExtraEnv: []corev1.EnvVar{
@@ -94,7 +101,7 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 			wantErrCount: 0,
 		},
 		{
-			name: "extraEnv - invalid KV Store default type",
+			name: "extraEnv - arbitrary KV Store variable is allowed",
 			spec: &enterpriseApi.CommonSplunkSpec{
 				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
 					ExtraEnv: []corev1.EnvVar{
@@ -102,8 +109,7 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 					},
 				},
 			},
-			wantErrCount: 1,
-			wantErrField: "spec.extraEnv[0].value",
+			wantErrCount: 0,
 		},
 		// imagePullSecrets uniqueness validation tests
 		{
@@ -1443,5 +1449,89 @@ func TestGetCommonWarnings(t *testing.T) {
 				t.Errorf("getCommonWarnings() got %d warnings, want %d", len(warnings), tt.wantWarnings)
 			}
 		})
+	}
+}
+
+func kvServiceEnvAdmissionReview(t *testing.T, kind string, gvr schema.GroupVersionResource, operation admissionv1.Operation, env []corev1.EnvVar) *admissionv1.AdmissionReview {
+	t.Helper()
+	spec := map[string]any{"replicas": 3, "extraEnv": env}
+	if kind == "IndexerCluster" {
+		spec["clusterManagerRef"] = map[string]string{"name": "manager"}
+	}
+	if kind == "IngestorCluster" {
+		spec["queueRef"] = map[string]string{"name": "queue"}
+		spec["objectStorageRef"] = map[string]string{"name": "storage"}
+	}
+	data, err := json.Marshal(map[string]any{
+		"apiVersion": "enterprise.splunk.com/v4", "kind": kind,
+		"metadata": map[string]string{"name": "consumer", "namespace": "workload"},
+		"spec":     spec,
+	})
+	require.NoError(t, err)
+	return &admissionv1.AdmissionReview{Request: &admissionv1.AdmissionRequest{
+		Operation: operation, Namespace: "workload", Name: "consumer",
+		Resource: metav1.GroupVersionResource{Group: gvr.Group, Version: gvr.Version, Resource: gvr.Resource},
+		Object:   runtime.RawExtension{Raw: data}, OldObject: runtime.RawExtension{Raw: data},
+	}}
+}
+
+func TestKVServiceExtraEnvAdmission(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	for _, label := range []string{"enabled", "disabled", "", "Enabled"} {
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: "workload", Labels: map[string]string{splcommon.LabelKVService: label}},
+		}).Build()
+		for _, resource := range []struct {
+			kind string
+			gvr  schema.GroupVersionResource
+		}{
+			{"Standalone", StandaloneGVR},
+			{"IndexerCluster", IndexerClusterGVR},
+			{"SearchHeadCluster", SearchHeadClusterGVR},
+			{"ClusterManager", ClusterManagerGVR},
+			{"ClusterManager", ClusterMasterGVR},
+			{"LicenseManager", LicenseManagerGVR},
+			{"LicenseManager", LicenseMasterGVR},
+			{"MonitoringConsole", MonitoringConsoleGVR},
+			{"IngestorCluster", IngestorClusterGVR},
+		} {
+			for _, operation := range []admissionv1.Operation{admissionv1.Create, admissionv1.Update} {
+				for _, name := range []string{"SPLUNK_KVSTORE_DEFAULT_TYPE", "SPLUNK_KVSERVICE_SCOPE", "SPLUNK_KVSERVICE_MODE", "SPLUNK_SCS_TENANT", "SPLUNK_SCS_ENVIRONMENT"} {
+					t.Run(label+"/"+resource.gvr.Resource+"/"+string(operation)+"/"+name, func(t *testing.T) {
+						env := []corev1.EnvVar{{Name: "UNRELATED", Value: "allowed"}, {Name: name, Value: "local"}}
+						ar := kvServiceEnvAdmissionReview(t, resource.kind, resource.gvr, operation, env)
+						_, err := ValidateWithClient(ar, DefaultValidators, c)
+						require.NoError(t, err)
+					})
+				}
+			}
+		}
+	}
+}
+
+func TestKVServiceExtraEnvAdmissionValueFrom(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: "workload", Labels: map[string]string{splcommon.LabelKVService: "enabled"}},
+	}).Build()
+	env := []corev1.EnvVar{{Name: "SPLUNK_SCS_TENANT", ValueFrom: &corev1.EnvVarSource{
+		SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "tenant"}, Key: "name"},
+	}}}
+	ar := kvServiceEnvAdmissionReview(t, "Standalone", StandaloneGVR, admissionv1.Create, env)
+	_, err := ValidateWithClient(ar, DefaultValidators, c)
+	require.NoError(t, err)
+}
+
+func TestKVServiceExtraEnvAdmissionWithoutNamespace(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	// Extra environment variables do not require a Namespace lookup.
+	c := fake.NewClientBuilder().WithScheme(scheme).Build()
+	for _, name := range []string{"UNRELATED", "SPLUNK_SCS_TENANT"} {
+		ar := kvServiceEnvAdmissionReview(t, "Standalone", StandaloneGVR, admissionv1.Create, []corev1.EnvVar{{Name: name, Value: "customer"}})
+		_, err := ValidateWithClient(ar, DefaultValidators, c)
+		require.NoError(t, err)
 	}
 }

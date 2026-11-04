@@ -1,0 +1,63 @@
+suite: Namespace discovery for namespace-only operators
+templates:
+  - templates/rbac/namespace_reader.yaml
+release:
+  name: verify
+  namespace: workload
+tests:
+  - it: omits the separate namespace reader with cluster-wide access
+    set:
+      splunkOperator.clusterWideAccess: true
+    asserts:
+      - hasDocuments:
+          count: 0
+  - it: grants namespace reads and watches through a ClusterRole in namespace-only mode
+    set:
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: ClusterRole
+        documentIndex: 0
+      - equal:
+          path: rules[0].resources
+          value: [namespaces]
+        documentIndex: 0
+      - equal:
+          path: rules[0].verbs
+          value: [get, list, watch]
+        documentIndex: 0
+      - isKind:
+          of: ClusterRoleBinding
+        documentIndex: 1
+      - equal:
+          path: roleRef.name
+          value: splunk-operator-namespace-reader.workload
+        documentIndex: 1
+      - equal:
+          path: subjects[0].name
+          value: splunk-operator-controller-manager
+        documentIndex: 1
+      - equal:
+          path: subjects[0].namespace
+          value: workload
+        documentIndex: 1
+  - it: gives a second namespace its own cluster-scoped resources
+    release:
+      namespace: another
+    set:
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - equal:
+          path: metadata.name
+          value: splunk-operator-namespace-reader.another
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: splunk-operator-namespace-reader.another
+        documentIndex: 1
+      - equal:
+          path: roleRef.name
+          value: splunk-operator-namespace-reader.another
+        documentIndex: 1

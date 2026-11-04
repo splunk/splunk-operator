@@ -1082,9 +1082,6 @@ func updateSplunkPodTemplateWithConfig(ctx context.Context, client splcommon.Con
 		{Name: "SPLUNK_SKIP_CLUSTER_BUNDLE_PUSH", Value: "true"},
 		{Name: "SPLUNK_NODE_SIDECAR_POSTGRES_DISABLED", Value: "true"},
 	}
-	if instanceType != SplunkIngestor {
-		env = append(env, corev1.EnvVar{Name: splunkKVStoreDefaultTypeEnv, Value: splunkKVStoreTypeLocal})
-	}
 
 	// update variables for licensing, if configured
 	if spec.LicenseURL != "" {

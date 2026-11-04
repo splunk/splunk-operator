@@ -1529,9 +1529,8 @@ func TestKVStoreDefaultTypeEnv(t *testing.T) {
 	}
 	sts, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, 1, nil, nil)
 	require.NoError(t, err)
-	value, found := getStatefulSetEnvValue(sts, splunkKVStoreDefaultTypeEnv)
-	require.True(t, found)
-	require.Equal(t, splunkKVStoreTypeLocal, value)
+	_, found := getStatefulSetEnvValue(sts, "SPLUNK_KVSTORE_DEFAULT_TYPE")
+	require.False(t, found)
 
 	ingestor := &enterpriseApi.IngestorCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1541,16 +1540,8 @@ func TestKVStoreDefaultTypeEnv(t *testing.T) {
 	}
 	sts, err = getSplunkStatefulSet(ctx, client, ingestor, &ingestor.Spec.CommonSplunkSpec, SplunkIngestor, 1, nil, nil)
 	require.NoError(t, err)
-	_, found = getStatefulSetEnvValue(sts, splunkKVStoreDefaultTypeEnv)
+	_, found = getStatefulSetEnvValue(sts, "SPLUNK_KVSTORE_DEFAULT_TYPE")
 	require.False(t, found)
-}
-
-func TestValidateKVStoreDefaultTypeExtraEnv(t *testing.T) {
-	valid := []corev1.EnvVar{{Name: splunkKVStoreDefaultTypeEnv, Value: splunkKVStoreTypeLocal}}
-	require.NoError(t, validateKVStoreDefaultTypeExtraEnv(valid))
-
-	invalid := []corev1.EnvVar{{Name: splunkKVStoreDefaultTypeEnv, Value: "remote"}}
-	require.ErrorContains(t, validateKVStoreDefaultTypeExtraEnv(invalid), "SPLUNK_KVSTORE_DEFAULT_TYPE")
 }
 
 // TestConfigMapVolAnnotationAbsentWhenNoVolumes verifies that no ConfigMapRevAnnotationPrefix annotations

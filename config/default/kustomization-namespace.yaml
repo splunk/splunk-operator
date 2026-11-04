@@ -165,3 +165,38 @@ components:
 # ValidatingWebhookConfigurations. To supply your own certificate, replace it
 # with ../components/ca-bundle; see "Option B" in docs/reference/ValidationWebhook.md.
 - ../components/cert-manager
+
+# Namespace-only installs still read cluster-scoped Namespace metadata. Include
+# the deployment namespace in these resource names so installs can coexist.
+replacements:
+- source:
+    kind: ServiceAccount
+    name: controller-manager
+    fieldPath: metadata.namespace
+  targets:
+  - select:
+      kind: ClusterRole
+      name: namespace-reader.namespace
+    fieldPaths:
+    - metadata.name
+    options:
+      delimiter: .
+      index: 1
+  - select:
+      kind: ClusterRoleBinding
+      name: namespace-reader.namespace
+    fieldPaths:
+    - metadata.name
+    options:
+      delimiter: .
+      index: 1
+- source:
+    kind: ClusterRole
+    name: namespace-reader.namespace
+    fieldPath: metadata.name
+  targets:
+  - select:
+      kind: ClusterRoleBinding
+      name: namespace-reader.namespace
+    fieldPaths:
+    - roleRef.name

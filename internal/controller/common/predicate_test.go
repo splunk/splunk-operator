@@ -17,6 +17,7 @@ package common
 import (
 	"testing"
 
+	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,4 +39,30 @@ func TestDeletionTimestampChangedPredicate(t *testing.T) {
 		ObjectOld: &corev1.Pod{},
 		ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{DeletionTimestamp: &now}},
 	}))
+}
+
+func TestKVServiceNamespacePredicate(t *testing.T) {
+	p := KVServiceNamespaceChangedPredicate()
+	for _, key := range []string{splcommon.LabelKVService, splcommon.LabelTenant} {
+		t.Run(key, func(t *testing.T) {
+			old := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "workload"}}
+			updated := old.DeepCopy()
+			updated.Labels = map[string]string{key: "value"}
+			assert.True(t, p.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}))
+			assert.True(t, p.Update(event.UpdateEvent{ObjectOld: updated, ObjectNew: old}), "removal must enqueue consumers")
+			assert.False(t, p.Update(event.UpdateEvent{ObjectOld: updated, ObjectNew: updated.DeepCopy()}))
+		})
+	}
+	old := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "workload"}}
+	updated := old.DeepCopy()
+	updated.Labels = map[string]string{"unrelated": "value"}
+	updated.Annotations = map[string]string{"unrelated": "value"}
+	assert.False(t, p.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}))
+	updated.Annotations[splcommon.AnnotationKVServiceAddr] = "shared.backend:8066"
+	assert.True(t, p.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}))
+	assert.True(t, p.Update(event.UpdateEvent{ObjectOld: updated, ObjectNew: old}), "address removal must enqueue consumers")
+	assert.False(t, p.Update(event.UpdateEvent{ObjectOld: updated, ObjectNew: updated.DeepCopy()}))
+	changed := updated.DeepCopy()
+	changed.Annotations[splcommon.AnnotationKVServiceAddr] = "shared.backend:9000"
+	assert.True(t, p.Update(event.UpdateEvent{ObjectOld: updated, ObjectNew: changed}), "port changes must enqueue consumers")
 }

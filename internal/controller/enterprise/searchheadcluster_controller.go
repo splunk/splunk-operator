@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -144,6 +145,9 @@ func (r *SearchHeadClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.StatefulsetChangedPredicate(),
 			common.PodChangedPredicate(),
 		)).
+		Watches(&corev1.Namespace{},
+			handler.EnqueueRequestsFromMapFunc(kvServiceNamespaceMapper(mgr.GetClient(), &enterpriseApi.SearchHeadClusterList{})),
+			builder.WithPredicates(common.KVServiceNamespaceChangedPredicate())).
 		Watches(&appsv1.StatefulSet{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),

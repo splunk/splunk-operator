@@ -29,7 +29,9 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splstorage "github.com/splunk/splunk-operator/pkg/splunk/client/storage"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	reconciletest "github.com/splunk/splunk-operator/pkg/splunk/test/reconcile"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/stretchr/testify/require"
@@ -357,7 +359,11 @@ func newFakeClientBuilder(scheme *pkgruntime.Scheme) *fake.ClientBuilder {
 	// The controller-runtime fake client defaults to a managed-fields tracker,
 	// which rejects the uint64 fields used by Splunk CR specs.
 	return fake.NewClientBuilder().
-		WithScheme(scheme).
+		WithScheme(scheme).WithObjects(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "shc-namespace"}},
+	).
 		WithObjectTracker(clienttesting.NewObjectTracker(
 			scheme,
 			serializer.NewCodecFactory(scheme).UniversalDecoder(),
@@ -388,7 +394,7 @@ func TestGetMonitoringConsoleStatefulSet(t *testing.T) {
 	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	ctx := context.Background()
 	cr := enterpriseApi.MonitoringConsole{ObjectMeta: metav1.ObjectMeta{Name: "stack1", Namespace: "test"}}
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	if _, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test"); err != nil {
 		t.Fatalf("failed to create namespace scoped object: %v", err)
 	}
@@ -578,6 +584,13 @@ func TestApplyMonitoringConsole(t *testing.T) {
 	}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[9], funcCalls[11], funcCalls[12], funcCalls[6]}, "Update": {funcCalls[0], funcCalls[12]}, "List": {listmockCall[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {updateFuncCalls[5]}, "List": {listmockCall[0]}}
+	// Cleanup now lists the defaults maps owned by this CR after applying its StatefulSet.
+	gcListCall := spltest.MockFuncCall{ListOpts: []client.ListOption{
+		client.InNamespace("test"),
+		client.MatchingLabels{resources.LabelCRKind: "MonitoringConsole", resources.LabelCRName: "stack1"},
+	}}
+	createCalls["List"] = append(createCalls["List"], gcListCall)
+	updateCalls["List"] = append(updateCalls["List"], gcListCall)
 	current := enterpriseApi.MonitoringConsole{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "MonitoringConsole",
@@ -593,6 +606,7 @@ func TestApplyMonitoringConsole(t *testing.T) {
 		_, err := ApplyMonitoringConsole(context.Background(), c, cr.(*enterpriseApi.MonitoringConsole))
 		return err
 	}
+	reconciletest.ExpectLocalKVStoreDefaultsCalls(t, &current, createCalls, updateCalls)
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyMonitoringConsole", &current, revised, createCalls, updateCalls, reconcile, true)
 }
 
@@ -632,7 +646,7 @@ func TestAppFrameworkApplyMonitoringConsoleShouldNotFail(t *testing.T) {
 			},
 		},
 	}
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
 	if err != nil {
@@ -909,7 +923,7 @@ func TestApplyMonitoringConsoleDeletion(t *testing.T) {
 			},
 		},
 	}
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
 	c.AddObject(&s3Secret)
