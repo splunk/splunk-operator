@@ -428,8 +428,8 @@ func (mgr *noahIndexerPodManager) Update(ctx context.Context, client splcommon.C
 		}
 
 		if statefulSet.Status.ReadyReplicas < appliedReplicas {
-			if err := k8sops.CheckPodsForTerminalFailures(ctx, mgr.client, statefulSet); err != nil {
-				return enterpriseApi.PhaseError, err
+			if phase, err, handled := k8sops.HandleStalePodOrTerminalFailure(ctx, mgr.client, statefulSet); handled {
+				return phase, err
 			}
 		}
 
@@ -448,8 +448,8 @@ func (mgr *noahIndexerPodManager) Update(ctx context.Context, client splcommon.C
 	// against. Once it does, the shared lifecycle engine owns the established
 	// scale-out-before-rollout ordering and inspects individual Pod revisions.
 	if statefulSet.Status.ObservedGeneration < statefulSet.Generation || statefulSet.Status.UpdateRevision == "" {
-		if err := k8sops.CheckPodsForTerminalFailures(ctx, mgr.client, statefulSet); err != nil {
-			return enterpriseApi.PhaseError, err
+		if phase, err, handled := k8sops.HandleStalePodOrTerminalFailure(ctx, mgr.client, statefulSet); handled {
+			return phase, err
 		}
 		return workloadPhase, nil
 	}

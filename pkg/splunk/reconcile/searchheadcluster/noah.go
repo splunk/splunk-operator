@@ -260,10 +260,11 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 		}
 	}
 	searchHeadManager := shcworkflow.NewPodManager(client, cr, namespaceScopedSecret, splclient.NewSplunkClient, shcworkflow.Operations{
-		ApplyStatefulSet:             k8sops.ApplyStatefulSet,
-		CheckPodsForTerminalFailures: k8sops.CheckPodsForTerminalFailures,
-		UpdateStatefulSetPods:        k8sops.UpdateStatefulSetPods,
-		ApplySecret:                  k8sops.ApplySecret,
+		ApplyStatefulSet:                k8sops.ApplyStatefulSet,
+		CheckPodsForTerminalFailures:    k8sops.CheckPodsForTerminalFailures,
+		HandleStalePodOrTerminalFailure: k8sops.HandleStalePodOrTerminalFailure,
+		UpdateStatefulSetPods:           k8sops.UpdateStatefulSetPods,
+		ApplySecret:                     k8sops.ApplySecret,
 	})
 	searchHeadPhase, err := searchHeadManager.Update(ctx, client, searchHeadStatefulSet, cr.Spec.Replicas)
 	if err != nil {

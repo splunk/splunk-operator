@@ -904,9 +904,8 @@ func (mgr *indexerClusterPodManager) UpdateWorkflow(ctx context.Context, c splco
 		// it before the early rollout path so each reconcile observes the manager's
 		// latest transition (for example Up -> Decommissioning -> Down).
 		if err := mgr.updateStatus(ctx, statefulSet); err != nil {
-			if terminalErr := k8sops.CheckPodsForTerminalFailures(ctx, c, statefulSet); terminalErr != nil {
-				mgr.log.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", terminalErr)
-				return enterpriseApi.PhaseError, terminalErr
+			if phase, termErr, handled := k8sops.HandleStalePodOrTerminalFailure(ctx, c, statefulSet); handled {
+				return phase, termErr
 			}
 			mgr.log.InfoContext(ctx, "waiting for fresh peer status before secret rollout", "error", err)
 			return enterpriseApi.PhasePending, nil
@@ -931,9 +930,8 @@ func (mgr *indexerClusterPodManager) UpdateWorkflow(ctx context.Context, c splco
 	}
 
 	if err := mgr.updateStatus(ctx, statefulSet); err != nil || mgr.cr.Status.ReadyReplicas == 0 || !mgr.cr.Status.Initialized || !mgr.cr.Status.IndexingReady || !mgr.cr.Status.ServiceReady {
-		if terminalErr := k8sops.CheckPodsForTerminalFailures(ctx, c, statefulSet); terminalErr != nil {
-			mgr.log.ErrorContext(ctx, "terminal pod failure detected; setting PhaseError", "error", terminalErr)
-			return enterpriseApi.PhaseError, terminalErr
+		if phase, err, handled := k8sops.HandleStalePodOrTerminalFailure(ctx, c, statefulSet); handled {
+			return phase, err
 		}
 		mgr.log.InfoContext(ctx, "IndexerCluster is not ready", "error ", err)
 		return enterpriseApi.PhasePending, nil
