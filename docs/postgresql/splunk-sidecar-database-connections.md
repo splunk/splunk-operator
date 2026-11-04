@@ -18,6 +18,7 @@ Adding a database mount does not change which Splunk features are supported on K
 
 Before creating resources, enable `PostgresController=true` on the Splunk Operator deployment.
 Install CloudNativePG and the PostgreSQL custom resource definitions.
+The [quickstart setup paths](quickstart.md#setup-and-prerequisites) give the supported versions and the checks.
 Use an approved `PostgresClusterClass` with `spec.provisioner: postgresql.cnpg.io` and CNPG default certificates.
 The [integration guide](integration-patterns.md) describes class creation and ownership.
 
@@ -28,8 +29,8 @@ Replace those names with your approved namespace and class.
 Follow the [terms instructions](../README.md#splunk-general-terms-acceptance) before starting Splunk workloads.
 
 The mount requires CNPG default certificates.
-The PostgresCluster and CNPG cluster must have the same name.
-The operator reads `ca.crt` from the Secret named `<PostgresCluster name>-ca`.
+The operator gives the CNPG cluster the same name as the PostgresCluster.
+It reads `ca.crt` from the Secret named `<PostgresCluster name>-ca`.
 Do not use custom certificates unless the mount implementation supports their CA reference.
 [CPI-2235](https://splunk.atlassian.net/browse/CPI-2235) tracks changes to CA discovery.
 
@@ -44,8 +45,10 @@ If your client supports the platform's TLS-1.3-only default, omit `postgresqlCon
 Set `TEST_PG17_IMAGE` to an approved CNPG-compatible PostgreSQL 17 image reference.
 The reference must include a version tag that starts with `17` and a complete `@sha256:` digest.
 The operator does not select a default image or inherit images from the class.
-The `postgresql-dev` class also enables PgBouncer, which reuses database connections.
-Set `TEST_PGBOUNCER_IMAGE` to its approved image reference, also with a tag and SHA-256 digest.
+The [`postgresql-dev` sample class](../../config/samples/platform_v1alpha1_postgresclusterclass_dev.yaml) enables PgBouncer, which reuses database connections.
+The quickstart creates a class with the same name that disables PgBouncer.
+Make sure that you know which of the two classes your cluster has.
+If PgBouncer is enabled, set `TEST_PGBOUNCER_IMAGE` to its approved image reference, also with a tag and SHA-256 digest.
 If the registry requires credentials, add `spec.images.imagePullSecrets` with Secret names from the cluster namespace.
 The [quickstart image requirements](quickstart.md#3-create-a-postgresql-cluster) describe the image publication and registry requirements.
 
@@ -95,7 +98,13 @@ envsubst '${TEST_PG17_IMAGE} ${TEST_PGBOUNCER_IMAGE}' \
 
 Make sure that the rendered file contains the approved image references.
 Apply the rendered resources through your authorized deployment process.
-Wait until the cluster and database report `Ready`.
+Wait until the cluster and database report `Ready`:
+
+```bash
+kubectl wait -n splunk --for=jsonpath='{.status.phase}'=Ready \
+  postgrescluster/sidecar-postgres postgresdatabase/sidecar-database --timeout=10m
+```
+
 The operator publishes references to the connection ConfigMap and credential Secrets in `PostgresDatabase.status.databases[]`.
 A ConfigMap contains non-secret connection metadata.
 A Secret contains credentials or certificate data.
@@ -138,6 +147,52 @@ If the consumer must create or change schema objects, add `includeAdmin: true` t
 This exposes the database-owner password to processes in the Splunk container.
 Use the read-write role for ordinary data operations.
 If you omit `includeAdmin`, it defaults to false.
+A change to `postgresDatabaseMounts` updates the pod template, so the operator restarts the Splunk pods.
+
+The operator mounts the projection read-only at `/opt/splunk/var/run/supervisor/postgresok`.
+For each mounted database, the projection contains these files:
+
+| Path | Content |
+|---|---|
+| `<database>/CLUSTER_RW_ENDPOINT`, `<database>/DEFAULT_CLUSTER_PORT` | Read-write host and port |
+| `<database>/DATABASE_NAME`, `<database>/RW_USER_NAME`, `<database>/ADMIN_USER_NAME` | Database and role names |
+| `<database>-rw` | Read-write password |
+| `<database>-admin` | Owner password, only with `includeAdmin: true` |
+| `<database>-ca.crt` | CA certificate for `verify-full` |
+
+The operator does not mount the other ConfigMap keys, such as the read-only or pooler endpoints.
+
+## Check the connection
+
+This shell function runs SQL from standard input inside a Splunk pod.
+It uses only the mounted files and the bundled client.
+The bundled `psql` needs `LD_LIBRARY_PATH=/opt/splunk/lib`.
+The first argument is the role, `rw` or `admin`.
+Use `admin` only when `includeAdmin` is true.
+The second argument is the database name.
+It is optional, and the default is `sidecardb`.
+
+```bash
+# Search head cluster members are named splunk-<name>-search-head-<n>.
+POD=splunk-sidecar-search-standalone-0
+probe() {
+  kubectl exec -i -n splunk "$POD" -c splunk -- sh -c '
+    R=/opt/splunk/var/run/supervisor/postgresok D=/opt/splunk/var/run/supervisor/postgresok/$2
+    if [ "$1" = admin ]; then U=ADMIN_USER_NAME; else U=RW_USER_NAME; fi
+    LD_LIBRARY_PATH=/opt/splunk/lib PGSSLMODE=verify-full PGSSLROOTCERT="$R/$2-ca.crt" \
+    PGHOST="$(cat "$D/CLUSTER_RW_ENDPOINT")" PGPORT="$(cat "$D/DEFAULT_CLUSTER_PORT")" \
+    PGDATABASE="$(cat "$D/DATABASE_NAME")" PGUSER="$(cat "$D/$U")" PGPASSWORD="$(cat "$R/$2-$1")" \
+    /opt/splunk/bin/psql -X -w -At -v ON_ERROR_STOP=1' sh "$1" "${2:-sidecardb}"
+}
+echo 'SELECT current_database(), current_user;
+SELECT ssl, version FROM pg_stat_ssl WHERE pid = pg_backend_pid();' | probe rw
+```
+
+The expected output is `sidecardb|sidecardb_rw`, then `t|TLSv1.2` or `t|TLSv1.3`.
+A certificate or hostname error is a failed check.
+Do not disable verification. Fix the mount or the endpoint.
+
+## Sidecar configuration
 
 The operator keeps the legacy embedded PostgreSQL sidecar disabled through `SPLUNK_NODE_SIDECAR_POSTGRES_DISABLED=true`.
 Keep that database process disabled when the consumer uses managed PostgreSQL.
