@@ -31,6 +31,7 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
+	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -229,7 +230,12 @@ func applyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 	}
 
 	// create or update statefulset
-	statefulSet, err := getMonitoringConsoleStatefulSet(ctx, client, cr)
+	defaultsConfigMap, err := configworkflow.EnsureKVServiceDefaults(ctx, client, cr, splcommon.SplunkMonitoringConsole)
+	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure KVService defaults")
+		return result, err
+	}
+	statefulSet, err := getMonitoringConsoleStatefulSet(ctx, client, cr, defaultsConfigMap.AsStatefulSetOption())
 	if err != nil {
 		eventPublisher.Warning(ctx, splcommon.EventReasonStatefulSetFailed, fmt.Sprintf("Failed to get monitoring console statefulset for %s — check operator logs", cr.GetName()))
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
@@ -258,6 +264,7 @@ func applyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
 		return result, err
 	}
+	configworkflow.GarbageCollectConfigMaps(ctx, client, cr, defaultsConfigMap.Name, statefulSet.Spec.Selector)
 	setPhaseAndConditions(phase, "")
 
 	// no need to requeue if everything is ready
@@ -273,13 +280,13 @@ func applyMonitoringConsole(ctx context.Context, client splcommon.ControllerClie
 }
 
 // getMonitoringConsoleStatefulSet returns the desired MonitoringConsole StatefulSet.
-func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole) (*appsv1.StatefulSet, error) {
+func getMonitoringConsoleStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.MonitoringConsole, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
 	// get generic statefulset for Splunk Enterprise objects
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(splcommon.SplunkMonitoringConsole, cr.GetName(), cr.GetNamespace(), 1)))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
-	statefulSet, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkMonitoringConsole, 1, []corev1.EnvVar{})
+	statefulSet, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkMonitoringConsole, 1, []corev1.EnvVar{}, opts...)
 	if err != nil {
 		return nil, err
 	}

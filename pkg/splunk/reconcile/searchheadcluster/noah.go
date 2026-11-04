@@ -199,12 +199,12 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	pass4SymmKey := string(runtime.Credential())
 
 	owner := splcommon.AsOwner(cr, true)
-	// Dictionary format matches the Noah indexer path (noah_indexer.go) and
-	// splunk-ansible's Noah pre-auth role, which reads splunk.conf.server.
-	// content.noahService as a mapping. The credential entry below targets the
-	// same path; splunk-ansible's own defaults loader deep-merges the two
-	// files' nested maps, so the structural and credential fields union into
-	// one [noahService] stanza before Ansible ever runs.
+	// Keep dictionary-format defaults and credentials for the existing Noah image.
+	// Noah and KVService stanzas share system/local/server.conf.
+	kvEntries, err := configworkflow.ResolveKVServiceClientConfig(ctx, client, cr, splcommon.SplunkSearchHead)
+	if err != nil {
+		return enterpriseApi.PhaseError, deployerPhase, nil, err
+	}
 	credentialsSecret, err := configworkflow.EnsureSecret(ctx, client, cr, splunkconfig.NoahCredentialsConf(pass4SymmKey), nil, &owner, resources.WithDictionaryConf())
 	if err != nil {
 		return enterpriseApi.PhaseError, deployerPhase, nil, fmt.Errorf("ensure Noah SearchHeadCluster credentials: %w", err)
@@ -212,7 +212,7 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 
 	identityOption := resources.WithNoahPodIdentity(os.Getenv(resources.ClusterDomainEnvName))
 
-	searchHeadConfigMap, err := ensureNoahSearchHeadDefaults(ctx, client, cr, noahSpec, &owner)
+	searchHeadConfigMap, err := ensureNoahSearchHeadDefaults(ctx, client, cr, noahSpec, &owner, kvEntries...)
 	if err != nil {
 		return enterpriseApi.PhaseError, deployerPhase, nil, fmt.Errorf("ensure Noah search-head defaults: %w", err)
 	}
@@ -288,6 +288,10 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	return searchHeadPhase, deployerPhase, searchHeadStatefulSet, nil
 }
 
-func ensureNoahSearchHeadDefaults(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, noahSpec enterpriseApi.NoahClusterSpec, owner *metav1.OwnerReference) (resources.DefaultsConfigMap, error) {
-	return configworkflow.EnsureConfigMap(ctx, client, cr, splunkconfig.NoahSearchHeadConf(noahSpec.Endpoint, noahSpec.Tenant), owner, resources.WithDictionaryConf())
+func ensureNoahSearchHeadDefaults(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, noahSpec enterpriseApi.NoahClusterSpec, owner *metav1.OwnerReference, kvEntries ...splcommon.ConfFileEntry) (resources.DefaultsConfigMap, error) {
+	entries, err := splunkconfig.MergeConfEntries(append(splunkconfig.NoahSearchHeadConf(noahSpec.Endpoint, noahSpec.Tenant), kvEntries...)...)
+	if err != nil {
+		return resources.DefaultsConfigMap{}, fmt.Errorf("merge Noah and KVService configuration: %w", err)
+	}
+	return configworkflow.EnsureConfigMap(ctx, client, cr, entries, owner, resources.WithDictionaryConf())
 }

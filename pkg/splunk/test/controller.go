@@ -94,6 +94,8 @@ func coreObjectCopier(dst, src *client.Object) bool {
 	srcP := *src
 	if reflect.TypeOf(dstP).String() == reflect.TypeOf(*src).String() {
 		switch (srcP).(type) {
+		case *corev1.Namespace:
+			*dstP.(*corev1.Namespace) = *srcP.(*corev1.Namespace)
 		case *corev1.ConfigMap:
 			*dstP.(*corev1.ConfigMap) = *srcP.(*corev1.ConfigMap)
 		case *corev1.Secret:
@@ -400,7 +402,7 @@ func (c MockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Ob
 		// Determine group based on type
 		var group, version string
 		switch obj.(type) {
-		case *corev1.Pod, *corev1.Service, *corev1.ConfigMap, *corev1.Secret:
+		case *corev1.Namespace, *corev1.Pod, *corev1.Service, *corev1.ConfigMap, *corev1.Secret:
 			group, version = "", "v1"
 		case *appsv1.StatefulSet, *appsv1.Deployment:
 			group, version = "apps", "v1"
@@ -647,6 +649,15 @@ func (c *MockClient) SubResource(subResource string) client.SubResourceClient {
 	return &src
 }
 
+// NewMockClientWithNamespaces seeds the namespaces required by workload configuration reads.
+func NewMockClientWithNamespaces(names ...string) *MockClient {
+	c := NewMockClient()
+	for _, name := range names {
+		c.AddObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}})
+	}
+	return c
+}
+
 // NewMockClient is used to create and initialize a new mock client
 func NewMockClient() *MockClient {
 	c := MockClient{
@@ -772,10 +783,27 @@ func testReconcileForResource(t *testing.T, c *MockClient, methodPlus string, re
 		c.Create(context.Background(), cr)
 	}
 
+	// Workload resources require an existing namespace in Kubernetes.
+	if object, ok := resource.(splcommon.MetaObject); ok && object.GetNamespace() != "" {
+		c.AddObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: object.GetNamespace()}})
+	}
 	c.ResetCalls()
 	err := reconcile(c, resource)
 	if err != nil {
 		t.Errorf("%s returned %v; want nil", methodPlus, err)
+	}
+	// Namespace discovery is covered by dedicated client-configuration tests.
+	// Preserve these legacy assertions for the remaining resource operations.
+	gets := c.Calls["Get"][:0]
+	for _, call := range c.Calls["Get"] {
+		if _, namespaceRead := call.Obj.(*corev1.Namespace); !namespaceRead {
+			gets = append(gets, call)
+		}
+	}
+	if len(gets) > 0 {
+		c.Calls["Get"] = gets
+	} else {
+		delete(c.Calls, "Get")
 	}
 	c.CheckCalls(t, methodPlus, calls)
 }

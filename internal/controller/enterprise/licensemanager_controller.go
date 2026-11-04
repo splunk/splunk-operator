@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -61,7 +62,7 @@ type LicenseManagerReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list
+//+kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -94,6 +95,9 @@ func (r *LicenseManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.PodChangedPredicate(),
 			common.CrdChangedPredicate(),
 		)).
+		Watches(&corev1.Namespace{},
+			handler.EnqueueRequestsFromMapFunc(kvServiceNamespaceMapper(mgr.GetClient(), &enterpriseApi.LicenseManagerList{})),
+			builder.WithPredicates(common.KVServiceNamespaceChangedPredicate())).
 		Watches(&appsv1.StatefulSet{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),

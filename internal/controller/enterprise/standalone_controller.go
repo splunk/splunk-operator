@@ -27,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -87,6 +88,9 @@ func (r *StandaloneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.PodChangedPredicate(),
 			common.CrdChangedPredicate(),
 		)).
+		Watches(&corev1.Namespace{},
+			handler.EnqueueRequestsFromMapFunc(kvServiceNamespaceMapper(mgr.GetClient(), &enterpriseApi.StandaloneList{})),
+			builder.WithPredicates(common.KVServiceNamespaceChangedPredicate())).
 		Watches(&appsv1.StatefulSet{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),

@@ -62,6 +62,7 @@ Packages may also import the CRD types they operate on from `api/<group>/<versio
 | `resources/` | K8s object builders (pure functions) | `common/`, `util/` |
 | `k8sops/` | K8s API CRUD, diff/merge, finalizers | `common/`, `util/`, `resources/` |
 | `workflow/<domain>/` | Multi-step stateful workflows and shared dependency resolution | `common/`, `util/`, `client/`, `resources/` |
+| `workflow/config/` | Configuration dependency resolution and defaults delivery | `common/`, `util/`, `client/`, `resources/`, `k8sops/`, `splunkconfig/` |
 | `reconcile/` | Reconciliation policy shared by multiple CRDs | `common/`, `util/`, `resources/`, `k8sops/`, `client/`, `workflow/` |
 | `reconcile/<cr>/` | Per-CR orchestration loop | `common/`, `util/`, `resources/`, `k8sops/`, `client/`, `workflow/` |
 
@@ -99,7 +100,9 @@ CRD types.
 
 `workflow/config` owns shared Kubernetes-backed configuration dependency
 resolution, including resolving a same-namespace NoahCluster and its credential
-Secret. It may validate connection inputs and construct an authenticated client
+Secret. It also resolves namespace-selected KVService client settings and delivers
+the generated entries through immutable defaults ConfigMaps. It may validate
+connection inputs and construct an authenticated client
 without making a Noah network request.
 
 The resolved credential remains sensitive even when returned as a defensive

@@ -319,7 +319,12 @@ func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 	}
 
 	// create or update statefulset
-	statefulSet, err := GetStandaloneStatefulSet(ctx, client, cr)
+	defaultsConfigMap, err := configworkflow.EnsureKVServiceDefaults(ctx, client, cr, splcommon.SplunkStandalone)
+	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure KVService defaults")
+		return result, err
+	}
+	statefulSet, err := GetStandaloneStatefulSet(ctx, client, cr, defaultsConfigMap.AsStatefulSetOption())
 	if errors.Is(err, configworkflow.ErrPostgresDatabasePending) {
 		setPhaseAndConditions(enterpriseApi.PhasePending, err.Error())
 		return result, nil
@@ -349,6 +354,7 @@ func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update pods")
 		return result, err
 	}
+	configworkflow.GarbageCollectConfigMaps(ctx, client, cr, defaultsConfigMap.Name, statefulSet.Spec.Selector)
 	setPhaseAndConditions(phase, "")
 
 	// Emit scale events when phase is ready and ready replicas changed to match desired
@@ -414,13 +420,13 @@ func applyStandalone(ctx context.Context, client splcommon.ControllerClient, cr 
 }
 
 // getStandaloneStatefulSet returns a Kubernetes StatefulSet object for Splunk Enterprise standalone instances.
-func GetStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone) (*appsv1.StatefulSet, error) {
+func GetStandaloneStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.Standalone, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(splcommon.SplunkStandalone, cr.GetName(), cr.GetNamespace(), cr.Spec.Replicas)))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
 	// get generic statefulset for Splunk Enterprise objects
-	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{})
+	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkStandalone, cr.Spec.Replicas, []corev1.EnvVar{}, opts...)
 	if err != nil {
 		return nil, err
 	}

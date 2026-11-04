@@ -32,6 +32,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	reconciletest "github.com/splunk/splunk-operator/pkg/splunk/test/reconcile"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
@@ -123,6 +124,13 @@ func TestApplyClusterMaster(t *testing.T) {
 		{ListOpts: listOpts}}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[9], funcCalls[11], funcCalls[6]}, "List": {listmockCall[0]}, "Update": {funcCalls[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[6]}, "List": {listmockCall[0]}}
+	// Cleanup now lists the defaults maps owned by this CR after applying its StatefulSet.
+	gcListCall := spltest.MockFuncCall{ListOpts: []runtime.ListOption{
+		runtime.InNamespace("test"),
+		runtime.MatchingLabels{resources.LabelCRKind: "ClusterMaster", resources.LabelCRName: "stack1"},
+	}}
+	createCalls["List"] = append(createCalls["List"], gcListCall)
+	updateCalls["List"] = append(updateCalls["List"], gcListCall)
 
 	current := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -144,6 +152,7 @@ func TestApplyClusterMaster(t *testing.T) {
 		_, err := ApplyClusterMaster(ctx, c, cr.(*enterpriseApiV3.ClusterMaster))
 		return err
 	}
+	reconciletest.ExpectLocalKVStoreDefaultsCalls(t, &current, createCalls, updateCalls)
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterMaster", &current, revised, createCalls, updateCalls, reconcile, true)
 
 	// test deletion
@@ -168,7 +177,7 @@ func TestGetClusterMasterStatefulSet(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
@@ -245,7 +254,7 @@ func TestClusterMasterSpecNotCreatedWithoutGeneralTerms(t *testing.T) {
 	}
 
 	// Create a mock client
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Attempt to apply the cluster master spec
 	_, err := ApplyClusterMaster(ctx, c, &cm)
@@ -344,6 +353,13 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		{ListOpts: listOpts}}
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[7], funcCalls[8], funcCalls[9], funcCalls[13], funcCalls[15]}, "List": {listmockCall[0], listmockCall[0]}, "Update": {funcCalls[0], funcCalls[3], funcCalls[16]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[10]}, "List": {listmockCall[0]}}
+	// Cleanup now lists the defaults maps owned by this CR after applying its StatefulSet.
+	gcListCall := spltest.MockFuncCall{ListOpts: []runtime.ListOption{
+		runtime.InNamespace("test"),
+		runtime.MatchingLabels{resources.LabelCRKind: "ClusterMaster", resources.LabelCRName: "stack1"},
+	}}
+	createCalls["List"] = append(createCalls["List"], gcListCall)
+	updateCalls["List"] = append(updateCalls["List"], gcListCall)
 
 	current := enterpriseApiV3.ClusterMaster{
 		TypeMeta: metav1.TypeMeta{
@@ -379,7 +395,7 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 			},
 		},
 	}
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Mock some functions for unit tests
 	savedAddTelApp := telapp.AddTelApp
@@ -443,6 +459,8 @@ func TestApplyClusterMasterWithSmartstore(t *testing.T) {
 		},
 	}
 
+	localDefaults := reconciletest.ExpectLocalKVStoreDefaultsCalls(t, &current, createCalls, updateCalls)
+	localDefaults.AsStatefulSetOption()(ss)
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterMasterWithSmartstore-0", &current, revised, createCalls, updateCalls, reconcile, true, secret, &smartstoreConfigMap, ss, pod)
 
 	current.Kind = "ClusterMaster"
@@ -535,7 +553,7 @@ func TestAppFrameworkApplyClusterMasterShouldNotFail(t *testing.T) {
 		return remoteDataListResponse, nil
 	}
 
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
@@ -607,7 +625,7 @@ func TestApplyCLusterMasterDeletion(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
@@ -1039,7 +1057,7 @@ func TestClusterMasterWitReadyState(t *testing.T) {
 	utilruntime.Must(enterpriseApi.AddToScheme(sch))
 	utilruntime.Must(enterpriseApiV3.AddToScheme(sch))
 
-	builder := spltest.NewFakeClientBuilder(sch).
+	builder := spltest.NewFakeClientBuilder(sch).WithObjects(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}).
 		WithStatusSubresource(&enterpriseApi.LicenseManager{}).
 		WithStatusSubresource(&enterpriseApi.ClusterManager{}).
 		WithStatusSubresource(&enterpriseApi.Standalone{}).

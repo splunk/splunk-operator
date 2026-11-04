@@ -15,6 +15,8 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
 - [Custom Resource Guide](#custom-resource-guide)
   - [Metadata Parameters](#metadata-parameters)
   - [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
+    - [KV Store Default Type](#kv-store-default-type)
+    - [Namespace KVService configuration](#namespace-kvservice-configuration)
   - [Common Spec Parameters for Splunk Enterprise Resources](#common-spec-parameters-for-splunk-enterprise-resources)
   - [LicenseManager Resource Spec Parameters](#licensemanager-resource-spec-parameters)
   - [Standalone Resource Spec Parameters](#standalone-resource-spec-parameters)
@@ -144,16 +146,24 @@ spec:
 
 ### KV Store Default Type
 
-SOK configures Splunk Enterprise pods to use local KV Store by default by injecting `SPLUNK_KVSTORE_DEFAULT_TYPE=local` into managed pods, except for `IngestorCluster`. Splunk Ansible consumes this variable and writes `[kvstore] defaultKVStoreType` to `server.conf`. This setting requires Splunk Enterprise 10.6.0 or later.
+SOK writes `defaultKVStoreType` in `$SPLUNK_HOME/etc/system/local/server.conf` for supported
+Enterprise consumers: `external` when the workload Namespace enables KVService,
+and `local` otherwise. Disabled KVService consumers also receive
+`postgresMigrateOnStartup = false`. IngestorCluster and SHC deployers do not
+receive these client defaults.
 
-The only supported value is `local`. If the variable is set in `spec.extraEnv`, it must use the same value:
+KVService client settings are delivered through generated defaults. SOK does not
+inject KVService client environment variables or reserve their names in
+`spec.extraEnv`; normal environment variable uniqueness validation still applies.
 
-```yaml
-spec:
-  extraEnv:
-    - name: SPLUNK_KVSTORE_DEFAULT_TYPE
-      value: "local"
-```
+For external KVService configuration, see [Namespace KVService configuration](#namespace-kvservice-configuration).
+
+### Namespace KVService configuration
+
+For namespace enablement and tenant labels, see
+[KV Service tenant labels](KVServiceTenantLabels.md). For the address annotation,
+supported workloads, and client behavior, see
+[Enterprise client configuration](KVService.md#enterprise-client-configuration).
 
 ## Common Spec Parameters for Splunk Enterprise Resources
 

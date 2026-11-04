@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -34,6 +35,7 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	reconciletest "github.com/splunk/splunk-operator/pkg/splunk/test/reconcile"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
@@ -137,6 +139,13 @@ func TestApplyStandalone(t *testing.T) {
 
 	createCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Create": {funcCalls[0], funcCalls[3], funcCalls[4], funcCalls[5], funcCalls[8], funcCalls[11], funcCalls[14]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": updateFuncCalls, "Update": {funcCalls[14]}, "List": {listmockCall[0]}}
+	// Cleanup now lists the defaults maps owned by this CR after applying its StatefulSet.
+	gcListCall := spltest.MockFuncCall{ListOpts: []client.ListOption{
+		client.InNamespace("test"),
+		client.MatchingLabels{resources.LabelCRKind: "Standalone", resources.LabelCRName: "stack1"},
+	}}
+	createCalls["List"] = append(createCalls["List"], gcListCall)
+	updateCalls["List"] = append(updateCalls["List"], gcListCall)
 	current := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Standalone",
@@ -152,6 +161,7 @@ func TestApplyStandalone(t *testing.T) {
 		_, err := ApplyStandalone(context.Background(), c, cr.(*enterpriseApi.Standalone))
 		return err
 	}
+	reconciletest.ExpectLocalKVStoreDefaultsCalls(t, &current, createCalls, updateCalls)
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandalone", &current, revised, createCalls, updateCalls, reconcileFn, true)
 
 	// test deletion
@@ -166,7 +176,7 @@ func TestApplyStandalone(t *testing.T) {
 
 	// Negative testing: spec validation failure is a terminal condition — returns nil (no requeue)
 	current.Spec.CommonSplunkSpec.LivenessInitialDelaySeconds = -1
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	ctx := context.TODO()
 	_ = errors.New(splcommon.Rerr)
 	_, err := ApplyStandalone(ctx, c, &current)
@@ -327,6 +337,13 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 
 	createCalls := map[string][]spltest.MockFuncCall{"Get": createFuncCalls, "Create": {funcCalls[2], funcCalls[6], funcCalls[7], funcCalls[8], funcCalls[10], funcCalls[12], funcCalls[15]}, "Update": {funcCalls[0]}, "List": {listmockCall[0]}}
 	updateCalls := map[string][]spltest.MockFuncCall{"Get": funcCalls, "Update": {funcCalls[9]}, "List": {listmockCall[0]}}
+	// Cleanup now lists the defaults maps owned by this CR after applying its StatefulSet.
+	gcListCall := spltest.MockFuncCall{ListOpts: []client.ListOption{
+		client.InNamespace("test"),
+		client.MatchingLabels{resources.LabelCRKind: "Standalone", resources.LabelCRName: "stack1"},
+	}}
+	createCalls["List"] = append(createCalls["List"], gcListCall)
+	updateCalls["List"] = append(updateCalls["List"], gcListCall)
 
 	current := enterpriseApi.Standalone{
 		TypeMeta: metav1.TypeMeta{
@@ -360,7 +377,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		},
 	}
 
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Without S3 keys, ApplyStandalone should fail
 	_, err := ApplyStandalone(context.Background(), client, &current)
@@ -387,6 +404,7 @@ func TestApplyStandaloneWithSmartstore(t *testing.T) {
 		_, err := ApplyStandalone(context.Background(), c, cr.(*enterpriseApi.Standalone))
 		return err
 	}
+	reconciletest.ExpectLocalKVStoreDefaultsCalls(t, &current, createCalls, updateCalls)
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyStandaloneWithSmartstore", &current, revised, createCalls, updateCalls, reconcile, true, secret)
 }
 
@@ -401,7 +419,7 @@ func TestGetStandaloneStatefulSet(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Errorf("Failed to create namespace scoped object")
@@ -490,7 +508,7 @@ func TestGetStandaloneStatefulSetPodAnnotationsOverrideIstioDefaults(t *testing.
 		"custom.splunk.com/parent":                    "overridden-by-pod-annotations",
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Fatalf("Failed to create namespace scoped object: %v", err)
@@ -531,7 +549,7 @@ func TestGetStandaloneStatefulSetPodAnnotationsPreserveIstioDefaults(t *testing.
 		"custom.splunk.com/pod": "from-pod-annotations",
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	if err != nil {
 		t.Fatalf("Failed to create namespace scoped object: %v", err)
@@ -612,7 +630,7 @@ func TestApplyStandaloneSmartstoreKeyChangeDetection(t *testing.T) {
 			},
 		},
 	}
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Create namespace scoped secret
 	secret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
@@ -690,7 +708,7 @@ func TestAppFrameworkApplyStandaloneShouldNotFail(t *testing.T) {
 		},
 	}
 
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
@@ -761,7 +779,7 @@ func TestAppFrameworkApplyStandaloneScalingUpShouldNotFail(t *testing.T) {
 		},
 	}
 
-	client := spltest.NewMockClient()
+	client := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Create namespace scoped secret
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, "test")
@@ -850,7 +868,7 @@ func TestApplyStandaloneDeletion(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 
 	// Create S3 secret
 	s3Secret := spltest.GetMockS3SecretKeys("s3-secret")
@@ -1442,7 +1460,7 @@ func TestConfigMapVolAnnotationStamped(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	require.NoError(t, err)
 
@@ -1487,7 +1505,7 @@ func TestConfigMapVolAnnotationAbsentWhenNoVolumes(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	require.NoError(t, err)
 
@@ -1546,7 +1564,7 @@ func TestConfigMapVolAnnotationMultipleVolumes(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	require.NoError(t, err)
 
@@ -1610,7 +1628,7 @@ func TestProjectedConfigMapAnnotationLongVolName(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	require.NoError(t, err)
 
@@ -1668,7 +1686,7 @@ func TestConfigMapVolAnnotationOptOut(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	require.NoError(t, err)
 
@@ -1724,7 +1742,7 @@ func TestConfigMapVolAnnotationOptOutProjected(t *testing.T) {
 		},
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	_, err := splutil.ApplyNamespaceScopedSecretObject(ctx, c, "test")
 	require.NoError(t, err)
 
@@ -2037,7 +2055,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 		}
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	c.ListObj = &pvclist
 	var err error
 	deleted, err := delete(cr, c)
@@ -2115,7 +2133,11 @@ func newFakeClientBuilder(scheme *runtime.Scheme) *fake.ClientBuilder {
 	// The controller-runtime v0.24 fake client defaults to a managed-fields
 	// tracker, which rejects the uint64 fields used by Splunk CR specs.
 	return fake.NewClientBuilder().
-		WithScheme(scheme).
+		WithScheme(scheme).WithObjects(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "shc-namespace"}},
+	).
 		WithObjectTracker(clienttesting.NewObjectTracker(
 			scheme,
 			serializer.NewCodecFactory(scheme).UniversalDecoder(),

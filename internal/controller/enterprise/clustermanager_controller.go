@@ -95,6 +95,9 @@ func (r *ClusterManagerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.CrdChangedPredicate(),
 			common.NodeConditionChangedPredicate(),
 		)).
+		Watches(&corev1.Namespace{},
+			handler.EnqueueRequestsFromMapFunc(kvServiceNamespaceMapper(mgr.GetClient(), &enterpriseApi.ClusterManagerList{})),
+			builder.WithPredicates(common.KVServiceNamespaceChangedPredicate())).
 		Watches(&appsv1.StatefulSet{},
 			handler.EnqueueRequestForOwner(
 				mgr.GetScheme(),

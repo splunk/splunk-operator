@@ -144,7 +144,7 @@ func splunkDeletionTester(t *testing.T, cr splcommon.MetaObject, delete func(spl
 		}}
 	}
 
-	c := spltest.NewMockClient()
+	c := spltest.NewMockClientWithNamespaces("test", "default")
 	c.ListObj = &pvclist
 	deleted, err := delete(cr, c)
 	if deleted != wantDeleted || err != nil {
@@ -158,7 +158,11 @@ func newFakeClientBuilder(scheme *runtime.Scheme) *fake.ClientBuilder {
 	// The controller-runtime v0.24 fake client defaults to a managed-fields
 	// tracker, which rejects the uint64 fields used by Splunk CR specs.
 	return fake.NewClientBuilder().
-		WithScheme(scheme).
+		WithScheme(scheme).WithObjects(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "shc-namespace"}},
+	).
 		WithObjectTracker(clienttesting.NewObjectTracker(
 			scheme,
 			serializer.NewCodecFactory(scheme).UniversalDecoder(),

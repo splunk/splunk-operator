@@ -32,6 +32,7 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
+	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -169,7 +170,11 @@ func applyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	}
 
 	// create or update statefulset
-	statefulSet, err := getLicenseMasterStatefulSet(ctx, client, cr)
+	defaultsConfigMap, err := configworkflow.EnsureKVServiceDefaults(ctx, client, cr, splcommon.SplunkLicenseMaster)
+	if err != nil {
+		return result, err
+	}
+	statefulSet, err := getLicenseMasterStatefulSet(ctx, client, cr, defaultsConfigMap.AsStatefulSetOption())
 	if err != nil {
 		return result, err
 	}
@@ -185,6 +190,7 @@ func applyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 	if err != nil {
 		return result, err
 	}
+	configworkflow.GarbageCollectConfigMaps(ctx, client, cr, defaultsConfigMap.Name, statefulSet.Spec.Selector)
 	cr.Status.Phase = phase
 
 	if cr.Spec.MonitoringConsoleRef.Name != "" {
@@ -227,12 +233,12 @@ func applyLicenseMaster(ctx context.Context, client splcommon.ControllerClient, 
 }
 
 // getLicenseMasterStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license master.
-func getLicenseMasterStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApiV3.LicenseMaster) (*appsv1.StatefulSet, error) {
+func getLicenseMasterStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApiV3.LicenseMaster, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
 	certMounts, err := certs.ReconcileCerts(ctx, client, cr, reconcileutil.ToCertEntries(cr.Spec.Certs, certs.AutoDNSNames(splcommon.SplunkLicenseMaster, cr.GetName(), cr.GetNamespace(), 1)))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile certs: %w", err)
 	}
-	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkLicenseMaster, 1, []corev1.EnvVar{})
+	ss, err := k8sops.GetSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, splcommon.SplunkLicenseMaster, 1, []corev1.EnvVar{}, opts...)
 	if err != nil {
 		return ss, err
 	}
