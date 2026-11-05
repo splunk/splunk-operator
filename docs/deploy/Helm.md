@@ -63,6 +63,10 @@ Set gates under `splunkOperator.featureGates`. The chart also honours a `FEATURE
 
 For namespace-mode installs (`splunkOperator.clusterWideAccess=false`), the chart appends the Helm release namespace to each webhook configuration name. Each configuration selects that namespace and points to the webhook Service for that install, so multiple namespace-mode releases can coexist and be managed independently. For cluster-wide installs, names have no namespace suffix. Cluster-wide installs with `splunkOperator.watchNamespaces` set only match the listed namespaces; otherwise they match every namespace. Kubernetes doesn't apply a `namespaceSelector` to cluster-scoped resources, so writes to any cluster-scoped resource in a webhook's rules are always sent to it, whatever the operator watches.
 
+In namespace mode, install into the operator namespace with `--namespace`.
+`namespaceOverride` must be empty or match that release namespace; a different
+value is rejected because the watch and admission scopes use the release namespace.
+
 #### Turning off cross-version field protection
 
 Set the gate to `false`:

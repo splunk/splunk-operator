@@ -24,6 +24,10 @@ SPLUNK_GENERAL_TERMS ?= ""
 # NAMESPACE defines default namespace where operator will be installed
 NAMESPACE ?= "splunk-operator"
 
+# Metrics authorization namespace for host-local make run. Deployed Pods use
+# their own namespace from the Downward API.
+POD_NAMESPACE ?= $(NAMESPACE)
+
 # MANAGER_EXTRA_ARG allows passing a single additional flag to the operator manager container.
 # Example: make deploy IMG=... MANAGER_EXTRA_ARG="--feature-gates=PostgresController=true"
 MANAGER_EXTRA_ARG ?= ""
@@ -219,7 +223,7 @@ build: setup/ginkgo manifests generate fmt vet ## Build manager binary.
 	GOFIPS140=v1.0.0 go build -o bin/manager cmd/main.go
 
 run: manifests generate fmt vet ## Run a controller from your host.
-	FEATURE_GATES=${FEATURE_GATES} go run ./cmd/main.go
+	POD_NAMESPACE=${POD_NAMESPACE} FEATURE_GATES=${FEATURE_GATES} go run ./cmd/main.go
 
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}

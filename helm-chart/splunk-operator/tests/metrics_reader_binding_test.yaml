@@ -1,0 +1,101 @@
+suite: operator metrics reader binding
+templates:
+  - templates/rbac/metrics_reader_role_binding.yaml
+tests:
+  - it: should not bind a metrics reader by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should bind configured readers only in the operator namespace even in cluster-wide mode
+    release:
+      namespace: operator-ns
+    set:
+      splunkOperator.clusterWideAccess: true
+      splunkOperator.metrics.readerServiceAccounts:
+        - name: prometheus
+          namespace: monitoring
+        - name: live-check
+          namespace: observability
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: RoleBinding
+      - equal:
+          path: metadata.namespace
+          value: operator-ns
+      - equal:
+          path: roleRef.kind
+          value: ClusterRole
+      - equal:
+          path: roleRef.name
+          value: splunk-operator-metrics-reader
+      - equal:
+          path: subjects[0]
+          value:
+            kind: ServiceAccount
+            name: prometheus
+            namespace: monitoring
+      - equal:
+          path: subjects[1]
+          value:
+            kind: ServiceAccount
+            name: live-check
+            namespace: observability
+
+  - it: should bind configured reader service accounts via a RoleBinding in namespace mode
+    release:
+      namespace: operator-ns
+    set:
+      splunkOperator.clusterWideAccess: false
+      splunkOperator.metrics.readerServiceAccounts:
+        - name: prometheus
+          namespace: monitoring
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: RoleBinding
+      - equal:
+          path: metadata.namespace
+          value: operator-ns
+      - equal:
+          path: roleRef.kind
+          value: Role
+      - equal:
+          path: roleRef.name
+          value: splunk-operator-metrics-reader
+      - equal:
+          path: subjects[0]
+          value:
+            kind: ServiceAccount
+            name: prometheus
+            namespace: monitoring
+
+  - it: should bind readers in the overridden operator namespace in cluster-wide mode
+    release:
+      namespace: release-ns
+    set:
+      namespaceOverride: operator-ns
+      splunkOperator.clusterWideAccess: true
+      splunkOperator.metrics.readerServiceAccounts:
+        - name: prometheus
+          namespace: monitoring
+    asserts:
+      - isKind:
+          of: RoleBinding
+      - equal:
+          path: metadata.namespace
+          value: operator-ns
+      - equal:
+          path: roleRef.kind
+          value: ClusterRole
+
+  - it: should require a reader service account namespace
+    set:
+      splunkOperator.metrics.readerServiceAccounts:
+        - name: prometheus
+    asserts:
+      - failedTemplate:
+          errorPattern: "splunkOperator.metrics.readerServiceAccounts\\[\\].namespace is required"

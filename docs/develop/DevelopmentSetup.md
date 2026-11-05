@@ -149,6 +149,14 @@ make run
 
 This uses your current kubeconfig context (`~/.kube/config`).
 
+`make run` supplies `POD_NAMESPACE` from `NAMESPACE` (default `splunk-operator`)
+as the local process's metrics authorization namespace. Override it with
+`make run NAMESPACE=operator-a` or `make run POD_NAMESPACE=operator-a`.
+Reader grants must cover that namespace; `WATCH_NAMESPACE` independently selects
+the namespaces reconciled by the operator. See [metrics authentication](../operate/OperatorMetrics.md)
+for reader grants, review permissions and HTTPS setup. In-cluster Pods still
+require `POD_NAMESPACE` from the Downward API; an unset value prevents startup.
+
 ## Environment Variables
 
 Key variables used during development and testing:
@@ -156,6 +164,7 @@ Key variables used during development and testing:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NAMESPACE` | `splunk-operator` | Target namespace |
+| `POD_NAMESPACE` | `NAMESPACE` for `make run`; Downward API in Pods | Metrics authorization namespace |
 | `WATCH_NAMESPACE` | `""` (all) | Namespaces the operator watches |
 | `SPLUNK_ENTERPRISE_IMAGE` | See `.env` | Splunk Enterprise image |
 | `SPLUNK_GENERAL_TERMS` | `""` | Must be set to value in [README](../README.md#splunk-general-terms-acceptance) |

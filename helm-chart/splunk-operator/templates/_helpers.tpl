@@ -69,7 +69,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 Define namespace of release and allow for namespace override
 */}}
 {{- define "splunk-operator.namespace" -}}
-{{- default .Release.Namespace .Values.namespaceOverride }}
+{{- $namespace := default .Release.Namespace .Values.namespaceOverride -}}
+{{- if and (not .Values.splunkOperator.clusterWideAccess) (ne $namespace .Release.Namespace) -}}
+{{- fail "namespaceOverride must match the Helm release namespace when splunkOperator.clusterWideAccess is false; install with --namespace set to the operator namespace" -}}
+{{- end -}}
+{{- $namespace -}}
 {{- end }}
 
 {{/*

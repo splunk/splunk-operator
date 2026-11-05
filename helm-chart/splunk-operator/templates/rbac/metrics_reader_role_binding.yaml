@@ -1,0 +1,23 @@
+{{- with .Values.splunkOperator.metrics.readerServiceAccounts }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" $ }}-metrics-reader-binding
+  namespace: {{ include "splunk-operator.namespace" $ }}
+  labels:
+{{- include "splunk-operator.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  {{- if $.Values.splunkOperator.clusterWideAccess }}
+  kind: ClusterRole
+  {{- else }}
+  kind: Role
+  {{- end }}
+  name: {{ include "splunk-operator.operator.fullname" $ }}-metrics-reader
+subjects:
+{{- range . }}
+  - kind: ServiceAccount
+    name: {{ required "splunkOperator.metrics.readerServiceAccounts[].name is required" .name }}
+    namespace: {{ required "splunkOperator.metrics.readerServiceAccounts[].namespace is required" .namespace }}
+{{- end }}
+{{- end }}

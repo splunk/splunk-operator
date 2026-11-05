@@ -166,6 +166,9 @@ graph TD
   - Cloud provider index secrets (EKS/Azure/GCP), created from environment variables
   - License ConfigMap (only when `--license-file` is provided; without it, Splunk instances use trial license)
   - App download PVC wiring on the operator deployment; the helper retries update conflicts and skips duplicate `app-staging` volume and mount entries
+- With `--cluster-wide=false`, creates an operator per test namespace. Its
+  `POD_NAMESPACE` comes from the Downward API, as required for metrics startup;
+  `WATCH_NAMESPACE` separately selects the namespace it reconciles.
 - **Prerequisites validation (fail-fast):** `SetupTestCaseEnv` calls `ValidateTestPrerequisites` immediately after creating the namespace and deployment. This checks that (a) the test namespace exists and (b) the operator pod is `Running` and `Ready` in the correct namespace (`splunk-operator` for cluster-wide, or the test namespace otherwise). If either check fails, the test fails fast with a clear error before any long-running operations begin
 - Torn down via `testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)` — which handles failure detection, skip-teardown on failure, deployment cleanup, and namespace deletion in one call
 - **Cloud credential validation (fail-fast):** when `CLUSTER_PROVIDER` is `eks`, `azure`, or `gcp`, `TestCaseEnv` rejects missing provider credentials before creating an incomplete Kubernetes Secret. The setup error names the missing variable, so the spec stops before cloud API operations begin

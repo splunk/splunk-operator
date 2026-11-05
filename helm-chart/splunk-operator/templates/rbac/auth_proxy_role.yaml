@@ -1,26 +1,12 @@
-{{- if .Values.splunkOperator.clusterWideAccess }}
+{{- if or .Values.splunkOperator.clusterWideAccess .Values.splunkOperator.metrics.delegatedAuth.createClusterRBAC }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  {{- if .Values.splunkOperator.clusterWideAccess }}
   name: {{ include "splunk-operator.operator.fullname" . }}-proxy-role
-rules:
-- apiGroups:
-  - authentication.k8s.io
-  resources:
-  - tokenreviews
-  verbs:
-  - create
-- apiGroups:
-  - authorization.k8s.io
-  resources:
-  - subjectaccessreviews
-  verbs:
-  - create
-{{- else }}
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ include "splunk-operator.operator.fullname" . }}-proxy-role
+  {{- else }}
+  name: {{ include "splunk-operator.operator.fullname" . }}-{{ include "splunk-operator.namespace" . }}-proxy-role
+  {{- end }}
 rules:
 - apiGroups:
   - authentication.k8s.io
