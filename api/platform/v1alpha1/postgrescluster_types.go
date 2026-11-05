@@ -672,6 +672,12 @@ type PostgresBlueGreenUpgradeStatus struct {
 	// +optional
 	RearmedAt *metav1.Time `json:"rearmedAt,omitempty"`
 
+	// HistoryCompacted marks a cleaned attempt whose detailed cutover evidence
+	// has been replaced by the durable history summary. It is set only when
+	// the cluster status store compacts that attempt.
+	// +optional
+	HistoryCompacted bool `json:"historyCompacted,omitempty"`
+
 	// Blue is the source environment that is authoritative before endpoint
 	// commit.
 	// +optional
@@ -723,6 +729,12 @@ type PostgresBlueGreenUpgradeStatus struct {
 	// EndpointPreparation records green-endpoint validation before canonical commit.
 	// +optional
 	EndpointPreparation *BlueGreenEndpointPreparationStatus `json:"endpointPreparation,omitempty"`
+
+	// EndpointIntentRevision is monotonic for this attempt, including after
+	// cancellation clears a pending preparation intent.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	EndpointIntentRevision int64 `json:"endpointIntentRevision,omitempty"`
 
 	// EndpointPublication records database access ConfigMap publication after canonical commit.
 	// +optional
@@ -933,6 +945,10 @@ type BlueGreenCancellationStatus struct {
 type BlueGreenEndpointPreparationStatus struct {
 	Generation int64 `json:"generation"`
 
+	// EndpointFingerprint binds the intent to the complete green routing payload.
+	// +optional
+	EndpointFingerprint *string `json:"endpointFingerprint,omitempty"`
+
 	// +listType=map
 	// +listMapKey=postgresDatabaseName
 	// +listMapKey=postgresDatabaseUID
@@ -950,6 +966,11 @@ type BlueGreenEndpointPreparationAcknowledgementStatus struct {
 	// +kubebuilder:validation:MinLength=1
 	PostgresDatabaseUID string `json:"postgresDatabaseUID"`
 
+	// PostgresDatabaseGeneration invalidates a proof after a child spec change.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	PostgresDatabaseGeneration int64 `json:"postgresDatabaseGeneration,omitempty"`
+
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	DatabaseName string `json:"databaseName"`
@@ -964,6 +985,10 @@ type BlueGreenEndpointPreparationAcknowledgementStatus struct {
 // BlueGreenEndpointPublicationStatus records post-commit ConfigMap publication.
 type BlueGreenEndpointPublicationStatus struct {
 	Generation int64 `json:"generation"`
+
+	// EndpointFingerprint is copied from the prepared green routing payload.
+	// +optional
+	EndpointFingerprint *string `json:"endpointFingerprint,omitempty"`
 
 	// Acknowledgements records one post-commit ConfigMap publication per database.
 	// +listType=map
@@ -983,6 +1008,11 @@ type BlueGreenEndpointPublicationAcknowledgementStatus struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	PostgresDatabaseUID string `json:"postgresDatabaseUID"`
+
+	// PostgresDatabaseGeneration invalidates a proof after a child spec change.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	PostgresDatabaseGeneration int64 `json:"postgresDatabaseGeneration,omitempty"`
 
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1

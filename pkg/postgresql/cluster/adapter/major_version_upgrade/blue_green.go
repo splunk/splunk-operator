@@ -271,9 +271,10 @@ func compactedBlueGreenHistoryEntry(entry platformv1alpha1.PostgresMajorUpgradeS
 		Failure:     failure,
 	}
 	current.BlueGreen = &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
-		AttemptID: blueGreen.AttemptID,
-		RearmedAt: blueGreen.RearmedAt.DeepCopy(),
-		Cleanup:   cleanup,
+		AttemptID:        blueGreen.AttemptID,
+		RearmedAt:        blueGreen.RearmedAt.DeepCopy(),
+		HistoryCompacted: true,
+		Cleanup:          cleanup,
 	}
 	return current
 }

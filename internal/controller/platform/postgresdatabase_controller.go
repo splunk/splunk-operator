@@ -54,9 +54,11 @@ import (
 // PostgresDatabaseReconciler reconciles a PostgresDatabase object.
 type PostgresDatabaseReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
-	Metrics  ports.Recorder
+	// APIReader is the uncached reader used for endpoint publication safety checks.
+	APIReader client.Reader
+	Scheme    *runtime.Scheme
+	Recorder  record.EventRecorder
+	Metrics   ports.Recorder
 	// IdentityResolver is shared with the PostgresCluster reconciler so both
 	// controllers derive provider identity from one resolver contract.
 	IdentityResolver *identityadapter.IdentityResolver
@@ -78,7 +80,10 @@ const (
 //+kubebuilder:rbac:groups=platform.splunk.com,resources=postgresdatabases/finalizers,verbs=update
 //+kubebuilder:rbac:groups=platform.splunk.com,resources=postgresclusters,verbs=get;list;watch;patch
 //+kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters,verbs=get;list;watch
+//+kubebuilder:rbac:groups=postgresql.cnpg.io,resources=poolers,verbs=get;list;watch
 //+kubebuilder:rbac:groups=postgresql.cnpg.io,resources=databases,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;delete
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;delete
 //+kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
@@ -98,6 +103,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	rc := &dbcore.ReconcileContext{
 		Client:              r.Client,
+		APIReader:           r.APIReader,
 		Scheme:              r.Scheme,
 		Recorder:            r.Recorder,
 		Metrics:             r.Metrics,
@@ -116,6 +122,10 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PostgresDatabaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.APIReader == nil {
+		r.APIReader = mgr.GetAPIReader()
+	}
+
 	if err := mgr.GetFieldIndexer().IndexField(
 		context.Background(),
 		&cnpgv1.Database{},

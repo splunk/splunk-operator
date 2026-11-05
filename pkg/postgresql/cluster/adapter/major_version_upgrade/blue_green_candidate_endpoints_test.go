@@ -25,6 +25,7 @@ import (
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -65,10 +66,11 @@ func TestCandidateEndpointsWaitForDirectServiceAndRemainStable(t *testing.T) {
 	assert.Equal(t, availableAt, status.Green.AvailableAt, "a retry must preserve the first availability time")
 }
 
-func TestCandidateEndpointsWaitForClonedPoolerAndServingPods(t *testing.T) {
+func TestCandidateEndpointsWaitForClonedPoolerAndAvailableDeployment(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	require.NoError(t, appsv1.AddToScheme(scheme))
 	parent := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "orders", Namespace: "default", UID: "parent-uid"}}
 	source := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "blue", Namespace: parent.Namespace}}
 	candidate := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "green", Namespace: parent.Namespace}}
@@ -113,10 +115,17 @@ func TestCandidateEndpointsWaitForClonedPoolerAndServingPods(t *testing.T) {
 	assert.False(t, ready, "a Service alone does not prove the Pooler is serving")
 	assert.Nil(t, status.CandidateEndpoints)
 
-	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "green-pooler-1", Namespace: parent.Namespace,
-		Labels: map[string]string{cnpgutils.PgbouncerNameLabel: pooler.Name}},
-		Status: corev1.PodStatus{Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}}}
-	require.NoError(t, c.Create(t.Context(), pod))
+	selector := map[string]string{cnpgutils.PgbouncerNameLabel: pooler.Name}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: pooler.Name, Namespace: pooler.Namespace, UID: "pooler-deployment-uid", Generation: 1,
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pooler, cnpgv1.SchemeGroupVersion.WithKind("Pooler"))}},
+		Spec: appsv1.DeploymentSpec{Replicas: new(int32(1)), Selector: &metav1.LabelSelector{MatchLabels: selector},
+			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: selector}, Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "pgbouncer", Image: "pgbouncer:test", Ports: []corev1.ContainerPort{{Name: "pgbouncer", ContainerPort: 5432}}}},
+			}}},
+		Status: appsv1.DeploymentStatus{ObservedGeneration: 1, Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1, AvailableReplicas: 1},
+	}
+	require.NoError(t, c.Create(t.Context(), deployment))
 	ready, err = preparer.reconcileCandidateEndpoints(t.Context(), source, candidate, "attempt-1", status)
 	require.NoError(t, err)
 	assert.True(t, ready)

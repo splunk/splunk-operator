@@ -599,6 +599,123 @@ spec:
                       x-kubernetes-map-type: atomic
                   type: object
                 type: array
+              endpointPreparation:
+                description: |-
+                  EndpointPreparation acknowledges green endpoint validation without changing
+                  application-facing database ConfigMaps.
+                properties:
+                  attemptID:
+                    description: AttemptID identifies the active blue/green attempt.
+                    minLength: 1
+                    type: string
+                  databases:
+                    description: Databases contains one proof per declared database.
+                    items:
+                      description: |-
+                        DatabaseEndpointAcknowledgementStatus records validated or published routing
+                        data for one database access ConfigMap.
+                      properties:
+                        acknowledgedAt:
+                          format: date-time
+                          type: string
+                        configMapResourceVersion:
+                          description: ConfigMapResourceVersion is diagnostic evidence
+                            of the verified read.
+                          type: string
+                        configMapUID:
+                          description: ConfigMapUID is present after publication and
+                            read-back verification.
+                          type: string
+                        databaseName:
+                          minLength: 1
+                          type: string
+                        endpointFingerprint:
+                          description: EndpointFingerprint covers the complete routing
+                            payload, including port.
+                          minLength: 1
+                          type: string
+                      required:
+                      - databaseName
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - databaseName
+                    x-kubernetes-list-type: map
+                  greenClusterUID:
+                    description: GreenClusterUID binds the proof to the exact candidate
+                      CNPG Cluster.
+                    type: string
+                  intentGeneration:
+                    description: IntentGeneration is the parent's monotonic endpoint-intent
+                      revision.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  observedDatabaseGeneration:
+                    description: ObservedDatabaseGeneration is the child spec generation
+                      validated for this intent.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                type: object
+              endpointPublication:
+                description: EndpointPublication acknowledges verified post-commit
+                  ConfigMap publication.
+                properties:
+                  attemptID:
+                    description: AttemptID identifies the active blue/green attempt.
+                    minLength: 1
+                    type: string
+                  databases:
+                    description: Databases contains one proof per declared database.
+                    items:
+                      description: |-
+                        DatabaseEndpointAcknowledgementStatus records validated or published routing
+                        data for one database access ConfigMap.
+                      properties:
+                        acknowledgedAt:
+                          format: date-time
+                          type: string
+                        configMapResourceVersion:
+                          description: ConfigMapResourceVersion is diagnostic evidence
+                            of the verified read.
+                          type: string
+                        configMapUID:
+                          description: ConfigMapUID is present after publication and
+                            read-back verification.
+                          type: string
+                        databaseName:
+                          minLength: 1
+                          type: string
+                        endpointFingerprint:
+                          description: EndpointFingerprint covers the complete routing
+                            payload, including port.
+                          minLength: 1
+                          type: string
+                      required:
+                      - databaseName
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - databaseName
+                    x-kubernetes-list-type: map
+                  greenClusterUID:
+                    description: GreenClusterUID binds the proof to the exact candidate
+                      CNPG Cluster.
+                    type: string
+                  intentGeneration:
+                    description: IntentGeneration is the parent's monotonic endpoint-intent
+                      revision.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                  observedDatabaseGeneration:
+                    description: ObservedDatabaseGeneration is the child spec generation
+                      validated for this intent.
+                    format: int64
+                    minimum: 1
+                    type: integer
+                type: object
               lastTransitionTime:
                 description: |-
                   LastTransitionTime is the start time of the active time-to-Ready cycle.

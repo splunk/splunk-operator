@@ -346,6 +346,30 @@ The operator does not run full row counts or cross-environment checksums. Correc
 
 ### 5.6 Two-phase endpoint publication and commit
 
+Endpoint preparation reads candidate identity and readiness from the Kubernetes API without
+using the controller cache. Direct PostgreSQL Services are validated against the
+green CNPG Cluster's healthy phase and ready-instance count, expected selectors,
+ports, and recorded Service identity. CNPG manages PostgreSQL instances directly.
+
+For each enabled PgBouncer side, preparation validates the Pooler and its Service,
+then reads the same-name Deployment controlled by that exact Pooler UID. The
+Service selector must match the Deployment's pod template, including its named
+`pgbouncer` target port. The Deployment must have observed its current generation,
+match the Pooler's desired replica count, and have all desired replicas updated,
+ready, and available, with no reported surge or terminating replicas. Paused Poolers,
+paused Deployments, failed rollouts, and deleting resources are not ready.
+CNPG's Pooler replica count alone is insufficient because it includes pods that
+are not ready. Candidate preparation and endpoint validation share this workload
+readiness check. The rollout gate follows the
+[Kubernetes Deployment completion contract](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#complete-deployment).
+
+This contract uses existing Deployment read permissions and does not read or
+require permissions for EndpointSlices. Deployment readiness does not establish
+Service endpoint convergence, DNS/network reachability, or successful SQL access.
+Those remain live CNPG qualification concerns (CPI-2126). After canonical commit,
+child publication uses the committed routing payload even if live candidate
+health subsequently fails; recovery must continue to fail forward.
+
 Endpoint publication preserves single-writer ownership across controllers without exposing green before commit:
 
 1. `PostgresCluster` records a green endpoint-preparation intent with the `attemptID` and generation.
