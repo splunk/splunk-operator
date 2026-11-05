@@ -253,16 +253,18 @@ func TestPostgresDatabaseServiceRejectsStaleProviderUIDBeforeClosingDatabases(t 
 		},
 	}
 	provider := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: postgresDB.Namespace, UID: "replacement-uid"}}
-	c := testClient(t, scheme, postgresDB, provider)
+	parent := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: postgresDB.Spec.ClusterRef.Name, Namespace: postgresDB.Namespace}}
+	c := testClient(t, scheme, postgresDB, provider, parent)
 	card := testResolvedClusterCard("primary", postgresDB.Namespace, provider.Name)
 	card.Authoritative.Identity.UID = "recorded-uid"
 	card.Managed[0].Identity.UID = "recorded-uid"
 	provisioner := &stubDatabaseProvisioner{}
 
 	_, err := PostgresDatabaseService(ctx, &ReconcileContext{
-		Client:   c,
-		Scheme:   scheme,
-		Recorder: record.NewFakeRecorder(1),
+		Client:    c,
+		APIReader: c,
+		Scheme:    scheme,
+		Recorder:  record.NewFakeRecorder(1),
 		ClusterReader: clusterReadinessReaderFunc(func(context.Context, string, string) (dbclusterinfo.ResolvedClusterFacts, error) {
 			return dbclusterinfo.ResolvedClusterFacts{Cluster: card}, nil
 		}),

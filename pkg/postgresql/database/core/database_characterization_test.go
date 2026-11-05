@@ -212,10 +212,11 @@ func TestCharacterization_CurrentTerminalFailureWritesNoStatus(t *testing.T) {
 	}
 
 	statusWrites := 0
+	parent := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: postgresDB.Spec.ClusterRef.Name, Namespace: postgresDB.Namespace}}
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithStatusSubresource(&platformv1alpha1.PostgresDatabase{}).
-		WithObjects(postgresDB).
+		WithObjects(postgresDB, parent).
 		WithInterceptorFuncs(interceptor.Funcs{
 			SubResourceUpdate: func(ctx context.Context, cl client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 				if subResourceName == "status" {
@@ -226,7 +227,7 @@ func TestCharacterization_CurrentTerminalFailureWritesNoStatus(t *testing.T) {
 		}).
 		Build()
 
-	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
+	rc := &ReconcileContext{Client: c, APIReader: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10)}
 	newDBRepo := func(_ context.Context, _, _, _ string) (ports.DBRepo, error) { return &stubDBRepo{}, nil }
 
 	// The first pass may publish custom metrics; the repeated pass below is the

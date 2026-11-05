@@ -265,9 +265,10 @@ func TestPostgresDatabaseServiceDoesNotReadRawClusterAfterReadinessGate(t *testi
 	var observedCustomMetricsStatus *platformv1alpha1.CustomMetricsStatus
 
 	result, err := PostgresDatabaseService(ctx, &ReconcileContext{
-		Client:   c,
-		Scheme:   scheme,
-		Recorder: record.NewFakeRecorder(10),
+		Client:    c,
+		APIReader: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build(),
+		Scheme:    scheme,
+		Recorder:  record.NewFakeRecorder(10),
 		ClusterReader: clusterReadinessReaderFunc(func(context.Context, string, string) (dbclusterinfo.ResolvedClusterFacts, error) {
 			return facts, nil
 		}),

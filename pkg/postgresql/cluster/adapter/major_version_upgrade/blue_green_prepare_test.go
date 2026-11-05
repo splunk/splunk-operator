@@ -30,6 +30,7 @@ import (
 	identityadapter "github.com/splunk/splunk-operator/pkg/postgresql/shared/adapter/identity"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -38,7 +39,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -423,42 +423,38 @@ func TestCandidatePoolerValidationComparesFullDesiredSpec(t *testing.T) {
 	require.ErrorIs(t, preparer.validateCandidatePooler(changed, desired, "attempt-1"), mvutypes.ErrUpgradeFlowFailed)
 }
 
-func TestCandidatePoolerReadyRequiresServingPods(t *testing.T) {
+func TestCandidatePoolerReadyRequiresAvailableDeployment(t *testing.T) {
 	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, appsv1.AddToScheme(scheme))
 	pooler := &cnpgv1.Pooler{ObjectMeta: metav1.ObjectMeta{Name: "green-pooler-rw", Namespace: "default", UID: "pooler-uid"},
-		Spec:   cnpgv1.PoolerSpec{Instances: new(int32(2))},
-		Status: cnpgv1.PoolerStatus{Phase: cnpgv1.PoolerPhaseActive, Instances: 2}}
-	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: pooler.Name, Namespace: pooler.Namespace,
-		OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(pooler, cnpgv1.SchemeGroupVersion.WithKind("Pooler"))}},
-		Spec: corev1.ServiceSpec{Selector: map[string]string{cnpgutils.PgbouncerNameLabel: pooler.Name}}}
-	readyPod := func(name string) *corev1.Pod {
-		return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: pooler.Namespace,
-			Labels: map[string]string{cnpgutils.PgbouncerNameLabel: pooler.Name}},
-			Status: corev1.PodStatus{Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}}}
-	}
-	for _, test := range []struct {
-		name  string
-		phase cnpgv1.PoolerPhase
-		pods  []*corev1.Pod
-		want  bool
+		Spec: cnpgv1.PoolerSpec{Instances: new(int32(2))}, Status: cnpgv1.PoolerStatus{Phase: cnpgv1.PoolerPhaseActive, Instances: 2}}
+	selector := map[string]string{cnpgutils.PgbouncerNameLabel: pooler.Name}
+	owner := []metav1.OwnerReference{*metav1.NewControllerRef(pooler, cnpgv1.SchemeGroupVersion.WithKind("Pooler"))}
+	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: pooler.Name, Namespace: pooler.Namespace, OwnerReferences: owner}, Spec: corev1.ServiceSpec{Selector: selector}}
+	for _, tt := range []struct {
+		name      string
+		phase     cnpgv1.PoolerPhase
+		available int32
+		want      bool
 	}{
-		{name: "both serving", phase: cnpgv1.PoolerPhaseActive, pods: []*corev1.Pod{readyPod("one"), readyPod("two")}, want: true},
-		{name: "paused", phase: cnpgv1.PoolerPhasePaused, pods: []*corev1.Pod{readyPod("one"), readyPod("two")}},
-		{name: "one missing", phase: cnpgv1.PoolerPhaseActive, pods: []*corev1.Pod{readyPod("one")}},
-		{name: "one unready", phase: cnpgv1.PoolerPhaseActive, pods: []*corev1.Pod{readyPod("one"), {ObjectMeta: metav1.ObjectMeta{Name: "two", Namespace: pooler.Namespace, Labels: map[string]string{cnpgutils.PgbouncerNameLabel: pooler.Name}}}}},
+		{name: "all available", phase: cnpgv1.PoolerPhaseActive, available: 2, want: true},
+		{name: "paused", phase: cnpgv1.PoolerPhasePaused, available: 2},
+		{name: "one available", phase: cnpgv1.PoolerPhaseActive, available: 1},
+		{name: "none available", phase: cnpgv1.PoolerPhaseActive},
 	} {
-		t.Run(test.name, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			current := pooler.DeepCopy()
-			current.Status.Phase = test.phase
-			objects := make([]client.Object, 0, len(test.pods))
-			for _, pod := range test.pods {
-				objects = append(objects, pod)
+			current.Status.Phase = tt.phase
+			deployment := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: pooler.Name, Namespace: pooler.Namespace, UID: "deployment-uid", Generation: 1, OwnerReferences: owner},
+				Spec: appsv1.DeploymentSpec{Replicas: new(int32(2)), Selector: &metav1.LabelSelector{MatchLabels: selector},
+					Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: selector}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "pgbouncer", Ports: []corev1.ContainerPort{{Name: "pgbouncer", ContainerPort: 5432}}}}}}},
+				Status: appsv1.DeploymentStatus{ObservedGeneration: 1, Replicas: 2, UpdatedReplicas: 2, ReadyReplicas: tt.available, AvailableReplicas: tt.available},
 			}
-			preparer := &BlueGreenCandidatePreparer{client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()}
+			preparer := &BlueGreenCandidatePreparer{client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(deployment).Build()}
 			ready, err := preparer.candidatePoolerReady(t.Context(), current, service)
 			require.NoError(t, err)
-			assert.Equal(t, test.want, ready)
+			assert.Equal(t, tt.want, ready)
 		})
 	}
 }

@@ -251,6 +251,54 @@ type DatabaseRoleInfo struct {
 	Exists bool `json:"exists"`
 }
 
+// PostgresDatabaseEndpointAcknowledgementStatus is a child-owned proof for one
+// endpoint intent. The parent aggregates it; the child never writes parent status.
+type PostgresDatabaseEndpointAcknowledgementStatus struct {
+	// AttemptID identifies the active blue/green attempt.
+	// +kubebuilder:validation:MinLength=1
+	AttemptID string `json:"attemptID"`
+
+	// IntentGeneration is the parent's monotonic endpoint-intent revision.
+	// +kubebuilder:validation:Minimum=1
+	IntentGeneration int64 `json:"intentGeneration"`
+
+	// ObservedDatabaseGeneration is the child spec generation validated for this intent.
+	// +kubebuilder:validation:Minimum=1
+	ObservedDatabaseGeneration int64 `json:"observedDatabaseGeneration"`
+
+	// GreenClusterUID binds the proof to the exact candidate CNPG Cluster.
+	GreenClusterUID k8stypes.UID `json:"greenClusterUID"`
+
+	// Databases contains one proof per declared database.
+	// +listType=map
+	// +listMapKey=databaseName
+	// +optional
+	Databases []DatabaseEndpointAcknowledgementStatus `json:"databases,omitempty"`
+}
+
+// DatabaseEndpointAcknowledgementStatus records validated or published routing
+// data for one database access ConfigMap.
+type DatabaseEndpointAcknowledgementStatus struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	DatabaseName string `json:"databaseName"`
+
+	// EndpointFingerprint covers the complete routing payload, including port.
+	// +kubebuilder:validation:MinLength=1
+	EndpointFingerprint string `json:"endpointFingerprint"`
+
+	// ConfigMapUID is present after publication and read-back verification.
+	// +optional
+	ConfigMapUID k8stypes.UID `json:"configMapUID,omitempty"`
+
+	// ConfigMapResourceVersion is diagnostic evidence of the verified read.
+	// +optional
+	ConfigMapResourceVersion string `json:"configMapResourceVersion,omitempty"`
+
+	// +optional
+	AcknowledgedAt *metav1.Time `json:"acknowledgedAt,omitempty"`
+}
+
 // PostgresDatabaseStatus defines the observed state of PostgresDatabase.
 type PostgresDatabaseStatus struct {
 	// +optional
@@ -269,6 +317,13 @@ type PostgresDatabaseStatus struct {
 	// current participation has not been published yet.
 	// +optional
 	CustomMetricsPublication *PostgresDatabaseCustomMetricsPublication `json:"customMetricsPublication,omitempty"`
+	// EndpointPreparation acknowledges green endpoint validation without changing
+	// application-facing database ConfigMaps.
+	// +optional
+	EndpointPreparation *PostgresDatabaseEndpointAcknowledgementStatus `json:"endpointPreparation,omitempty"`
+	// EndpointPublication acknowledges verified post-commit ConfigMap publication.
+	// +optional
+	EndpointPublication *PostgresDatabaseEndpointAcknowledgementStatus `json:"endpointPublication,omitempty"`
 	// ObservedGeneration represents the .metadata.generation that the status was set based upon.
 	// +optional
 	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`

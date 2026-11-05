@@ -32,7 +32,9 @@ import (
 
 // ReconcileContext bundles infrastructure dependencies injected by the controller.
 type ReconcileContext struct {
-	Client                              client.Client
+	Client client.Client
+	// APIReader bypasses the controller cache for endpoint-commit safety reads.
+	APIReader                           client.Reader
 	Scheme                              *runtime.Scheme
 	Recorder                            record.EventRecorder
 	Metrics                             ports.Recorder
@@ -140,6 +142,9 @@ const (
 	// Role-gate condition/event message formats (postgresDB name, gate detail).
 	msgFmtRoleConflict        = "Role conflict in PostgresDatabase %s: %s"
 	msgFmtRoleReconcileFailed = "Role reconciliation failed for PostgresDatabase %s: %s"
+
+	// Database-readiness condition/event message format (database count).
+	msgFmtDatabasesReady = "All %d databases ready"
 
 	conflictDeletion               reconcileConflictCategory = "deletion"
 	conflictFinalizer              reconcileConflictCategory = "finalizer"

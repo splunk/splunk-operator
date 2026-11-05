@@ -25,9 +25,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 func TestObjectStorePredicator(t *testing.T) {
@@ -86,6 +89,23 @@ func TestMapDatabaseToCluster(t *testing.T) {
 	assert.Empty(t, mapDatabaseToCluster(ctx, &corev1.Secret{}))
 }
 
+func TestDatabaseClusterRefUpdateEnqueuesOldAndNewParents(t *testing.T) {
+	oldDB := dbWithStatusRoles("db", "blue")
+	newDB := oldDB.DeepCopy()
+	newDB.Spec.ClusterRef.Name = "green"
+	q := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
+	defer q.ShutDown()
+
+	h := handler.EnqueueRequestsFromMapFunc(mapDatabaseToCluster)
+	h.Update(t.Context(), event.UpdateEvent{ObjectOld: oldDB, ObjectNew: newDB}, q)
+	require.Equal(t, 2, q.Len())
+	first, _ := q.Get()
+	q.Done(first)
+	second, _ := q.Get()
+	q.Done(second)
+	assert.ElementsMatch(t, []string{"blue", "green"}, []string{first.Name, second.Name})
+}
+
 func TestExtractPostgresDatabaseClusterRefName(t *testing.T) {
 	assert.Equal(t, []string{"pg"}, extractPostgresDatabaseClusterRefName(dbWithStatusRoles("db", "pg")))
 	assert.Nil(t, extractPostgresDatabaseClusterRefName(dbWithStatusRoles("db", "")))
@@ -96,7 +116,7 @@ func TestPostgresDatabaseForClusterPredicator(t *testing.T) {
 	pred := postgresDatabaseForClusterPredicator()
 
 	assert.True(t, pred.Create(event.CreateEvent{Object: dbWithStatusRoles("db", "pg", "app_admin")}))
-	assert.False(t, pred.Create(event.CreateEvent{Object: &platformv1alpha1.PostgresDatabase{
+	assert.True(t, pred.Create(event.CreateEvent{Object: &platformv1alpha1.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "ns"},
 		Spec:       platformv1alpha1.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}},
 	}}))
@@ -116,8 +136,11 @@ func TestPostgresDatabaseForClusterPredicator(t *testing.T) {
 	oldSpec.Generation = 1
 	specUpdated := dbWithStatusRoles("db", "pg", "app_admin")
 	specUpdated.Generation = 2
-	assert.False(t, pred.Update(event.UpdateEvent{ObjectOld: oldSpec, ObjectNew: specUpdated}),
-		"raw database spec changes must be interpreted by the database controller first")
+	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: oldSpec, ObjectNew: specUpdated}),
+		"spec changes invalidate the endpoint publication inventory immediately")
+
+	otherCluster := dbWithStatusRoles("db", "other", "app_admin")
+	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: oldSpec, ObjectNew: otherCluster}))
 
 	statusUpdated := dbWithStatusRoles("db", "pg", "app_admin")
 	statusUpdated.Status.CustomMetricsPublication = &platformv1alpha1.PostgresDatabaseCustomMetricsPublication{
@@ -129,6 +152,14 @@ func TestPostgresDatabaseForClusterPredicator(t *testing.T) {
 		}},
 	}
 	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: statusUpdated}))
+
+	preparationUpdated := old.DeepCopy()
+	preparationUpdated.Status.EndpointPreparation = &platformv1alpha1.PostgresDatabaseEndpointAcknowledgementStatus{AttemptID: "a1"}
+	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: preparationUpdated}))
+
+	publicationUpdated := old.DeepCopy()
+	publicationUpdated.Status.EndpointPublication = &platformv1alpha1.PostgresDatabaseEndpointAcknowledgementStatus{AttemptID: "a1"}
+	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: publicationUpdated}))
 
 	deleting := dbWithStatusRoles("db", "pg", "app_admin")
 	now := metav1.Now()
