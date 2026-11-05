@@ -34,6 +34,38 @@ tests:
           path: metadata.namespace
           value: overridden-ns
 
+  - it: should allow a matching namespace override in namespace mode
+    release:
+      namespace: operator-ns
+    set:
+      namespaceOverride: operator-ns
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: operator-ns
+
+  - it: should default an empty override to the release namespace in namespace mode
+    release:
+      namespace: operator-ns
+    set:
+      namespaceOverride: ""
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: operator-ns
+
+  - it: should reject a different namespace override in namespace mode
+    release:
+      namespace: operator-ns
+    set:
+      namespaceOverride: other-ns
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "namespaceOverride must match the Helm release namespace when splunkOperator.clusterWideAccess is false; install with --namespace set to the operator namespace"
+
   - it: should include common labels
     chart:
       version: 1.2.3

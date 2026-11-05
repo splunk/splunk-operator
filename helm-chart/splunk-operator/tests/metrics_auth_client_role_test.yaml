@@ -1,0 +1,40 @@
+suite: operator metrics authorization role
+templates:
+  - templates/rbac/auth_proxy_client_clusterrole.yaml
+tests:
+  - it: should render a cluster-scoped role when cluster-wide access is enabled
+    set:
+      splunkOperator.clusterWideAccess: true
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: rules[0]
+          value:
+            apiGroups:
+              - metrics.splunk.com
+            resources:
+              - operatormetrics
+            verbs:
+              - get
+
+  - it: should render a namespace-scoped role in namespace mode
+    release:
+      namespace: operator-ns
+    set:
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - isKind:
+          of: Role
+      - equal:
+          path: metadata.namespace
+          value: operator-ns
+      - equal:
+          path: rules[0]
+          value:
+            apiGroups:
+              - metrics.splunk.com
+            resources:
+              - operatormetrics
+            verbs:
+              - get

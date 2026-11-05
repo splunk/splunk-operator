@@ -210,22 +210,13 @@ tests:
             matchLabels:
               kubernetes.io/metadata.name: splunk-operator
 
-  - it: should select the release namespace, not namespaceOverride, when clusterWideAccess is false
+  - it: should reject a namespace override that disagrees with namespace-mode admission scope
     set:
       namespaceOverride: other-ns
       splunkOperator.clusterWideAccess: false
     asserts:
-      - equal:
-          path: metadata.name
-          value: splunk-operator-cross-version-field-protection-splunk-operator
-      - equal:
-          path: webhooks[0].namespaceSelector
-          value:
-            matchLabels:
-              kubernetes.io/metadata.name: splunk-operator
-      - equal:
-          path: webhooks[0].clientConfig.service.namespace
-          value: other-ns
+      - failedTemplate:
+          errorMessage: "namespaceOverride must match the Helm release namespace when splunkOperator.clusterWideAccess is false; install with --namespace set to the operator namespace"
 
   - it: should include nameOverride in a namespace-mode webhook configuration name
     set:

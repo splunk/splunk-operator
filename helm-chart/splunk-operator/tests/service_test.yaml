@@ -1,0 +1,84 @@
+suite: operator service
+templates:
+  - templates/service.yaml
+tests:
+  - it: should be a Service
+    asserts:
+      - isKind:
+          of: Service
+
+  - it: should set the correct name
+    asserts:
+      - equal:
+          path: metadata.name
+          value: splunk-operator-controller-manager-service
+
+  - it: should place the service in the operator namespace in cluster-wide mode
+    release:
+      namespace: release-ns
+    set:
+      namespaceOverride: operator-ns
+      splunkOperator.clusterWideAccess: true
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: operator-ns
+
+  - it: should place the service in the release namespace in namespace mode
+    release:
+      namespace: operator-ns
+    set:
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: operator-ns
+
+  - it: should expose the http port by default
+    asserts:
+      - equal:
+          path: spec.ports[0]
+          value:
+            name: http
+            port: 80
+            protocol: TCP
+            targetPort: http
+
+  - it: should expose the controller-runtime metrics endpoint by default
+    asserts:
+      - equal:
+          path: spec.ports[1]
+          value:
+            name: http-metrics
+            port: 8080
+            protocol: TCP
+            targetPort: http-metrics
+
+  - it: should support overriding the published metrics port while routing to the real listener
+    set:
+      splunkOperator.service.type: NodePort
+      splunkOperator.service.ports:
+        - name: http-metrics
+          port: 9090
+          protocol: TCP
+          targetPort: 8080
+    asserts:
+      - equal:
+          path: spec.type
+          value: NodePort
+      - equal:
+          path: spec.ports
+          value:
+            - name: http-metrics
+              port: 9090
+              protocol: TCP
+              targetPort: 8080
+
+  - it: should add custom annotations
+    set:
+      splunkOperator.annotations:
+        prometheus.io/scrape: "true"
+    asserts:
+      - equal:
+          path: metadata.annotations["prometheus.io/scrape"]
+          value: "true"

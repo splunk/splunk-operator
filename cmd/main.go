@@ -50,7 +50,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -160,10 +159,9 @@ func main() {
 		setupLog.Info("Feature gates initialized", "gates", effectiveStates)
 	}
 
-	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
-	// More info:
-	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/metrics/server
-	// - https://book.kubebuilder.io/reference/metrics.html
+	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'.
+	// Use resource-based auth to support namespaced reader grants without also granting access
+	// to the API server's /metrics endpoint.
 	metricsServerOptions := metricsserver.Options{
 		BindAddress:   metricsAddr,
 		SecureServing: secureMetrics,
@@ -174,17 +172,8 @@ func main() {
 		// unauthorized access to sensitive metrics data. Consider replacing with CertDir, CertName, and KeyName
 		// to provide certificates, ensuring the server communicates using trusted and secure certificates.
 		TLSOpts:        tlsOpts,
-		FilterProvider: filters.WithAuthenticationAndAuthorization,
+		FilterProvider: config.MetricsAuthFilterProvider,
 	}
-
-	// TODO: enable https for /metrics endpoint by default
-	// if secureMetrics {
-	// 	// FilterProvider is used to protect the metrics endpoint with authn/authz.
-	// 	// These configurations ensure that only authorized users and service accounts
-	// 	// can access the metrics endpoint. The RBAC are configured in 'config/rbac/kustomization.yaml'. More info:
-	// 	// https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.18.4/pkg/metrics/filters#WithAuthenticationAndAuthorization
-	// 	metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
-	// }
 
 	// see https://github.com/operator-framework/operator-sdk/issues/1813
 	if leaseDurationSecond < 30 {
