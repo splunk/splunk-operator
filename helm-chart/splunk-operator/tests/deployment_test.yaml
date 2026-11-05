@@ -259,3 +259,16 @@ tests:
             secret:
               defaultMode: 420
               secretName: my-webhook-cert
+
+  - it: should authorize metrics in the Pod namespace independently of WATCH_NAMESPACE
+    set:
+      splunkOperator.clusterWideAccess: true
+      splunkOperator.watchNamespaces: workload-a,workload-b
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace

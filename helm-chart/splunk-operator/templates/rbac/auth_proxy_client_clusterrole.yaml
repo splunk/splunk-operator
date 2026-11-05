@@ -4,8 +4,23 @@ kind: ClusterRole
 metadata:
   name: {{ include "splunk-operator.operator.fullname" . }}-metrics-reader
 rules:
-- nonResourceURLs:
-  - "/metrics"
+- apiGroups:
+  - metrics.splunk.com
+  resources:
+  - operatormetrics
+  verbs:
+  - get
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-metrics-reader
+  namespace: {{ include "splunk-operator.namespace" . }}
+rules:
+- apiGroups:
+  - metrics.splunk.com
+  resources:
+  - operatormetrics
   verbs:
   - get
 {{- end }}

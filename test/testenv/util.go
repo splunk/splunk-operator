@@ -680,6 +680,13 @@ func newOperator(name, ns, account, operatorImageAndTag, splunkEnterpriseImageAn
 										},
 									},
 								}, {
+									Name: "POD_NAMESPACE",
+									ValueFrom: &corev1.EnvVarSource{
+										FieldRef: &corev1.ObjectFieldSelector{
+											FieldPath: "metadata.namespace",
+										},
+									},
+								}, {
 									Name: "POD_NAME",
 									ValueFrom: &corev1.EnvVarSource{
 										FieldRef: &corev1.ObjectFieldSelector{
