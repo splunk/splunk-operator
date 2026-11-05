@@ -106,20 +106,22 @@ const (
 
 func reconcilePostgresDatabase(ctx context.Context, nn types.NamespacedName) (ctrl.Result, error) {
 	reconciler := &PostgresDatabaseReconciler{
-		Client:   k8sClient,
-		Scheme:   k8sClient.Scheme(),
-		Recorder: record.NewFakeRecorder(100),
-		Metrics:  &pgprometheus.NoopRecorder{},
+		Client:    k8sClient,
+		APIReader: k8sClient,
+		Scheme:    k8sClient.Scheme(),
+		Recorder:  record.NewFakeRecorder(100),
+		Metrics:   &pgprometheus.NoopRecorder{},
 	}
 	return reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
 }
 
 func reconcilePostgresDatabaseWithRecorder(ctx context.Context, nn types.NamespacedName, recorder record.EventRecorder) (ctrl.Result, error) {
 	reconciler := &PostgresDatabaseReconciler{
-		Client:   k8sClient,
-		Scheme:   k8sClient.Scheme(),
-		Recorder: recorder,
-		Metrics:  &pgprometheus.NoopRecorder{},
+		Client:    k8sClient,
+		APIReader: k8sClient,
+		Scheme:    k8sClient.Scheme(),
+		Recorder:  recorder,
+		Metrics:   &pgprometheus.NoopRecorder{},
 	}
 	return reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
 }

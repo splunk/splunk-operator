@@ -1031,9 +1031,12 @@ func TestCompactBlueGreenHistoryRetainsTenCleanedSummariesAndArtifacts(t *testin
 	require.Len(t, compacted, 11)
 	assert.Equal(t, "cleaned-1", compacted[0].BlueGreen.AttemptID)
 	assert.Nil(t, compacted[0].BlueGreen.CommitReceipt, "cleaned history must be a compacted summary")
+	assert.True(t, compacted[0].BlueGreen.HistoryCompacted, "cleaned summary must carry an explicit marker")
 	assert.Equal(t, platformv1alpha1.BlueGreenCleanupStateCleaned, compacted[0].BlueGreen.Cleanup.State)
 	assert.Equal(t, "retained-artifacts", compacted[len(compacted)-1].BlueGreen.AttemptID)
+	assert.False(t, compacted[len(compacted)-1].BlueGreen.HistoryCompacted, "retained artifacts must keep detailed history")
 	assert.NotNil(t, compacted[len(compacted)-1].BlueGreen.CommitReceipt, "attempts with retained artifacts must not be compacted")
+	assert.True(t, compactBlueGreenHistory(compacted)[0].BlueGreen.HistoryCompacted, "repeated compaction must keep the marker")
 }
 
 func TestMajorUpgradeInputSkipsUnavailableBlueGreenSourceHistory(t *testing.T) {

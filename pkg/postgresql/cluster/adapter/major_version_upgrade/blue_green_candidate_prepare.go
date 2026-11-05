@@ -26,6 +26,7 @@ import (
 	certmanagerinfra "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/certmanager"
 	clusterCnpg "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
 	tlsport "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/tls"
+	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	pginfra "github.com/splunk/splunk-operator/pkg/postgresql/shared/infrastructure/postgres"
 	corev1 "k8s.io/api/core/v1"
@@ -454,7 +455,8 @@ func (p *BlueGreenCandidatePreparer) reconcileCandidatePoolers(ctx context.Conte
 		if !ready {
 			return false, nil, nil
 		}
-		if pooler.Spec.Type == cnpgv1.PoolerTypeRW {
+		// Prefer RW regardless of list order, retaining RO for RO-only topology.
+		if candidateService == nil || pooler.Spec.Type == cnpgv1.PoolerTypeRW {
 			candidateService = service
 		}
 	}
@@ -465,36 +467,7 @@ func (p *BlueGreenCandidatePreparer) candidatePoolerReady(ctx context.Context, p
 	if !metav1.IsControlledBy(service, pooler) || service.Spec.Selector[cnpgutils.PgbouncerNameLabel] != pooler.Name {
 		return false, fmt.Errorf("%w: green Pooler Service %q does not select its owning Pooler", mvutypes.ErrUpgradeFlowFailed, service.Name)
 	}
-	desired := int32(1)
-	if pooler.Spec.Instances != nil {
-		desired = *pooler.Spec.Instances
-	}
-	if desired < 1 || pooler.Status.Phase != cnpgv1.PoolerPhaseActive || pooler.Status.Instances != desired {
-		return false, nil
-	}
-	pods := &corev1.PodList{}
-	if err := p.client.List(ctx, pods, client.InNamespace(pooler.Namespace), client.MatchingLabels(service.Spec.Selector)); err != nil {
-		return false, fmt.Errorf("listing green Pooler pods for %q: %w", pooler.Name, err)
-	}
-	if len(pods.Items) != int(desired) {
-		return false, nil
-	}
-	for _, pod := range pods.Items {
-		if pod.DeletionTimestamp != nil {
-			return false, nil
-		}
-		ready := false
-		for _, condition := range pod.Status.Conditions {
-			if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
-				ready = true
-				break
-			}
-		}
-		if !ready {
-			return false, nil
-		}
-	}
-	return true, nil
+	return pgcnpg.PoolerDeploymentReady(ctx, p.client, pooler, service)
 }
 
 func (p *BlueGreenCandidatePreparer) validateCandidatePooler(pooler, desired *cnpgv1.Pooler, attemptID string) error {
