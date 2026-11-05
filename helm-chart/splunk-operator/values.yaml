@@ -126,10 +126,33 @@ splunkOperator:
       port: 80
       protocol: TCP
       targetPort: http
-  # - name: metric
-  #   port: 8080
-  #   protocol: TCP
-  #   targetPort: 8080
+    # The manager always binds the metrics listener to :8080
+    # (--metrics-bind-address is not configurable via values). If you
+    # override "port" to publish the endpoint on a different number,
+    # keep targetPort set to the numeric 8080 rather than the port name,
+    # otherwise the Service will route to a port nothing is listening on.
+    - name: http-metrics
+      port: 8080
+      protocol: TCP
+      targetPort: http-metrics
+
+  # Configure the authenticated controller-runtime metrics endpoint, served
+  # on the port above. This is independent of splunkOperator.telemetry, which
+  # controls product-usage telemetry from managed Splunk Enterprise
+  # instances. The endpoint always requires an authenticated, authorized
+  # bearer token; grant access to it by listing readers below rather than
+  # disabling authentication.
+  metrics:
+    # In namespace mode, let this chart create cluster-scoped auth review
+    # permissions. If false, an administrator must provision them separately.
+    delegatedAuth:
+      createClusterRBAC: false
+    # Service accounts that may read /metrics in this operator namespace.
+    # Grant central scrapers access in each installation they must read,
+    # independently of clusterWideAccess and watchNamespaces.
+    readerServiceAccounts: []
+    # - name: <fill-in>
+    #   namespace: <fill-in>
 
   # Set resource requests and limits for manager container
   resources:

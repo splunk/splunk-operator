@@ -1,0 +1,77 @@
+suite: operator metrics authentication role
+templates:
+  - templates/rbac/auth_proxy_role.yaml
+tests:
+  - it: should be cluster scoped when cluster-wide access is enabled
+    set:
+      splunkOperator.clusterWideAccess: true
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: rules[0]
+          value:
+            apiGroups:
+              - authentication.k8s.io
+            resources:
+              - tokenreviews
+            verbs:
+              - create
+      - equal:
+          path: rules[1]
+          value:
+            apiGroups:
+              - authorization.k8s.io
+            resources:
+              - subjectaccessreviews
+            verbs:
+              - create
+      - equal:
+          path: metadata.name
+          value: splunk-operator-proxy-role
+
+  - it: should omit the review role in namespace mode by default
+    set:
+      splunkOperator.clusterWideAccess: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should name opt-in delegation using the operator name and namespace
+    release:
+      name: my-release
+      namespace: test-ns
+    set:
+      splunkOperator.nameOverride: my-operator
+      splunkOperator.clusterWideAccess: false
+      splunkOperator.metrics.delegatedAuth.createClusterRBAC: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: my-operator-test-ns-proxy-role
+      - equal:
+          path: rules
+          value:
+            - apiGroups: [authentication.k8s.io]
+              resources: [tokenreviews]
+              verbs: [create]
+            - apiGroups: [authorization.k8s.io]
+              resources: [subjectaccessreviews]
+              verbs: [create]
+
+  - it: should reject a mismatched namespace override for opt-in delegation
+    release:
+      name: my-release
+      namespace: test-ns
+    set:
+      namespaceOverride: overridden-ns
+      splunkOperator.nameOverride: my-operator
+      splunkOperator.clusterWideAccess: false
+      splunkOperator.metrics.delegatedAuth.createClusterRBAC: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "namespaceOverride must match the Helm release namespace when splunkOperator.clusterWideAccess is false; install with --namespace set to the operator namespace"

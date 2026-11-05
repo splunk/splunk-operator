@@ -3,7 +3,9 @@ kind: ClusterRole
 metadata:
   name: metrics-reader
 rules:
-- nonResourceURLs:
-  - "/metrics"
+- apiGroups:
+  - metrics.splunk.com
+  resources:
+  - operatormetrics
   verbs:
   - get
