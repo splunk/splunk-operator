@@ -1448,6 +1448,13 @@ spec:
                           - postgresDatabaseUID
                           - databaseName
                           x-kubernetes-list-type: map
+                        endpointIntentRevision:
+                          description: |-
+                            EndpointIntentRevision is monotonic for this attempt, including after
+                            cancellation clears a pending preparation intent.
+                          format: int64
+                          minimum: 0
+                          type: integer
                         endpointPreparation:
                           description: EndpointPreparation records green-endpoint
                             validation before canonical commit.
@@ -1460,6 +1467,12 @@ spec:
                                     type: string
                                   endpointFingerprint:
                                     type: string
+                                  postgresDatabaseGeneration:
+                                    description: PostgresDatabaseGeneration invalidates
+                                      a proof after a child spec change.
+                                    format: int64
+                                    minimum: 1
+                                    type: integer
                                   postgresDatabaseName:
                                     minLength: 1
                                     type: string
@@ -1480,6 +1493,10 @@ spec:
                               - postgresDatabaseUID
                               - databaseName
                               x-kubernetes-list-type: map
+                            endpointFingerprint:
+                              description: EndpointFingerprint binds the intent to
+                                the complete green routing payload.
+                              type: string
                             generation:
                               format: int64
                               type: integer
@@ -1505,6 +1522,12 @@ spec:
                                     description: EndpointFingerprint is the published
                                       endpoint value.
                                     type: string
+                                  postgresDatabaseGeneration:
+                                    description: PostgresDatabaseGeneration invalidates
+                                      a proof after a child spec change.
+                                    format: int64
+                                    minimum: 1
+                                    type: integer
                                   postgresDatabaseName:
                                     minLength: 1
                                     type: string
@@ -1522,6 +1545,10 @@ spec:
                               - postgresDatabaseUID
                               - databaseName
                               x-kubernetes-list-type: map
+                            endpointFingerprint:
+                              description: EndpointFingerprint is copied from the
+                                prepared green routing payload.
+                              type: string
                             generation:
                               format: int64
                               type: integer
@@ -1647,6 +1674,12 @@ spec:
                           required:
                           - ref
                           type: object
+                        historyCompacted:
+                          description: |-
+                            HistoryCompacted marks a cleaned attempt whose detailed cutover evidence
+                            has been replaced by the durable history summary. It is set only when
+                            the cluster status store compacts that attempt.
+                          type: boolean
                         rearmedAt:
                           description: |-
                             RearmedAt records that the controller observed allow=false after this

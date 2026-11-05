@@ -340,7 +340,9 @@ func postgresDatabaseForClusterPredicator() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			db, ok := e.Object.(*platformv1alpha1.PostgresDatabase)
-			return ok && (len(db.Status.Databases) > 0 || db.Status.CustomMetricsPublication != nil)
+			// A newly declared database changes the endpoint-publication inventory
+			// before its controller has written any status.
+			return ok && db.Spec.ClusterRef.Name != ""
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			oldDB, oldOK := e.ObjectOld.(*platformv1alpha1.PostgresDatabase)
@@ -351,10 +353,15 @@ func postgresDatabaseForClusterPredicator() predicate.Predicate {
 			if oldDB.Spec.ClusterRef.Name != newDB.Spec.ClusterRef.Name {
 				return true
 			}
+			if oldDB.Generation != newDB.Generation {
+				return true
+			}
 			if !equality.Semantic.DeepEqual(oldDB.GetDeletionTimestamp(), newDB.GetDeletionTimestamp()) {
 				return true
 			}
 			return !equality.Semantic.DeepEqual(oldDB.Status.Databases, newDB.Status.Databases) ||
+				!equality.Semantic.DeepEqual(oldDB.Status.EndpointPreparation, newDB.Status.EndpointPreparation) ||
+				!equality.Semantic.DeepEqual(oldDB.Status.EndpointPublication, newDB.Status.EndpointPublication) ||
 				!equality.Semantic.DeepEqual(
 					oldDB.Status.CustomMetricsPublication,
 					newDB.Status.CustomMetricsPublication,
