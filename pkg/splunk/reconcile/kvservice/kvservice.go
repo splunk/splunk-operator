@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -25,7 +26,6 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
-	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -77,6 +77,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	logger := logging.FromContext(ctx).With("func", "ApplyKVService")
 	logger.DebugContext(ctx, "reconciling KVService", "generation", cr.Generation, "replicas", cr.Spec.Replicas)
 	previousPhase := cr.Status.Phase
+	previousConditions := slices.Clone(cr.Status.Conditions)
 	result.RequeueAfter = 5 * time.Second
 	cr.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("KVService"))
 	cr.Status.Phase = enterpriseApi.PhaseError
@@ -104,6 +105,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 		} else {
 			cr.Status.Conditions = splcommon.ClearStalledCondition(cr.Status.Conditions, cr.Generation)
 		}
+		k8sops.EmitStalledTransitionEvents(ctx, publisher, cr.Name, previousConditions, cr.Status.Conditions)
 		statusErr := k8sops.UpdateKVServiceStatus(ctx, c, cr)
 		if statusErr != nil && !(apierrors.IsNotFound(statusErr) && cr.DeletionTimestamp != nil) {
 			if terminal {
@@ -137,12 +139,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 		publisher.Warning(ctx, splcommon.EventReasonValidateSpecFailed, "KVService spec validation failed")
 		return result, fmt.Errorf("validate KVService spec: %w", err)
 	}
-	if cr.Spec.Postgres != nil {
-		if _, err = splutil.ApplyNamespaceScopedSecretObject(ctx, c, cr.Namespace); err != nil {
-			return result, fmt.Errorf("ensure KVService namespace authentication Secret: %w", err)
-		}
-	}
-	postgresDependencies, postgresReady, postgresMessage, postgresErr := ensurePostgresReady(ctx, c, cr)
+	postgresDependencies, postgresReady, postgresMessage, postgresErr := ensureTenantPostgresReady(ctx, c, cr)
 	statusMessage = postgresMessage
 	if postgresErr != nil {
 		return result, fmt.Errorf("prepare KVService PostgreSQL dependency: %w", postgresErr)

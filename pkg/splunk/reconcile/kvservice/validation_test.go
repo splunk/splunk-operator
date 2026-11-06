@@ -35,6 +35,7 @@ func TestValidateKVServiceSpec(t *testing.T) {
 			Name:      "stack1",
 			Namespace: "test",
 		},
+		Spec: enterpriseApi.KVServiceSpec{Postgres: enterpriseApi.KVServicePostgresSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}}},
 	}
 
 	err := validateKVServiceSpec(ctx, c, cr)
@@ -68,6 +69,7 @@ func TestValidateKVServiceSpec(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			spec.Spec = cr.Spec.Spec
+			spec.Postgres = cr.Spec.Postgres
 			invalid := &enterpriseApi.KVService{ObjectMeta: cr.ObjectMeta, Spec: spec}
 			if err := validateKVServiceSpec(ctx, c, invalid); err == nil {
 				t.Error("negative probe timing must fail validation")
@@ -90,16 +92,14 @@ func TestValidateKVServiceSpec(t *testing.T) {
 	} {
 		t.Run("reserved "+name, func(t *testing.T) {
 			candidate := cr.DeepCopy()
-			candidate.Spec.Postgres = &enterpriseApi.KVServicePostgresSpec{}
+			candidate.Spec.Postgres = cr.Spec.Postgres
 			candidate.Spec.ExtraEnv = []corev1.EnvVar{{Name: name, Value: "override"}}
 			require.ErrorContains(t, validateKVServiceSpec(t.Context(), c, candidate), name)
-			candidate.Spec.Postgres = nil
-			require.NoError(t, validateKVServiceSpec(t.Context(), c, candidate), "without PostgreSQL configuration the variable is user-managed")
 		})
 	}
 	t.Run("unrelated extra environment", func(t *testing.T) {
 		candidate := cr.DeepCopy()
-		candidate.Spec.Postgres = &enterpriseApi.KVServicePostgresSpec{}
+		candidate.Spec.Postgres = cr.Spec.Postgres
 		candidate.Spec.ExtraEnv = []corev1.EnvVar{{Name: "CUSTOM_SETTING", Value: "allowed"}}
 		require.NoError(t, validateKVServiceSpec(t.Context(), c, candidate))
 	})
@@ -111,8 +111,37 @@ func TestValidateKVServiceCertsFeatureGate(t *testing.T) {
 	t.Cleanup(func() {
 		require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): previous}))
 	})
-	cr := &enterpriseApi.KVService{}
+	cr := &enterpriseApi.KVService{Spec: enterpriseApi.KVServiceSpec{Postgres: enterpriseApi.KVServicePostgresSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}}}}
 	cr.Spec.Certs = []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "postgres-ca"}}}
 	err := validateKVServiceSpec(context.Background(), spltest.NewMockClient(), cr)
 	require.ErrorContains(t, err, "CertManagement")
+}
+
+func TestKVServiceReservesTLSOverridesOnlyWithCerts(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	previous := config.DefaultMutableFeatureGate.Enabled(config.CertManagement)
+	require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): true}))
+	t.Cleanup(func() {
+		require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): previous}))
+	})
+	for _, name := range []string{"TLS_CERTIFICATE", "TLS_PRIVATE_KEY", "TLS_HOST", "TLS_PORT"} {
+		t.Run(name, func(t *testing.T) {
+			for _, withCerts := range []bool{false, true} {
+				cr := &enterpriseApi.KVService{Spec: enterpriseApi.KVServiceSpec{
+					Postgres: enterpriseApi.KVServicePostgresSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}},
+				}}
+				cr.Spec.ExtraEnv = []corev1.EnvVar{{Name: name, Value: "override"}}
+				if withCerts {
+					cr.Spec.Certs = []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "tls"}}}
+				}
+				err := validateKVServiceSpec(t.Context(), spltest.NewMockClient(), cr)
+				if withCerts {
+					require.ErrorContains(t, err, "TLS environment variable")
+					require.ErrorContains(t, err, name)
+				} else {
+					require.NoError(t, err)
+				}
+			}
+		})
+	}
 }

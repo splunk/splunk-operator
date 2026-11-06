@@ -30,18 +30,11 @@ const (
 
 // KVServicePostgresSpec configures the Postgres resources used by KVService.
 type KVServicePostgresSpec struct {
-	// Reference to an existing PostgresDatabase resource in this namespace.
-	// When omitted, the controller selects the existing kvstore-database resource.
-	// KVService never creates or modifies the referenced PostgresDatabase.
-	// +optional
-	DatabaseRef *corev1.LocalObjectReference `json:"databaseRef,omitempty"`
-
-	// Logical PostgreSQL database name used by KVService.
-	// When omitted, the controller selects kvstore.
-	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9]*$`
-	// +kubebuilder:validation:MaxLength=30
-	// +optional
-	DatabaseName string `json:"databaseName,omitempty"`
+	// ClusterRef references the PostgresCluster in this namespace used to provision
+	// databases for tenant namespaces that select this KVService.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="has(self.name) && self.name != ''",message="clusterRef.name must not be empty"
+	ClusterRef corev1.LocalObjectReference `json:"clusterRef"`
 }
 
 // KVServiceSpec defines the desired state of KVService.
@@ -68,9 +61,9 @@ type KVServiceSpec struct {
 	// +kubebuilder:default=1
 	Replicas int32 `json:"replicas,omitempty"`
 
-	// Postgres config used by KVService.
-	// +optional
-	Postgres *KVServicePostgresSpec `json:"postgres,omitempty"`
+	// Postgres configures the required PostgresCluster connection for KVService.
+	// +kubebuilder:validation:Required
+	Postgres KVServicePostgresSpec `json:"postgres"`
 }
 
 // KVServiceStatus defines the observed state of KVService
@@ -123,6 +116,7 @@ type KVService struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
+	// +kubebuilder:validation:Required
 	Spec   KVServiceSpec   `json:"spec"`
 	Status KVServiceStatus `json:"status,omitempty,omitzero"`
 }

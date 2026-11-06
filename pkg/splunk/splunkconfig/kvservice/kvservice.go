@@ -17,6 +17,7 @@ package kvservice
 import (
 	"github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
+	"github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 type feature struct{ connectionString, tenant string }
@@ -40,8 +41,12 @@ func (f *feature) Contribute(role common.InstanceType) (splunkconfig.ConfSet, er
 		settings := common.StanzaFields{"defaultKVStoreType": "local"}
 		stanzas := common.ConfFileStanzas{"kvstore": settings}
 		if f.connectionString != "" {
+			endpoint, err := util.ParseKVServiceAddress(f.connectionString)
+			if err != nil {
+				return splunkconfig.ConfSet{}, err
+			}
 			settings["defaultKVStoreType"] = "external"
-			settings["kvserviceConnectionString"] = f.connectionString
+			settings["kvserviceConnectionString"] = endpoint.String()
 			stanzas["scs"] = common.StanzaFields{"tenant": f.tenant, "mvl-enabled": "true"}
 		} else {
 			// Preserve local KV Store startup behavior when KVService is disabled.
