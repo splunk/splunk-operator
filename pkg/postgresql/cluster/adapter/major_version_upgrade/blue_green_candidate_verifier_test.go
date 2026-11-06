@@ -32,12 +32,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestCandidateBaselineReusesReadOnlyPreflightInventory(t *testing.T) {
-	source, verifier, preflight := sourceInventoryTestFixture(t, []string{subscriptionName("orders", "orders") + "/orders"}, true)
+	source, verifier, preflight := sourceInventoryTestFixture(t, []string{replicationSlotName("orders", "orders") + "/orders"}, true)
 	databases := []declaredDatabase{{name: "orders"}}
 
 	_, err := preflight.Inspect(t.Context(), source, databases, "attempt-1")
@@ -50,7 +49,7 @@ func TestCandidateBaselineReusesReadOnlyPreflightInventory(t *testing.T) {
 }
 
 func TestCandidateBaselineAcceptsUnchangedPreparedSource(t *testing.T) {
-	source, verifier, _ := sourceInventoryTestFixture(t, []string{subscriptionName("orders", "orders") + "/orders"}, false)
+	source, verifier, _ := sourceInventoryTestFixture(t, []string{replicationSlotName("orders", "orders") + "/orders"}, false)
 	schema, access := "schema-fingerprint", "access-fingerprint"
 	status := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
 		AttemptID: "attempt-1",
@@ -92,9 +91,9 @@ func TestCandidateReadyRejectsUnexpectedSourceLogicalSlot(t *testing.T) {
 		ready bool
 		fail  bool
 	}{
-		{name: "only attempt slot", slots: []string{subscriptionName("orders", "orders") + "/orders"}, ready: true},
-		{name: "table copy slot still closing", slots: []string{subscriptionName("orders", "orders") + "/orders", "pg_10_sync_11_12/orders"}},
-		{name: "unexpected slot", slots: []string{subscriptionName("orders", "orders") + "/orders", "other/orders"}, fail: true},
+		{name: "only attempt slot", slots: []string{replicationSlotName("orders", "orders") + "/orders"}, ready: true},
+		{name: "table copy slot still closing", slots: []string{replicationSlotName("orders", "orders") + "/orders", "pg_10_sync_11_12/orders"}},
+		{name: "unexpected slot", slots: []string{replicationSlotName("orders", "orders") + "/orders", "other/orders"}, fail: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			source, verifier, _ := sourceInventoryTestFixture(t, test.slots, false)
@@ -148,7 +147,7 @@ func TestCandidateSamplesBlueWALPosition(t *testing.T) {
 
 func TestDirectBluePodConnectionVerifiesBlueServiceName(t *testing.T) {
 	source, verifier, _ := sourceInventoryTestFixture(t, nil, false)
-	host := "source-1.source-r.default.svc.cluster.local"
+	host := "10.42.0.17"
 	verifier.connect = func(_ context.Context, gotHost, database, password, serverName string, serverCA []byte) (pginfra.Conn, error) {
 		assert.Equal(t, host, gotHost)
 		assert.Equal(t, "orders", database)
@@ -205,6 +204,49 @@ func TestLogicalSlotRequiresFailoverSafeReplicaState(t *testing.T) {
 	require.ErrorContains(t, err, "slot query failed after its row")
 }
 
+func TestSourceSlotReadinessRequiresRunningNativeSettingsOnEveryInstance(t *testing.T) {
+	for _, pendingInstance := range []string{"blue-1", "blue-2", ""} {
+		t.Run("pending_"+pendingInstance, func(t *testing.T) {
+			source := &cnpgv1.Cluster{Name: "blue", Namespace: "default", Status: cnpgv1.ClusterStatus{CurrentPrimary: "blue-1"}}
+			setLogicalSlotSynchronization(&source.Spec)
+			instances := []string{"blue-1", "blue-2"}
+			pods := map[string]corev1.Pod{"blue-1": {Name: "blue-1", UID: "primary-uid", Status: corev1.PodStatus{PodIP: "10.42.0.1"}}, "blue-2": {Name: "blue-2", UID: "replica-uid", Status: corev1.PodStatus{PodIP: "10.42.0.2"}}}
+			connections := make(map[string]*preflightSQLTestConn)
+			v := &postgresCandidateVerifier{logicalName: "orders", connectEnvironment: func(_ context.Context, _ *cnpgv1.Cluster, host, _ string) (pginfra.Conn, error) {
+				instance := "blue-1"
+				if host == pods["blue-2"].Status.PodIP {
+					instance = "blue-2"
+				} else {
+					assert.Equal(t, pods["blue-1"].Status.PodIP, host)
+				}
+				primary := instance == source.Status.CurrentPrimary
+				conn := &preflightSQLTestConn{results: [][]any{{instance != pendingInstance}, {[]any{primary, true, "", true, !primary, false, true}}}}
+				connections[instance] = conn
+				return conn, nil
+			}}
+			proofs, ready, err := v.slotState(t.Context(), source, "orders", "0/16B6C50", instances, pods)
+			require.NoError(t, err)
+			assert.Equal(t, pendingInstance == "", ready)
+			require.Len(t, proofs, 2)
+			for _, proof := range proofs {
+				assert.Equal(t, replicationSlotName("orders", "orders"), proof.SlotName)
+				assert.Equal(t, proof.ReplicaName != pendingInstance, *proof.Valid)
+				if proof.ReplicaName == pendingInstance {
+					require.NotNil(t, proof.Failure)
+					assert.Contains(t, *proof.Failure, "settings have not converged")
+				}
+			}
+			for _, conn := range connections {
+				require.Len(t, conn.queries, 2)
+				assert.Contains(t, conn.queries[0], "current_setting('hot_standby_feedback')::boolean")
+				assert.Contains(t, conn.queries[0], "current_setting('sync_replication_slots')::boolean")
+				assert.Contains(t, conn.queries[0], "pending_restart")
+				assert.Contains(t, conn.queries[0], "current_setting('synchronized_standby_slots')")
+			}
+		})
+	}
+}
+
 func TestSubscriptionStateRequiresRunningCaughtUpApplyWorkerAndEveryTableCopied(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
@@ -244,12 +286,14 @@ type subscriptionStateConn struct {
 
 func (subscriptionStateConn) Begin(context.Context) (pginfra.Tx, error) { panic("not used") }
 func (subscriptionStateConn) Close(context.Context) error               { return nil }
-func (c subscriptionStateConn) Query(_ context.Context, sql string, _ ...any) (pginfra.Rows, error) {
+func (c subscriptionStateConn) Query(_ context.Context, sql string, args ...any) (pginfra.Rows, error) {
 	switch {
 	case strings.Contains(sql, "pg_stat_subscription"):
 		assert.Contains(c.t, sql, "worker.pid IS NOT NULL")
 		assert.Contains(c.t, sql, "sub.subfailover")
-		assert.Contains(c.t, sql, "worker.latest_end_lsn >= $2::pg_lsn")
+		assert.Contains(c.t, sql, "sub.subslotname = $2")
+		assert.Contains(c.t, sql, "worker.latest_end_lsn >= $3::pg_lsn")
+		assert.Equal(c.t, []any{subscriptionName("orders", "orders"), replicationSlotName("orders", "orders"), "0/16B6C50"}, args)
 		return &sourceInventoryRows{values: []any{c.applyWorker && c.caughtUp}}, nil
 	case strings.Contains(sql, "pg_subscription_rel"):
 		assert.Contains(c.t, sql, "rel.srrelid = c.oid")
@@ -431,6 +475,7 @@ func TestCandidateGuardsAreInstalledOnceThenOnlyVerified(t *testing.T) {
 		{true}, {[]any{"public", "orders"}}, {"valid"},
 	}}
 	require.NoError(t, verifier.VerifyAndGuard(t.Context(), target, databases, status))
+	assert.Equal(t, greenAccessFingerprintSQL, conn.queries[1], "green must require the inert publisher shadow before recording import parity")
 	assert.Equal(t, new(true), status.DatabaseReplication[0].SchemaImported)
 	assert.Len(t, conn.execs, 3, "first pass creates the schema, function, and table guard")
 	assert.Equal(t, 1, conn.commits)

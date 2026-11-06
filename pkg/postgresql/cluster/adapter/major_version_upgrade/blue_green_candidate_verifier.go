@@ -31,7 +31,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -40,6 +39,9 @@ type postgresCandidateVerifier struct {
 	connect     postgresConnector
 	logicalName string
 	owner       *platformv1alpha1.PostgresCluster
+	// connectEnvironment lets the cutover verifier retain the same replication
+	// proof while using its restricted identity after remote postgres is fenced.
+	connectEnvironment func(context.Context, *cnpgv1.Cluster, string, string) (pginfra.Conn, error)
 }
 
 func newPostgresCandidateVerifier(c client.Client, logicalName string, owner *platformv1alpha1.PostgresCluster) *postgresCandidateVerifier {
@@ -76,7 +78,7 @@ func (v *postgresCandidateVerifier) VerifyAndGuard(ctx context.Context, target *
 			conn.Close(ctx)
 			return fmt.Errorf("fingerprinting green schema for %q: %w", database.name, err)
 		}
-		if err := queryOne(ctx, conn, &access, accessFingerprintSQL, replicationRoleName(status.AttemptID)); err != nil {
+		if err := queryOne(ctx, conn, &access, greenAccessFingerprintSQL, replicationRoleName(status.AttemptID)); err != nil {
 			conn.Close(ctx)
 			return fmt.Errorf("fingerprinting green access policy for %q: %w", database.name, err)
 		}
@@ -126,6 +128,9 @@ func (v *postgresCandidateVerifier) connectTarget(ctx context.Context, target *c
 func (v *postgresCandidateVerifier) connectCluster(ctx context.Context, cluster *cnpgv1.Cluster, host, database string) (pginfra.Conn, error) {
 	if cluster == nil {
 		return nil, fmt.Errorf("%w: PostgreSQL Cluster is unavailable", mvutypes.ErrUpgradeFlowFailed)
+	}
+	if v.connectEnvironment != nil {
+		return v.connectEnvironment(ctx, cluster, host, database)
 	}
 	secretName := cluster.GetSuperuserSecretName()
 	if secretName == "" {
@@ -309,7 +314,7 @@ func (v *postgresCandidateVerifier) verifySourceSlotInventory(ctx context.Contex
 	}
 	expected := make(map[string]struct{}, len(databases))
 	for _, database := range databases {
-		expected[subscriptionName(v.logicalName, database.name)+"/"+database.name] = struct{}{}
+		expected[replicationSlotName(v.logicalName, database.name)+"/"+database.name] = struct{}{}
 	}
 	pendingSyncSlot := false
 	for _, slot := range actual {
@@ -328,21 +333,7 @@ func (v *postgresCandidateVerifier) verifySourceSlotInventory(ctx context.Contex
 }
 
 func (v *postgresCandidateVerifier) healthySourcePods(ctx context.Context, source *cnpgv1.Cluster) ([]string, map[string]corev1.Pod, error) {
-	healthy := source.Status.InstancesStatus[cnpgv1.PodHealthy]
-	podList := &corev1.PodList{}
-	if err := v.client.List(ctx, podList, client.InNamespace(source.Namespace), client.MatchingLabels{"cnpg.io/cluster": source.Name}); err != nil {
-		return nil, nil, fmt.Errorf("listing blue instances for logical-slot verification: %w", err)
-	}
-	pods := make(map[string]corev1.Pod, len(podList.Items))
-	for _, pod := range podList.Items {
-		pods[pod.Name] = pod
-	}
-	for _, name := range healthy {
-		if _, found := pods[name]; !found {
-			return nil, nil, fmt.Errorf("%w: blue healthy instance %q is not discoverable", mvutypes.ErrUpgradeFlowFailed, name)
-		}
-	}
-	return healthy, pods, nil
+	return healthyInstancePods(ctx, v.client, source)
 }
 
 func (v *postgresCandidateVerifier) subscriptionState(ctx context.Context, target *cnpgv1.Cluster, database, sourceLSN string) (bool, bool, error) {
@@ -352,14 +343,15 @@ func (v *postgresCandidateVerifier) subscriptionState(ctx context.Context, targe
 	}
 	defer conn.Close(ctx)
 	name := subscriptionName(v.logicalName, database)
+	slotName := replicationSlotName(v.logicalName, database)
 	var subscriptionHealthy bool
 	if err := queryOne(ctx, conn, &subscriptionHealthy, `SELECT EXISTS (
   SELECT 1 FROM pg_subscription sub
   JOIN pg_stat_subscription worker ON worker.subid = sub.oid
-  WHERE sub.subname = $1 AND sub.subenabled AND sub.subfailover AND sub.subslotname = $1
+  WHERE sub.subname = $1 AND sub.subenabled AND sub.subfailover AND sub.subslotname = $2
     AND worker.relid IS NULL AND worker.pid IS NOT NULL
-    AND worker.latest_end_lsn >= $2::pg_lsn
-)`, name, sourceLSN); err != nil {
+    AND worker.latest_end_lsn >= $3::pg_lsn
+)`, name, slotName, sourceLSN); err != nil {
 		return false, false, fmt.Errorf("checking green subscription %q: %w", name, err)
 	}
 	var copyComplete bool
@@ -379,19 +371,31 @@ func (v *postgresCandidateVerifier) subscriptionState(ctx context.Context, targe
 }
 
 func (v *postgresCandidateVerifier) slotState(ctx context.Context, source *cnpgv1.Cluster, database, sourceLSN string, healthy []string, pods map[string]corev1.Pod) ([]platformv1alpha1.BlueGreenReplicaSlotStatus, bool, error) {
-	service, err := pgconninfo.ServiceFQDN(source.GetServiceAnyName(), source.Namespace)
-	if err != nil {
-		return nil, false, fmt.Errorf("resolving blue headless Service for logical-slot verification: %w", err)
-	}
-	slotName := subscriptionName(v.logicalName, database)
+	slotName := replicationSlotName(v.logicalName, database)
 	result := make([]platformv1alpha1.BlueGreenReplicaSlotStatus, 0, len(healthy))
+	standbySlots := make([]string, 0, max(len(healthy)-1, 0))
+	for _, instance := range healthy {
+		if instance == source.Status.CurrentPrimary {
+			continue
+		}
+		slot := source.GetSlotNameFromInstanceName(instance)
+		if slot == "" {
+			return result, false, fmt.Errorf("%w: source HA replication slots are not enabled", mvutypes.ErrUpgradeFlowPending)
+		}
+		standbySlots = append(standbySlots, slot)
+	}
 	ready := true
 	for _, instance := range healthy {
 		pod := pods[instance]
-		host := instance + "." + service
+		host := pod.Status.PodIP
 		conn, err := v.connectCluster(ctx, source, host, database)
 		if err != nil {
 			return result, false, fmt.Errorf("connecting to blue instance %q for logical-slot verification: %w", instance, err)
+		}
+		settingsReady, err := sourceLogicalSlotSettingsReady(ctx, conn, standbySlots)
+		if err != nil {
+			conn.Close(ctx)
+			return result, false, fmt.Errorf("checking blue logical-slot settings on %q: %w", instance, err)
 		}
 		state, err := logicalSlotState(ctx, conn, slotName, sourceLSN)
 		closeErr := conn.Close(ctx)
@@ -404,7 +408,7 @@ func (v *postgresCandidateVerifier) slotState(ctx context.Context, source *cnpgv
 		if state.invalidation != "" && state.invalidation != "missing" {
 			return result, false, fmt.Errorf("%w: blue logical slot %q on %q is invalidated: %s", mvutypes.ErrUpgradeFlowFailed, slotName, instance, state.invalidation)
 		}
-		valid := logicalSlotReady(state, instance == source.Status.CurrentPrimary)
+		valid := settingsReady && logicalSlotReady(state, instance == source.Status.CurrentPrimary)
 		now := metav1.Now()
 		replica := platformv1alpha1.BlueGreenReplicaSlotStatus{ReplicaName: instance, ReplicaUID: string(pod.UID), SlotName: slotName, Valid: new(valid), VerifiedAt: &now}
 		if !valid {
@@ -412,12 +416,28 @@ func (v *postgresCandidateVerifier) slotState(ctx context.Context, source *cnpgv
 			if instance == source.Status.CurrentPrimary {
 				failure = "primary logical slot is not active, caught up, and failover-enabled"
 			}
+			if !settingsReady {
+				failure = "source logical-slot synchronization settings have not converged"
+			}
 			replica.Failure = &failure
 		}
 		result = append(result, replica)
 		ready = ready && valid
 	}
 	return result, ready, nil
+}
+
+func sourceLogicalSlotSettingsReady(ctx context.Context, conn pginfra.Conn, standbySlots []string) (bool, error) {
+	var ready bool
+	err := queryOne(ctx, conn, &ready, `SELECT current_setting('hot_standby_feedback')::boolean
+  AND current_setting('sync_replication_slots')::boolean
+  AND NOT EXISTS (SELECT 1 FROM pg_settings
+    WHERE name IN ('hot_standby_feedback', 'sync_replication_slots', 'synchronized_standby_slots') AND pending_restart)
+  AND (pg_is_in_recovery() OR NOT EXISTS (
+    SELECT 1 FROM unnest($1::text[]) required(slot_name)
+    WHERE NOT (slot_name = ANY (regexp_split_to_array(current_setting('synchronized_standby_slots'), '\s*,\s*')))
+  ))`, standbySlots)
+	return ready, err
 }
 
 type logicalSlotObservation struct {

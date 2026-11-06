@@ -151,7 +151,7 @@ func TestFingerprintQueriesCoverTheFreezeContract(t *testing.T) {
 }
 
 func TestGreenFingerprintRequiresAnInertExistingPublisherRole(t *testing.T) {
-	green := greenAccessFingerprintSQL()
+	green := greenAccessFingerprintSQL
 	assert.Contains(t, accessFingerprintSQL, sourcePublisherRoleDrift)
 	assert.NotContains(t, accessFingerprintSQL, greenPublisherRoleDrift)
 	assert.NotContains(t, accessFingerprintSQL, "attempt-role-missing:", "blue's first baseline precedes publisher creation")

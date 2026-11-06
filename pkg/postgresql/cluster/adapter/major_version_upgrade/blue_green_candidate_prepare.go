@@ -35,7 +35,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -67,7 +66,17 @@ type candidateVerifier interface {
 }
 
 func NewBlueGreenCandidatePreparer(c client.Client, key types.NamespacedName, cluster *platformv1alpha1.PostgresCluster, plan BlueGreenCandidatePlan) *BlueGreenCandidatePreparer {
-	return &BlueGreenCandidatePreparer{client: c, key: key, cluster: cluster, plan: plan, verifier: newPostgresCandidateVerifier(c, key.Name, cluster), tls: certmanagerinfra.NewManager(c)}
+	return NewBlueGreenCandidatePreparerWithReader(c, c, key, cluster, plan)
+}
+
+// NewBlueGreenCandidatePreparerWithReader keeps instance UID and PodIP safety
+// observations outside the informer cache while preserving the explicit writer.
+func NewBlueGreenCandidatePreparerWithReader(c client.Client, reader client.Reader, key types.NamespacedName, cluster *platformv1alpha1.PostgresCluster, plan BlueGreenCandidatePlan) *BlueGreenCandidatePreparer {
+	if c == nil || reader == nil || cluster == nil || key.Name == "" || key.Namespace == "" || key.Name != cluster.Name || key.Namespace != cluster.Namespace {
+		panic("blue/green candidate requires clients and a matching parent identity")
+	}
+	live := liveReadClient{Client: c, reader: reader}
+	return &BlueGreenCandidatePreparer{client: live, key: key, cluster: cluster, plan: plan, verifier: newPostgresCandidateVerifier(live, key.Name, cluster), tls: certmanagerinfra.NewManager(live)}
 }
 
 // PrepareCandidate creates the target-major CNPG Cluster from the immutable
@@ -238,9 +247,9 @@ func (p *BlueGreenCandidatePreparer) buildCandidate(ctx context.Context, source 
 		return nil, fmt.Errorf("resolving blue write Service for candidate import: %w", err)
 	}
 	databaseNames := make([]string, 0, len(databases))
-	// The attempt replication role is source-only. CNPG's schema import does
-	// not preserve its REPLICATION attribute, and the access fingerprint
-	// already excludes the expected attempt role on blue.
+	// Import application roles with their owners and ACLs intact. CNPG runs
+	// PostInitSQL before monolith import, so an inert publisher-name recipient
+	// can satisfy the dump's SELECT grants without importing source credentials.
 	roles := declaredRoleNames(databases, "")
 	roleNames := make([]string, 0, len(roles))
 	for _, database := range databases {
@@ -278,6 +287,7 @@ func (p *BlueGreenCandidatePreparer) buildCandidate(ctx context.Context, source 
 	spec.Plugins = plugins
 	spec.Bootstrap = &cnpgv1.BootstrapConfiguration{InitDB: &cnpgv1.BootstrapInitDB{
 		Database: "postgres", Owner: "postgres", Secret: source.Spec.SuperuserSecret,
+		PostInitSQL: []string{candidatePublisherShadowSQL(username)},
 		Import: &cnpgv1.Import{
 			Source: cnpgv1.ImportSource{ExternalCluster: candidateImportExternalClusterName},
 			Type:   cnpgv1.MonolithSnapshotType, Databases: databaseNames, Roles: roleNames, SchemaOnly: true,
@@ -330,7 +340,14 @@ func (p *BlueGreenCandidatePreparer) replicationUsername(ctx context.Context, at
 	if username == "" {
 		return "", fmt.Errorf("%w: replication Secret %s has no username", mvutypes.ErrUpgradeFlowFailed, name)
 	}
+	if username != replicationRoleName(attemptID) {
+		return "", fmt.Errorf("%w: replication Secret %s has an unexpected attempt role", mvutypes.ErrUpgradeFlowFailed, name)
+	}
 	return username, nil
+}
+
+func candidatePublisherShadowSQL(role string) string {
+	return "CREATE ROLE " + pginfra.QuoteIdentifier(role) + " NOLOGIN NOREPLICATION NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS INHERIT CONNECTION LIMIT -1 PASSWORD NULL"
 }
 
 func (p *BlueGreenCandidatePreparer) validateCandidate(candidate, desired, source *cnpgv1.Cluster, attemptID string) error {
@@ -559,7 +576,7 @@ func (p *BlueGreenCandidatePreparer) buildCandidateSubscription(candidateName, d
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: p.key.Namespace, Labels: map[string]string{blueGreenAttemptLabel: attemptID}, OwnerReferences: p.ownerReferences()},
 		Spec: cnpgv1.SubscriptionSpec{
 			ClusterRef: candidateRef(candidateName), Name: name, DBName: databaseName,
-			Parameters:      map[string]string{"copy_data": "true", "create_slot": "true", "enabled": "true", "failover": "true", "slot_name": name},
+			Parameters:      map[string]string{"copy_data": "true", "create_slot": "true", "enabled": "true", "failover": "true", "slot_name": replicationSlotName(p.key.Name, databaseName)},
 			PublicationName: publicationName(p.key.Name, databaseName), PublicationDBName: databaseName,
 			ExternalClusterName: candidateSourceExternalClusterName, ReclaimPolicy: cnpgv1.SubscriptionReclaimDelete,
 		},
@@ -679,4 +696,11 @@ func subscriptionName(clusterName, databaseName string) string {
 		clusterName = clusterName[:postgresIdentifierMaxLength-len(suffix)]
 	}
 	return clusterName + suffix
+}
+
+// PostgreSQL slot names have a stricter alphabet than Kubernetes object and
+// quoted SQL subscription names. Keep their identities separate.
+func replicationSlotName(clusterName, databaseName string) string {
+	digest := sha256.Sum256([]byte(clusterName + "/" + databaseName))
+	return fmt.Sprintf("sok_bg_%x", digest[:12])
 }
