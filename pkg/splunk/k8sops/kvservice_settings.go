@@ -20,6 +20,7 @@ import (
 	"slices"
 
 	"github.com/splunk/splunk-operator/pkg/config"
+	"github.com/splunk/splunk-operator/pkg/logging"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -52,8 +53,8 @@ func SupportsKVService(cr splcommon.MetaObject) bool {
 }
 
 // GetKVServiceSettings reads the consumer namespace's enable and tenant labels
-// and address annotation. The address is used unchanged. It does not require a
-// KVService CR, Service, or ready backend to exist.
+// and address annotation. Supported short Service DNS addresses are used unchanged.
+// It does not require a KVService CR, Service, or ready backend to exist.
 func GetKVServiceSettings(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) (KVServiceSettings, bool, error) {
 	if !SupportsKVService(cr) || instanceType == SplunkDeployer {
 		return KVServiceSettings{}, false, nil
@@ -70,12 +71,27 @@ func GetKVServiceSettings(ctx context.Context, client splcommon.ControllerClient
 		return KVServiceSettings{}, false, nil
 	}
 	address := namespace.Annotations[splcommon.AnnotationKVServiceAddr]
-	if address == "" {
-		return KVServiceSettings{}, false, fmt.Errorf("namespace %q annotation %s must not be empty", namespace.Name, splcommon.AnnotationKVServiceAddr)
-	}
 	tenant, err := splutil.GetTenantName(namespace)
 	if err != nil {
 		return KVServiceSettings{}, false, err
 	}
+	if err := splutil.ValidateKVServiceTenantName(tenant); err != nil {
+		return KVServiceSettings{}, false, fmt.Errorf("validate tenant label in namespace %q: %w", namespace.Name, err)
+	}
+	if _, err := namespaceKVServiceAddress(ctx, namespace); err != nil {
+		return KVServiceSettings{}, false, fmt.Errorf("resolve namespace KVService address: %w", err)
+	}
 	return KVServiceSettings{ConnectionString: address, Tenant: tenant}, true, nil
+}
+
+// namespaceKVServiceAddress supplies the same actionable, sanitized diagnostic at
+// every namespace-metadata boundary. The annotation value itself is never logged.
+func namespaceKVServiceAddress(ctx context.Context, namespace *corev1.Namespace) (*splutil.KVServiceAddress, error) {
+	endpoint, err := splutil.ParseKVServiceAddress(namespace.Annotations[splcommon.AnnotationKVServiceAddr])
+	if err != nil {
+		err = fmt.Errorf("namespace %q: set annotation %s to a supported KVService address: %w", namespace.Name, splcommon.AnnotationKVServiceAddr, err)
+		logging.FromContext(ctx).WarnContext(ctx, "invalid namespace KVService address", "namespace", namespace.Name, "annotation", splcommon.AnnotationKVServiceAddr, "error", err)
+		return nil, err
+	}
+	return endpoint, nil
 }

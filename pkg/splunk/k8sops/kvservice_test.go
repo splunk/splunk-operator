@@ -68,7 +68,7 @@ func TestGetKVServiceDeployment(t *testing.T) {
 	cr.Spec.ServiceAccount = "kvservice-sa"
 	cr.Spec.Replicas = 1
 
-	deployment, err := GetKVServiceDeployment(ctx, c, cr, nil)
+	deployment, err := GetKVServiceDeploymentWithPostgresDependencies(ctx, c, cr, &KVServicePostgresDependencies{}, nil)
 	if err != nil {
 		t.Fatalf("GetKVServiceDeployment error=%v", err)
 	}
@@ -168,7 +168,7 @@ func TestKVServiceConfigurationAndConfigMapRollouts(t *testing.T) {
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, cm).Build()
 	before := cr.DeepCopy()
-	deployment, err := GetKVServiceDeployment(ctx, c, cr, nil)
+	deployment, err := GetKVServiceDeploymentWithPostgresDependencies(ctx, c, cr, &KVServicePostgresDependencies{}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, before, cr, "resolving configuration must not mutate the CR")
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 1)
@@ -195,18 +195,18 @@ func TestKVServiceConfigurationAndConfigMapRollouts(t *testing.T) {
 	cm.Labels = map[string]string{"metadata": "updated"}
 	cm.Data["unused"] = "changed"
 	require.NoError(t, c.Update(ctx, cm))
-	unchanged, err := GetKVServiceDeployment(ctx, c, cr, nil)
+	unchanged, err := GetKVServiceDeploymentWithPostgresDependencies(ctx, c, cr, &KVServicePostgresDependencies{}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, first, unchanged.Spec.Template.Annotations, "metadata and unmounted keys must not trigger a rollout")
 	cm.Data["used"] = "second"
 	require.NoError(t, c.Update(ctx, cm))
-	changed, err := GetKVServiceDeployment(ctx, c, cr, nil)
+	changed, err := GetKVServiceDeploymentWithPostgresDependencies(ctx, c, cr, &KVServicePostgresDependencies{}, nil)
 	require.NoError(t, err)
 	assert.NotEqual(t, first[splcommon.ConfigMapRevAnnotationPrefix+"config"], changed.Spec.Template.Annotations[splcommon.ConfigMapRevAnnotationPrefix+"config"])
 	assert.NotEqual(t, first[projectedKey], changed.Spec.Template.Annotations[projectedKey])
 	cm.Annotations = map[string]string{splcommon.ConfigMapRestartOptOutAnnotation: "false"}
 	require.NoError(t, c.Update(ctx, cm))
-	optOut, err := GetKVServiceDeployment(ctx, c, cr, nil)
+	optOut, err := GetKVServiceDeploymentWithPostgresDependencies(ctx, c, cr, &KVServicePostgresDependencies{}, nil)
 	require.NoError(t, err)
 	assert.NotContains(t, optOut.Spec.Template.Annotations, splcommon.ConfigMapRevAnnotationPrefix+"config")
 	assert.NotContains(t, optOut.Spec.Template.Annotations, projectedKey)
@@ -228,7 +228,6 @@ func TestResolveKVServicePostgresDependenciesRejectsMissingRequiredValues(t *tes
 		{name: "missing port", configKey: pgconninfo.KeyDefaultClusterPort},
 		{name: "missing username", configKey: pgdatabase.ConfigMapKeyAdminUser},
 		{name: "missing password", secretName: "admin", secretKey: "password"},
-		{name: "missing pass4 key", secretName: splcommon.GetNamespaceScopedSecretName("test"), secretKey: kvServicePass4SymmKey},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -240,7 +239,7 @@ func TestResolveKVServicePostgresDependenciesRejectsMissingRequiredValues(t *tes
 				delete(data, tt.configKey)
 			}
 			adminSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "admin", Namespace: "test"}, Data: map[string][]byte{"password": []byte("password")}}
-			namespaceSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: splcommon.GetNamespaceScopedSecretName("test"), Namespace: "test"}, Data: map[string][]byte{kvServicePass4SymmKey: []byte("pass4")}}
+			namespaceSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: splcommon.GetNamespaceScopedSecretName("test"), Namespace: "test"}, Data: map[string][]byte{"pass4SymmKey": []byte("pass4")}}
 			if tt.secretName == adminSecret.Name {
 				delete(adminSecret.Data, tt.secretKey)
 			}
@@ -265,9 +264,9 @@ func TestResolveKVServicePostgresDependenciesRejectsMissingRequiredValues(t *tes
 			})
 			cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "test"}}
 
-			_, ready, err := ResolveKVServicePostgresDependencies(t.Context(), mockClient, cr, database, "kvstore")
+			_, ready, err := ResolveKVServiceTenantDependencies(t.Context(), mockClient, cr, database, "kvstore")
 			require.Error(t, err)
-			assert.False(t, ready)
+			assert.Nil(t, ready)
 		})
 	}
 }

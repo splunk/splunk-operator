@@ -20,7 +20,7 @@ metadata:
     platform.splunk.com/kvservice: enabled
     platform.splunk.com/tenant: tenant
   annotations:
-    platform.splunk.com/kvservice-addr: "shared.backend:8066"
+    platform.splunk.com/kvservice-addr: "splunk-shared-kvservice-service.backend:8066"
 ```
 
 `platform.splunk.com/tenant` optionally sets the tenant name for the namespace.
@@ -34,10 +34,23 @@ accepts tenant names for namespaces included in its `WATCH_NAMESPACE` scope; an
 empty `WATCH_NAMESPACE` means all namespaces are watched.
 
 `platform.splunk.com/kvservice-addr` sets the KVService client address for
-Enterprise clients, for example `shared.backend:8066`. This annotation is required
-when KVService is enabled and belongs under the workload Namespace's
-`metadata.annotations`. SOK uses its value unchanged: include any required port;
-SOK does not add one or normalize the address.
+Enterprise clients, for example `splunk-shared-kvservice-service.backend:8066`.
+This selects KVService `backend/shared`, regardless of which workload namespace
+contains the annotation. It is required when KVService is enabled and belongs
+under the workload Namespace's `metadata.annotations`.
+
+Only the short Service DNS form
+`splunk-<kvservice-name>-kvservice-service.<hosting-namespace>:8066` is supported.
+The Service name and port must match the operator-managed backend. Full DNS names
+(including `.svc` and `.svc.cluster.local`), single-label names, IP addresses,
+aliases, missing ports, and custom ports are rejected. Do not append a DNS suffix.
+
+An explicit `http://` or `https://` scheme and an optional trailing root slash are
+preserved; a bare address uses `http://`. Credentials, query strings, fragments,
+and non-root paths are rejected. The shared parser returns the same backend
+identity for client configuration, tenant discovery, and source-Secret routing.
+Invalid address metadata is reported with the namespace and annotation to repair;
+the supplied annotation value is not logged.
 
 Changes to the enable or tenant label, or address annotation, update KVService consumers
 automatically. Missing or empty address annotations in enabled namespaces cause

@@ -14,7 +14,12 @@
 
 package util
 
-import "os"
+import (
+	"fmt"
+	"os"
+
+	"github.com/splunk/splunk-operator/pkg/splunk/common"
+)
 
 // GetKVServiceImage resolves an explicit image, the related-image setting, or the default.
 func GetKVServiceImage(specImage string) string {
@@ -30,4 +35,9 @@ func GetKVServiceImage(specImage string) string {
 	}
 
 	return name
+}
+
+// KVServiceBackendAddress returns the canonical Service address used for tenant discovery.
+func KVServiceBackendAddress(name, namespace string) string {
+	return fmt.Sprintf("%s.%s:%d", common.GetSplunkServiceName(common.SplunkKVService, name, false), namespace, common.KVServicePort)
 }

@@ -359,8 +359,8 @@ func TestNoahNamespaceKVServiceDefaultsUseSystemLocalDictionary(t *testing.T) {
 			c := spltest.NewMockClient()
 			namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "workload"}}
 			if enabled {
-				namespace.Labels = map[string]string{splcommon.LabelKVService: "enabled", splcommon.LabelTenant: "kv-tenant"}
-				namespace.Annotations = map[string]string{splcommon.AnnotationKVServiceAddr: "shared.backend:8066"}
+				namespace.Labels = map[string]string{splcommon.LabelKVService: "enabled", splcommon.LabelTenant: "kvtenant"}
+				namespace.Annotations = map[string]string{splcommon.AnnotationKVServiceAddr: "splunk-shared-kvservice-service.backend:8066"}
 			}
 			c.AddObject(namespace)
 			cr := &enterpriseApi.SearchHeadCluster{
@@ -387,8 +387,10 @@ func TestNoahNamespaceKVServiceDefaultsUseSystemLocalDictionary(t *testing.T) {
 			assert.Equal(t, noahSpec.Tenant, server.Stanzas["noahService"]["tenant"])
 			assert.NotContains(t, server.Stanzas["noahService"], "pass4SymmKey")
 			if enabled {
-				assert.Equal(t, splcommon.StanzaFields{"defaultKVStoreType": "external", "kvserviceConnectionString": "shared.backend:8066"}, server.Stanzas["kvstore"])
-				assert.Equal(t, splcommon.StanzaFields{"tenant": "kv-tenant", "mvl-enabled": "true"}, server.Stanzas["scs"])
+				assert.Equal(t, splcommon.StanzaFields{"defaultKVStoreType": "external", "kvserviceConnectionString": "http://splunk-shared-kvservice-service.backend:8066"}, server.Stanzas["kvstore"])
+				assert.Equal(t, splcommon.StanzaFields{"tenant": "kvtenant", "mvl-enabled": "true"}, server.Stanzas["scs"])
+				assert.NotContains(t, server.Stanzas["kvstore"], "kvserviceScope")
+				assert.NotContains(t, server.Stanzas["scs"], "environment")
 			} else {
 				assert.Equal(t, splcommon.StanzaFields{"defaultKVStoreType": "local", "postgresMigrateOnStartup": "false"}, server.Stanzas["kvstore"])
 				assert.NotContains(t, server.Stanzas, "scs")

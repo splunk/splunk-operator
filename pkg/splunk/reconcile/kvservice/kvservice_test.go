@@ -35,7 +35,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/events"
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -44,20 +43,11 @@ import (
 func TestKVServiceReadinessAndConfigurationFailure(t *testing.T) {
 	// Existing unit-test fixture value; this test only uses a fake Kubernetes client.
 	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
-	if err := enterpriseApi.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
-	cr := &enterpriseApi.KVService{
-		TypeMeta:   metav1.TypeMeta{APIVersion: enterpriseApi.GroupVersion.String(), Kind: "KVService"},
-		ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "test", UID: "kvservice-id", Generation: 7},
-	}
+	cr, _, c := postgresReadinessFixture(t)
+	ctx := t.Context()
+	cr.Generation = 7
 	cr.Spec.PodAnnotations = map[string]string{"sidecar.istio.io/inject": "false"}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&enterpriseApi.KVService{}, &appsv1.Deployment{}).WithObjects(cr).Build()
+	require.NoError(t, c.Update(ctx, cr))
 	key := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 	recorder := events.NewFakeRecorder(100)
 	result, err := Apply(ctx, c, key, recorder)
@@ -74,12 +64,21 @@ func TestKVServiceReadinessAndConfigurationFailure(t *testing.T) {
 	}
 	secrets := &corev1.SecretList{}
 	require.NoError(t, c.List(ctx, secrets))
-	assert.Empty(t, secrets.Items, "KVService must not generate Enterprise namespace or versioned secrets")
+	for _, secret := range secrets.Items {
+		if secret.Namespace == cr.Namespace {
+			assert.Contains(t, []string{"alpha-owner", "bravo-owner", splcommon.KVServiceTenantVerificationKeysName}, secret.Name)
+		}
+	}
 	configMaps := &corev1.ConfigMapList{}
 	require.NoError(t, c.List(ctx, configMaps))
-	assert.Empty(t, configMaps.Items, "KVService must not create default.yml or App Framework ConfigMaps")
+	assert.Len(t, configMaps.Items, 3, "only two database connection maps and the tenant map are needed")
+	for _, configMap := range configMaps.Items {
+		assert.NotContains(t, configMap.Data, "default.yml", "KVService must not create Enterprise defaults")
+	}
 	assert.NotContains(t, deployment.Spec.Template.Annotations, "defaultConfigRev")
-	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].Env)
+	assert.Equal(t, "alpha", envValue(deployment.Spec.Template.Spec.Containers[0].Env, "KVSERVICE_CMPK_SERVICE_DATABASE"))
+	assert.Empty(t, envValue(deployment.Spec.Template.Spec.Containers[0].Env, "SPLUNK_HOME"))
+	assert.Empty(t, envValue(deployment.Spec.Template.Spec.Containers[0].Env, "SPLUNK_DEFAULTS_URL"))
 	// Reconciling an older Deployment must remove the inherited Enterprise setup.
 	deployment.Spec.Template.Spec.Containers[0].Env = append(deployment.Spec.Template.Spec.Containers[0].Env,
 		corev1.EnvVar{Name: "SPLUNK_HOME", Value: "/opt/splunk"},
@@ -92,9 +91,14 @@ func TestKVServiceReadinessAndConfigurationFailure(t *testing.T) {
 	_, err = Apply(ctx, c, key, recorder)
 	require.NoError(t, err)
 	require.NoError(t, c.Get(ctx, deploymentKey, deployment))
-	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].Env)
-	assert.Empty(t, deployment.Spec.Template.Spec.Volumes)
-	assert.Empty(t, deployment.Spec.Template.Spec.Containers[0].VolumeMounts)
+	assert.Equal(t, "alpha", envValue(deployment.Spec.Template.Spec.Containers[0].Env, "KVSERVICE_CMPK_SERVICE_DATABASE"))
+	assert.Empty(t, envValue(deployment.Spec.Template.Spec.Containers[0].Env, "SPLUNK_HOME"))
+	assert.Empty(t, envValue(deployment.Spec.Template.Spec.Containers[0].Env, "SPLUNK_DEFAULTS_URL"))
+	assert.Len(t, deployment.Spec.Template.Spec.Volumes, 4, "tenant map, verification keys, and both tenant password Secrets must be restored")
+	assert.Len(t, deployment.Spec.Template.Spec.Containers[0].VolumeMounts, 4)
+	for _, mount := range deployment.Spec.Template.Spec.Containers[0].VolumeMounts {
+		assert.NotEqual(t, "/mnt/splunk-secrets", mount.MountPath)
+	}
 	deployment.Status = appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1}
 	if err := c.Status().Update(ctx, deployment); err != nil {
 		t.Fatal(err)
@@ -196,36 +200,28 @@ func TestKVServiceReadinessAndConfigurationFailure(t *testing.T) {
 	}
 }
 
-func TestKVServicePostgresInitializesNamespaceSecretAndPreservesPendingMessage(t *testing.T) {
+func TestKVServicePostgresPreservesTenantPendingMessage(t *testing.T) {
 	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
-	featuregatetesting.SetFeatureGateDuringTest(t, config.DefaultMutableFeatureGate, config.PostgresController, true)
+	cr, c := pendingPostgresFixture(t)
 	ctx := t.Context()
-	scheme := runtime.NewScheme()
-	require.NoError(t, clientgoscheme.AddToScheme(scheme))
-	require.NoError(t, enterpriseApi.AddToScheme(scheme))
-	require.NoError(t, platformApi.AddToScheme(scheme))
-	cr := &enterpriseApi.KVService{
-		ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "test", UID: "kvservice-id", Generation: 1},
-		Spec: enterpriseApi.KVServiceSpec{
-			Postgres: &enterpriseApi.KVServicePostgresSpec{},
-		},
-	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&enterpriseApi.KVService{}).WithObjects(cr).Build()
-
 	result, err := Apply(ctx, c, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, events.NewFakeRecorder(10))
 	require.NoError(t, err)
-	assert.NotZero(t, result.RequeueAfter, "KVService waiting for PostgreSQL should be retried")
+	assert.NotZero(t, result.RequeueAfter, "KVService waiting for tenant databases should be retried")
 	secret := &corev1.Secret{}
 	secretKey := types.NamespacedName{Namespace: cr.Namespace, Name: splcommon.GetNamespaceScopedSecretName(cr.Namespace)}
-	require.NoError(t, c.Get(ctx, secretKey, secret), "namespace Secret should be initialized before the PostgreSQL readiness gate")
+	assert.True(t, apierrors.IsNotFound(c.Get(ctx, secretKey, secret)), "multi-tenant KVService must not generate a shared Enterprise namespace Secret")
+	for _, tenant := range []string{"alpha", "bravo"} {
+		database := &platformApi.PostgresDatabase{}
+		require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: tenant + "-database"}, database))
+		assert.Equal(t, cr.Spec.Postgres.ClusterRef, database.Spec.ClusterRef)
+	}
 	current := &enterpriseApi.KVService{}
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, current))
-	wantMessage := `waiting for PostgresDatabase "kvstore-database"`
 	assert.Equal(t, enterpriseApi.PhasePending, current.Status.Phase)
 	ready := meta.FindStatusCondition(current.Status.Conditions, string(enterpriseApi.ConditionReady))
 	require.NotNil(t, ready)
 	assert.Equal(t, metav1.ConditionFalse, ready.Status)
-	assert.Equal(t, wantMessage, ready.Message)
+	assert.Equal(t, "waiting for tenant databases: alpha, bravo", ready.Message)
 	t.Run("PostgreSQL reconciliation lifecycle", testKVServicePostgresReconciliationLifecycle)
 	t.Run("PostgreSQL with TLS", testKVServicePostgresTLSReconciliation)
 }
@@ -234,20 +230,20 @@ func TestEnsurePostgresReadyWaitsForCurrentNonDeletingDatabase(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, config.DefaultMutableFeatureGate, config.PostgresController, true)
 	for _, name := range []string{"stale database status", "deleting database"} {
 		t.Run(name, func(t *testing.T) {
-			cr, _, database, c := postgresReadinessFixture(t, false)
+			cr, database, c := postgresReadinessFixture(t)
 			if name == "stale database status" {
 				database.Status.ObservedGeneration = nil
-				require.NoError(t, c.Update(t.Context(), database))
+				require.NoError(t, c.Status().Update(t.Context(), database))
 			} else {
 				database.Finalizers = []string{"test-finalizer"}
 				require.NoError(t, c.Update(t.Context(), database))
 				require.NoError(t, c.Delete(t.Context(), database))
 			}
-			dependencies, ready, message, err := ensurePostgresReady(t.Context(), c, cr)
+			dependencies, ready, message, err := ensureTenantPostgresReady(t.Context(), c, cr)
 			require.NoError(t, err)
 			assert.False(t, ready)
 			assert.Nil(t, dependencies)
-			assert.Contains(t, message, "PostgresDatabase")
+			assert.Contains(t, message, "waiting for tenant databases: alpha")
 		})
 	}
 }
@@ -284,25 +280,15 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 	t.Cleanup(func() {
 		require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): previous}))
 	})
-	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	require.NoError(t, clientgoscheme.AddToScheme(scheme))
-	require.NoError(t, enterpriseApi.AddToScheme(scheme))
-	cr := &enterpriseApi.KVService{
-		ObjectMeta: metav1.ObjectMeta{Name: "certs", Namespace: "test", UID: "kvservice-certs"},
-		Spec: enterpriseApi.KVServiceSpec{
-			CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
-				Certs: []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "customer-tls"}}},
-			},
-		},
-	}
+	cr, _, c := postgresReadinessFixture(t)
+	ctx := t.Context()
+	cr.Spec.Certs = []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "customer-tls"}}}
+	require.NoError(t, c.Update(ctx, cr))
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "customer-tls", Namespace: cr.Namespace},
 		Data:       map[string][]byte{"tls.crt": []byte("test-cert-v1"), "tls.key": []byte("test-private-key"), "ca.crt": []byte("test-ca")},
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).
-		WithStatusSubresource(&enterpriseApi.KVService{}, &appsv1.Deployment{}).
-		WithObjects(cr, secret).Build()
+	require.NoError(t, c.Create(ctx, secret))
 	key := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 	_, err := Apply(ctx, c, key, nil)
 	require.NoError(t, err)

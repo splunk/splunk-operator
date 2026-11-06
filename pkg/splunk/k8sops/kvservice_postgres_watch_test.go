@@ -17,12 +17,9 @@ package k8sops
 import (
 	"context"
 	"errors"
-	"testing"
-
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,63 +27,104 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"testing"
 )
 
 func TestKVServicePostgresDependencyMappings(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, enterpriseApi.AddToScheme(scheme))
 	require.NoError(t, platformApi.AddToScheme(scheme))
-	consumer := func(name, namespace, resource, logical string) *enterpriseApi.KVService {
-		cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
-		cr.Spec.Postgres = &enterpriseApi.KVServicePostgresSpec{DatabaseName: logical}
-		if resource != "" {
-			cr.Spec.Postgres.DatabaseRef = &corev1.LocalObjectReference{Name: resource}
+	database := func(name, owner string) *platformApi.PostgresDatabase {
+		return &platformApi.PostgresDatabase{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "shared", Annotations: map[string]string{splcommon.KVServiceTenantDatabaseOwnerAnnotation: "shared/" + owner}},
+			Status: platformApi.PostgresDatabaseStatus{Databases: []platformApi.DatabaseInfo{{Name: name, ConfigMapRef: &corev1.LocalObjectReference{Name: "connection"}, AdminUserSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "password"}, Key: "password"}}}}}
+	}
+	alpha, bravo := database("alpha-database", "kvs"), database("bravo-database", "kvs")
+	foreign := database("foreign-database", "other")
+	var gets, lists int
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(alpha, bravo, foreign).
+		WithIndex(&platformApi.PostgresDatabase{}, KVServiceDatabaseDependencyIndex, KVServiceDatabaseDependencies).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+				gets++
+				return errors.New("unexpected Get")
+			},
+			List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+				lists++
+				return c.List(ctx, list, opts...)
+			},
+		}).Build()
+	mapper := KVServicePostgresMapper{Client: c}
+	requests := mapper.MapDatabase(t.Context(), alpha)
+	require.Len(t, requests, 1)
+	require.Equal(t, "kvs", requests[0].Name)
+	require.Zero(t, gets)
+	require.Equal(t, 1, lists, "database events list only the hosting namespace consumer set")
+	for _, event := range []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "connection", Namespace: "shared"}}, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "password", Namespace: "shared"}}} {
+		lists = 0
+		if _, ok := event.(*corev1.ConfigMap); ok {
+			requests = mapper.MapConfigMap(t.Context(), event)
+		} else {
+			requests = mapper.MapAdminSecret(t.Context(), event)
 		}
-		return cr
+		require.Len(t, requests, 2, "deduplicate multiple tenant databases for the same KVService")
+		require.ElementsMatch(t, []string{"kvs", "other"}, []string{requests[0].Name, requests[1].Name})
+		require.Equal(t, 1, lists, "dependency events use one indexed list, not per-tenant reads")
+		require.Zero(t, gets)
 	}
-	database := func(name, logical string) *platformApi.PostgresDatabase {
-		return &platformApi.PostgresDatabase{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test"}, Status: platformApi.PostgresDatabaseStatus{Databases: []platformApi.DatabaseInfo{{Name: logical,
-			ConfigMapRef: &corev1.LocalObjectReference{Name: "connection"}, AdminUserSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "admin"}, Key: "password"},
-		}}}}
-	}
-	objects := []client.Object{
-		consumer("default", "test", "", ""), consumer("custom", "test", "custom-db", "tenantdb"),
-		consumer("different-logical", "test", "", "otherdb"), consumer("unrelated", "test", "other-db", ""),
-		consumer("other-namespace", "other", "", ""), &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "no-postgres", Namespace: "test"}},
-		database("kvstore-database", "kvstore"), database("custom-db", "tenantdb"),
-	}
-	type mapper func(*KVServicePostgresMapper, context.Context, client.Object) []reconcile.Request
-	tests := []struct {
-		name     string
-		mapEvent mapper
-		event    client.Object
-		want     []string
-	}{
-		{name: "default database", mapEvent: (*KVServicePostgresMapper).MapDatabase, event: database("kvstore-database", "kvstore"), want: []string{"default", "different-logical"}},
-		{name: "custom database", mapEvent: (*KVServicePostgresMapper).MapDatabase, event: database("custom-db", "tenantdb"), want: []string{"custom"}},
-		{name: "ConfigMap", mapEvent: (*KVServicePostgresMapper).MapConfigMap, event: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "connection", Namespace: "test"}}, want: []string{"default", "custom"}},
-		{name: "admin Secret", mapEvent: (*KVServicePostgresMapper).MapAdminSecret, event: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "admin", Namespace: "test"}}, want: []string{"default", "custom"}},
-		{name: "namespace Secret", mapEvent: (*KVServicePostgresMapper).MapNamespaceSecret, event: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: splcommon.GetNamespaceScopedSecretName("test"), Namespace: "test"}}, want: []string{"default", "custom", "different-logical", "unrelated"}},
-		{name: "unrelated ConfigMap", mapEvent: (*KVServicePostgresMapper).MapConfigMap, event: &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "test"}}},
-		{name: "unrelated Secret", mapEvent: (*KVServicePostgresMapper).MapNamespaceSecret, event: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "test"}}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-			r := &KVServicePostgresMapper{Client: c}
-			requests := tt.mapEvent(r, t.Context(), tt.event)
-			names := []string{}
-			for _, request := range requests {
-				assert.Equal(t, "test", request.Namespace)
-				names = append(names, request.Name)
-			}
-			assert.ElementsMatch(t, tt.want, names)
-			assert.Empty(t, tt.mapEvent(r, t.Context(), &corev1.Service{}), "other object types must be ignored")
-			failing := fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
-				return errors.New("list failed")
-			}}).Build()
-			assert.Empty(t, tt.mapEvent(&KVServicePostgresMapper{Client: failing}, t.Context(), tt.event))
-		})
+	require.Empty(t, mapper.MapConfigMap(t.Context(), &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "shared"}}))
+	require.Empty(t, mapper.MapAdminSecret(t.Context(), &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "password", Namespace: "elsewhere"}}))
+	require.Empty(t, mapper.MapDatabase(t.Context(), &corev1.Service{}))
+	require.Empty(t, mapper.MapDatabase(t.Context(), &platformApi.PostgresDatabase{ObjectMeta: metav1.ObjectMeta{Name: "unmanaged", Namespace: "shared"}}))
+	unannotated := &platformApi.PostgresDatabase{ObjectMeta: metav1.ObjectMeta{Name: "retained", Namespace: "shared", Labels: map[string]string{"app.kubernetes.io/managed-by": "splunk-operator", "app.kubernetes.io/instance": "splunk-old-kvservice"}}}
+	require.Empty(t, mapper.MapDatabase(t.Context(), unannotated), "labels alone must not assign database management")
+	require.Empty(t, mapper.MapConfigMap(t.Context(), &corev1.Secret{}))
+	require.Empty(t, mapper.MapAdminSecret(t.Context(), &corev1.Service{}))
+}
+
+func TestKVServiceDependencyIndexTracksStatusChanges(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, platformApi.AddToScheme(scheme))
+	db := &platformApi.PostgresDatabase{ObjectMeta: metav1.ObjectMeta{Name: "alpha-database", Namespace: "shared", Annotations: map[string]string{splcommon.KVServiceTenantDatabaseOwnerAnnotation: "shared/kvs"}}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(db).WithStatusSubresource(db).WithIndex(db, KVServiceDatabaseDependencyIndex, KVServiceDatabaseDependencies).Build()
+	mapper := KVServicePostgresMapper{Client: c}
+	event := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "password", Namespace: "shared"}}
+	require.Empty(t, mapper.MapAdminSecret(t.Context(), event))
+	db.Status.Databases = []platformApi.DatabaseInfo{{Name: "alpha", AdminUserSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "password"}}}}
+	require.NoError(t, c.Status().Update(t.Context(), db))
+	require.Len(t, mapper.MapAdminSecret(t.Context(), event), 1)
+	db.Status.Databases[0].AdminUserSecretRef.Name = "replacement"
+	require.NoError(t, c.Status().Update(t.Context(), db))
+	require.Empty(t, mapper.MapAdminSecret(t.Context(), event))
+}
+
+func TestKVServiceDependencyMappingHandlesListFailure(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, platformApi.AddToScheme(scheme))
+	c := fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
+		return errors.New("cache unavailable")
+	}}).Build()
+	mapper := KVServicePostgresMapper{Client: c}
+	require.Empty(t, mapper.MapAdminSecret(t.Context(), &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "password", Namespace: "shared"}}))
+	require.Empty(t, mapper.MapTenantNamespace(t.Context(), &corev1.Namespace{}))
+}
+
+func TestDatabaseCollisionRepairWakesBlockedConsumer(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, enterpriseApi.AddToScheme(scheme))
+	require.NoError(t, platformApi.AddToScheme(scheme))
+	blocked := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "blocked", Namespace: "shared"}}
+	other := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "elsewhere", Namespace: "other"}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(blocked, other).Build()
+	mapper := KVServicePostgresMapper{Client: c}
+	for _, annotation := range []string{"", "shared/previous-manager"} {
+		db := &platformApi.PostgresDatabase{ObjectMeta: metav1.ObjectMeta{Name: "alpha-database", Namespace: "shared", Annotations: map[string]string{splcommon.KVServiceTenantDatabaseOwnerAnnotation: annotation}}}
+		requests := mapper.MapDatabase(t.Context(), db)
+		names := []string{}
+		for _, request := range requests {
+			require.Equal(t, "shared", request.Namespace)
+			names = append(names, request.Name)
+		}
+		require.Contains(t, names, "blocked", "repair/deletion must wake the stalled consumer without ownership metadata")
+		require.NotContains(t, names, "elsewhere")
 	}
 }
