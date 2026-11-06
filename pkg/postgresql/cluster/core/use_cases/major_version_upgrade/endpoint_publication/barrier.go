@@ -92,7 +92,7 @@ func (c *Coordinator) requireCanonicalBlue(ctx context.Context, parent *platform
 	if err != nil {
 		return err
 	}
-	if cm.Annotations[pgconninfo.AnnotationActiveEnvironment] == bg.Green.Ref.Name || !endpointDataMatches(cm.Data, expected) {
+	if !pgendpointprotocol.CanonicalOwnedByParent(parent, cm) || cm.Annotations[pgconninfo.AnnotationActiveEnvironment] == bg.Green.Ref.Name || !endpointDataMatches(cm.Data, expected) {
 		return ErrCanonicalMismatch
 	}
 	return nil
@@ -110,7 +110,7 @@ func (c *Coordinator) committedRouting(ctx context.Context, parent *platformv1al
 		return nil, err
 	}
 	routing, valid := pgendpointprotocol.CommittedCanonicalRouting(parent, bg, cm, generation, fingerprint)
-	if !valid {
+	if !valid || bg.EndpointPreparation == nil || !accessMetadataMatches(cm.Data, bg.EndpointPreparation.AccessMetadata) {
 		return nil, ErrCanonicalMismatch
 	}
 	return routing, nil

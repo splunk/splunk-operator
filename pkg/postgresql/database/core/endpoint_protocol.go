@@ -87,10 +87,10 @@ func endpointPublicationSettled(ctx context.Context, rc *ReconcileContext, db *p
 	if err != nil {
 		return false, err
 	}
-	// Once production has completed, retained-blue cleanup is independent of
-	// ordinary database management. Original children still need their
-	// acknowledgements; later children can be released after green authority
-	// converges.
+	// Target availability ends the schema freeze. The parent retains the
+	// completed cutover barrier so later children and changed generations can
+	// return to ordinary green reconciliation without joining that old roster.
+	// Original children still prove their own acknowledgement.
 	cleaned := bg.Cleanup != nil && bg.Cleanup.State == platformv1alpha1.BlueGreenCleanupStateCleaned
 	completed := endpointAttemptProductionCompleted(parent, bg)
 	outsideRoster := !endpointChildInFrozenRoster(bg, current)
@@ -104,7 +104,7 @@ func endpointPublicationSettled(ctx context.Context, rc *ReconcileContext, db *p
 	} else if err := verifyDurableCommitIdentity(ctx, rc.APIReader, parent, bg); err != nil {
 		return false, err
 	}
-	if outsideRoster && (completed || cleaned) {
+	if outsideRoster && (completed || cleaned || frozenParentPublicationComplete(bg)) {
 		return ordinaryReaderObservesGreen(ctx, rc, current, parent, bg)
 	}
 	if err := verifyIntentInventory(bg.EndpointPreparation.Acknowledgements, current); err != nil {
@@ -117,6 +117,74 @@ func endpointPublicationSettled(ctx context.Context, rc *ReconcileContext, db *p
 		return false, nil
 	}
 	return ordinaryReaderObservesGreen(ctx, rc, current, parent, bg)
+}
+
+// Frozen parent acknowledgements prove the publication barrier that preceded
+// TargetAvailable. Current child definitions may legitimately differ afterward.
+func frozenParentPublicationComplete(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool {
+	if bg == nil || bg.Switchover == nil || bg.Switchover.TargetAvailableAt == nil {
+		return false
+	}
+	preparation, publication := bg.EndpointPreparation, bg.EndpointPublication
+	if preparation == nil || publication == nil {
+		return false
+	}
+	if preparation.EndpointFingerprint == nil || publication.EndpointFingerprint == nil {
+		return false
+	}
+	if *preparation.EndpointFingerprint == "" || *preparation.EndpointFingerprint != *publication.EndpointFingerprint {
+		return false
+	}
+	if preparation.Generation <= 0 || preparation.Generation != publication.Generation || preparation.Generation != bg.EndpointIntentRevision {
+		return false
+	}
+	if len(bg.DatabaseReplication) == 0 || len(bg.DatabaseReplication) != len(preparation.Acknowledgements) || len(preparation.Acknowledgements) != len(publication.Acknowledgements) {
+		return false
+	}
+	type databaseKey struct {
+		child, uid, database string
+		generation           int64
+	}
+	prepared := make(map[databaseKey]struct{}, len(bg.EndpointPreparation.Acknowledgements))
+	inventory := make(map[databaseKey]struct{}, len(bg.DatabaseReplication))
+	for _, database := range bg.DatabaseReplication {
+		key := databaseKey{child: database.PostgresDatabaseName, uid: database.PostgresDatabaseUID, database: database.DatabaseName}
+		if key.child == "" || key.uid == "" || key.database == "" {
+			return false
+		}
+		if _, duplicate := inventory[key]; duplicate {
+			return false
+		}
+		inventory[key] = struct{}{}
+	}
+	fingerprint := *bg.EndpointPreparation.EndpointFingerprint
+	for _, ack := range bg.EndpointPreparation.Acknowledgements {
+		if ack.PostgresDatabaseName == "" || ack.PostgresDatabaseUID == "" || ack.PostgresDatabaseGeneration <= 0 || ack.DatabaseName == "" ||
+			ack.ValidatedAt == nil || ack.EndpointFingerprint == nil || *ack.EndpointFingerprint != fingerprint {
+			return false
+		}
+		key := databaseKey{ack.PostgresDatabaseName, ack.PostgresDatabaseUID, ack.DatabaseName, ack.PostgresDatabaseGeneration}
+		identity := databaseKey{child: key.child, uid: key.uid, database: key.database}
+		if _, present := inventory[identity]; !present {
+			return false
+		}
+		delete(inventory, identity)
+		if _, duplicate := prepared[key]; duplicate {
+			return false
+		}
+		prepared[key] = struct{}{}
+	}
+	if len(inventory) != 0 {
+		return false
+	}
+	for _, ack := range bg.EndpointPublication.Acknowledgements {
+		key := databaseKey{ack.PostgresDatabaseName, ack.PostgresDatabaseUID, ack.DatabaseName, ack.PostgresDatabaseGeneration}
+		if _, present := prepared[key]; !present || ack.AcknowledgedAt == nil || ack.EndpointFingerprint == nil || *ack.EndpointFingerprint != fingerprint {
+			return false
+		}
+		delete(prepared, key)
+	}
+	return len(prepared) == 0
 }
 
 // The cluster state store removes cutover proof after Cleanup=Cleaned. Only
@@ -529,7 +597,14 @@ func verifyDurableCommitIdentity(ctx context.Context, reader client.Reader, pare
 		return fmt.Errorf("reading canonical endpoint ConfigMap: %w", err)
 	}
 	if cm.UID != receipt.CanonicalConfigMap.UID {
-		return fmt.Errorf("canonical endpoint ConfigMap UID changed after commit")
+		if bg.EndpointPublication == nil || bg.EndpointPublication.EndpointFingerprint == nil {
+			return fmt.Errorf("canonical endpoint ConfigMap UID changed after commit")
+		}
+		// A replacement UID needs the controller's explicit recovery projection,
+		// exact owner/namespace, and the already committed endpoint payload.
+		if _, valid := pgendpointprotocol.CommittedCanonicalRouting(parent, bg, cm, bg.EndpointPublication.Generation, *bg.EndpointPublication.EndpointFingerprint); !valid {
+			return fmt.Errorf("canonical endpoint ConfigMap UID changed after commit without matching recovery proof")
+		}
 	}
 	return nil
 }

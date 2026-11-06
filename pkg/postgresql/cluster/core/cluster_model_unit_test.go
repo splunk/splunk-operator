@@ -1767,7 +1767,7 @@ func TestComponentStateTriggerConditions(t *testing.T) {
 			pgconninfo.KeyClusterROEndpoint:  "pg1-ro.default.svc.cluster.local",
 			pgconninfo.KeyClusterREndpoint:   "pg1-r.default.svc.cluster.local",
 			pgconninfo.KeyDefaultClusterPort: pgconninfo.DefaultPort,
-			configMapKeySuperUserSecretRef:   "pg1-secret",
+			pgconninfo.KeySuperUserSecretRef: "pg1-secret",
 		},
 	}
 	examplePgCluster := &platformv1alpha1.PostgresCluster{

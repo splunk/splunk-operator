@@ -72,7 +72,7 @@ func TestEndpointProtocolPreparesBlueThenPublishesAfterCanonicalCommit(t *testin
 	}
 	configuring := "Configuring"
 	parent.Status.Phase = &configuring
-	canonical := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "postgres-connection", Namespace: "ns", UID: "canonical-uid"}}
+	canonical := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "postgres-connection", Namespace: "ns", UID: "canonical-uid", OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(parent, platformv1alpha1.GroupVersion.WithKind("PostgresCluster"))}}}
 	objects := []client.Object{child, parent, blue, green, canonical}
 	for _, name := range []string{"green-rw", "green-r"} {
 		uid := types.UID(name + "-uid")
@@ -634,6 +634,143 @@ func TestFinishedAttemptReleasesChildrenOutsideFrozenEndpointInventory(t *testin
 	}
 }
 
+func TestTargetAvailableReleasesNewAndChangedChildrenWithFrozenPublicationProof(t *testing.T) {
+	for _, changed := range []bool{false, true} {
+		for _, recreated := range []bool{false, true} {
+			t.Run(fmt.Sprintf("changed generation %t canonical recreated %t", changed, recreated), func(t *testing.T) {
+				parent, child, canonical := targetAvailablePublicationFixture(changed, recreated)
+				scheme := testScheme(t)
+				c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(parent, child, canonical).Build()
+				ordinaryProvider := "blue"
+				rc := &ReconcileContext{Client: c, APIReader: c, Scheme: scheme,
+					ClusterReader: clusterReadinessReaderFunc(func(context.Context, string, string) (dbclusterinfo.ResolvedClusterFacts, error) {
+						card := testResolvedClusterCard(parent.Name, parent.Namespace, ordinaryProvider)
+						card.Authoritative.Identity.UID = types.UID(ordinaryProvider + "-uid")
+						return dbclusterinfo.ResolvedClusterFacts{Cluster: card}, nil
+					}),
+				}
+				handled, _, err := reconcileEndpointProtocol(t.Context(), rc, child)
+				require.NoError(t, err)
+				require.True(t, handled, "ordinary reconciliation must first observe current green authority")
+				ordinaryProvider = "green"
+				handled, _, err = reconcileEndpointProtocol(t.Context(), rc, child)
+				require.NoError(t, err)
+				require.False(t, handled, "the completed frozen parent barrier must release a new database generation at TargetAvailable")
+				require.Nil(t, child.Status.EndpointPreparation)
+				require.Nil(t, child.Status.EndpointPublication, "later generations need no fabricated cutover acknowledgement")
+			})
+		}
+	}
+}
+
+func TestTargetAvailableCanonicalReplacementNeedsExactRecoveryProof(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*platformv1alpha1.PostgresBlueGreenUpgradeStatus, *corev1.ConfigMap)
+	}{
+		{"missing recovery", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus, _ *corev1.ConfigMap) {
+			bg.CanonicalRecovery = nil
+		}},
+		{"wrong commit sequence", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus, _ *corev1.ConfigMap) {
+			bg.CanonicalRecovery.CommitSequence++
+		}},
+		{"wrong canonical UID", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus, _ *corev1.ConfigMap) {
+			bg.CanonicalRecovery.ConfigMap.UID = "unrelated"
+		}},
+		{"foreign owner", func(_ *platformv1alpha1.PostgresBlueGreenUpgradeStatus, cm *corev1.ConfigMap) {
+			cm.OwnerReferences[0].UID = "unrelated"
+		}},
+		{"wrong namespace", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus, _ *corev1.ConfigMap) {
+			bg.CanonicalRecovery.ConfigMap.Namespace = "other"
+		}},
+		{"changed routing", func(_ *platformv1alpha1.PostgresBlueGreenUpgradeStatus, cm *corev1.ConfigMap) {
+			cm.Data[pgconninfo.KeyClusterRWEndpoint] = "blue-rw"
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			parent, child, canonical := targetAvailablePublicationFixture(false, true)
+			test.mutate(parent.Status.PostgresMajorUpgradeStatus[0].BlueGreen, canonical)
+			scheme := testScheme(t)
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(parent, child, canonical).Build()
+			handled, _, err := reconcileEndpointProtocol(t.Context(), &ReconcileContext{Client: c, APIReader: c, Scheme: scheme}, child)
+			require.True(t, handled)
+			require.ErrorContains(t, err, "canonical endpoint ConfigMap UID changed after commit")
+		})
+	}
+}
+
+func TestFrozenParentPublicationProofRejectsIncompleteOrChangedAcknowledgements(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*platformv1alpha1.PostgresBlueGreenUpgradeStatus)
+	}{
+		{"missing validation time", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) {
+			bg.EndpointPreparation.Acknowledgements[0].ValidatedAt = nil
+		}},
+		{"deleted frozen rosters", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) {
+			bg.EndpointPreparation.Acknowledgements = nil
+			bg.EndpointPublication.Acknowledgements = nil
+		}},
+		{"missing publication time", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) {
+			bg.EndpointPublication.Acknowledgements[0].AcknowledgedAt = nil
+		}},
+		{"changed child generation", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) {
+			bg.EndpointPublication.Acknowledgements[0].PostgresDatabaseGeneration++
+		}},
+		{"changed publication fingerprint", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) {
+			bg.EndpointPublication.Acknowledgements[0].EndpointFingerprint = new("other")
+		}},
+		{"changed database", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) {
+			bg.EndpointPublication.Acknowledgements[0].DatabaseName = "other"
+		}},
+		{"duplicate validation", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) {
+			bg.EndpointPreparation.Acknowledgements = append(bg.EndpointPreparation.Acknowledgements, bg.EndpointPreparation.Acknowledgements[0])
+			bg.EndpointPublication.Acknowledgements = append(bg.EndpointPublication.Acknowledgements, bg.EndpointPublication.Acknowledgements[0])
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			parent, _, _ := targetAvailablePublicationFixture(false, false)
+			bg := parent.Status.PostgresMajorUpgradeStatus[0].BlueGreen
+			require.True(t, frozenParentPublicationComplete(bg))
+			test.mutate(bg)
+			require.False(t, frozenParentPublicationComplete(bg))
+		})
+	}
+}
+
+func targetAvailablePublicationFixture(changed, recreated bool) (*platformv1alpha1.PostgresCluster, *platformv1alpha1.PostgresDatabase, *corev1.ConfigMap) {
+	now := metav1.Now()
+	routing := map[string]string{pgconninfo.KeyClusterRWEndpoint: "green-rw.ns.svc.cluster.local", pgconninfo.KeyClusterROEndpoint: "", pgconninfo.KeyClusterREndpoint: "green-r.ns.svc.cluster.local", pgconninfo.KeyDefaultClusterPort: pgconninfo.DefaultPort}
+	fingerprint := pgconninfo.FingerprintEndpointData(routing)
+	bg := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+		AttemptID: "attempt", EndpointIntentRevision: 7,
+		DatabaseReplication: []platformv1alpha1.BlueGreenDatabaseReplicationStatus{{PostgresDatabaseName: "orders", PostgresDatabaseUID: "orders-uid", DatabaseName: "orders"}},
+		Green:               &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: corev1.ObjectReference{Name: "green", UID: "green-uid"}},
+		EndpointPreparation: &platformv1alpha1.BlueGreenEndpointPreparationStatus{Generation: 7, EndpointFingerprint: &fingerprint, Acknowledgements: []platformv1alpha1.BlueGreenEndpointPreparationAcknowledgementStatus{{PostgresDatabaseName: "orders", PostgresDatabaseUID: "orders-uid", PostgresDatabaseGeneration: 3, DatabaseName: "orders", EndpointFingerprint: &fingerprint, ValidatedAt: &now}}},
+		EndpointPublication: &platformv1alpha1.BlueGreenEndpointPublicationStatus{Generation: 7, EndpointFingerprint: &fingerprint, Acknowledgements: []platformv1alpha1.BlueGreenEndpointPublicationAcknowledgementStatus{{PostgresDatabaseName: "orders", PostgresDatabaseUID: "orders-uid", PostgresDatabaseGeneration: 3, DatabaseName: "orders", EndpointFingerprint: &fingerprint, AcknowledgedAt: &now}}},
+		CommitReceipt:       &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 1, CanonicalConfigMap: &corev1.ObjectReference{Name: "canonical", UID: "canonical-uid"}, Target: &corev1.ObjectReference{Name: "green", UID: "green-uid"}},
+		Switchover:          &platformv1alpha1.BlueGreenSwitchoverStatus{TargetAvailableAt: &now},
+		Cleanup:             &platformv1alpha1.BlueGreenCleanupStatus{State: platformv1alpha1.BlueGreenCleanupStateRetained},
+	}
+	parent := &platformv1alpha1.PostgresCluster{Name: "postgres", Namespace: "ns", UID: "parent-uid", ResourceVersion: "20", Status: platformv1alpha1.PostgresClusterStatus{
+		ProvisionerRef: &corev1.ObjectReference{Name: "green", UID: "green-uid"}, Resources: &platformv1alpha1.PostgresClusterResources{ConfigMapRef: &corev1.LocalObjectReference{Name: "canonical"}},
+		PostgresMajorUpgradeStatus: []platformv1alpha1.PostgresMajorUpgradeStatus{{Phase: new("PostUpgradeBackup"), BlueGreen: bg}},
+	}}
+	child := &platformv1alpha1.PostgresDatabase{Name: "invoices", Namespace: "ns", UID: "invoices-uid", Generation: 1, Spec: platformv1alpha1.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: parent.Name}, Databases: []platformv1alpha1.DatabaseDefinition{{Name: "invoices"}}}}
+	if changed {
+		child.Name, child.UID, child.Generation = "orders", "orders-uid", 4
+		child.Spec.Databases = []platformv1alpha1.DatabaseDefinition{{Name: "orders"}, {Name: "ledger"}}
+	}
+	canonical := &corev1.ConfigMap{Name: "canonical", Namespace: parent.Namespace, UID: "canonical-uid", Data: routing, OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(parent, platformv1alpha1.GroupVersion.WithKind("PostgresCluster"))}, Annotations: map[string]string{
+		pgconninfo.AnnotationActiveEnvironment: "green", pgconninfo.AnnotationEndpointAttemptID: bg.AttemptID, pgconninfo.AnnotationEndpointIntentGeneration: "7", pgconninfo.AnnotationEndpointFingerprint: fingerprint,
+	}}
+	if recreated {
+		canonical.UID = "recreated-canonical-uid"
+		bg.CanonicalRecovery = &platformv1alpha1.BlueGreenCanonicalRecoveryStatus{CommitSequence: 1, ConfigMap: corev1.ObjectReference{APIVersion: "v1", Kind: "ConfigMap", Namespace: parent.Namespace, Name: canonical.Name, UID: canonical.UID}, EndpointFingerprint: fingerprint, RecoveredAt: &now}
+	}
+	return parent, child, canonical
+}
+
 func TestCompactedCleanedAttemptReleasesOnlyAfterProviderAuthorityConverges(t *testing.T) {
 	for _, childName := range []string{"orders", "invoices"} {
 		t.Run(childName, func(t *testing.T) {
@@ -1073,6 +1210,7 @@ func TestEndpointPublicationRejectsChangedDurableProof(t *testing.T) {
 			},
 		}
 		canonical := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "canonical", Namespace: "ns", UID: "canonical-uid",
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(parent, platformv1alpha1.GroupVersion.WithKind("PostgresCluster"))},
 			Annotations: map[string]string{
 				pgconninfo.AnnotationActiveEnvironment: "green", pgconninfo.AnnotationEndpointAttemptID: "attempt",
 				pgconninfo.AnnotationEndpointIntentGeneration: "5", pgconninfo.AnnotationEndpointFingerprint: fingerprint,
