@@ -26,6 +26,7 @@ import (
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	pginfra "github.com/splunk/splunk-operator/pkg/postgresql/shared/infrastructure/postgres"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func (s *postgresSwitchoverSQL) PrepareControl(ctx context.Context, cluster *cnpgv1.Cluster, databases []declaredDatabase, id cutoverIdentity) error {
@@ -258,6 +259,32 @@ func verifyControlDatabase(ctx context.Context, conn pginfra.Conn, id cutoverIde
 	}
 	if !safe {
 		return fmt.Errorf("%w: cutover control grants exceed their owned overlay", mvutypes.ErrUpgradeFlowFailed)
+	}
+	return nil
+}
+
+func (s *postgresSwitchoverSQL) VerifyControl(ctx context.Context, cluster *cnpgv1.Cluster, id cutoverIdentity) error {
+	sequenceWrites, err := s.sequenceWrites(cluster, id)
+	if err != nil {
+		return err
+	}
+	databases, err := listManagedDatabases(ctx, s.client, types.NamespacedName{Namespace: s.owner.Namespace, Name: s.owner.Name})
+	if err != nil {
+		return err
+	}
+	names := []string{"postgres"}
+	for _, db := range databases {
+		names = append(names, db.name)
+	}
+	for _, name := range names {
+		if err := s.withConn(ctx, cluster, "", name, id, func(conn pginfra.Conn) error {
+			if err := verifyControlDatabase(ctx, conn, id); err != nil {
+				return err
+			}
+			return verifyControlSequenceGrants(ctx, conn, id, sequenceWrites)
+		}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
