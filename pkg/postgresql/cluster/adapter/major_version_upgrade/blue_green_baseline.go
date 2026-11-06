@@ -36,6 +36,20 @@ type sourceBaseline struct {
 	targetImage         string
 }
 
+func candidateConfigurationFingerprint(cluster *cnpgv1.Cluster) (string, error) {
+	if cluster == nil {
+		return "", fmt.Errorf("candidate configuration is unavailable")
+	}
+	normalized := cluster.DeepCopy()
+	normalized.Default()
+	encoded, err := json.Marshal(normalized.Spec)
+	if err != nil {
+		return "", fmt.Errorf("normalizing candidate configuration: %w", err)
+	}
+	digest := sha256.Sum256(encoded)
+	return fmt.Sprintf("%x", digest[:]), nil
+}
+
 type frozenDatabaseDeclaration struct {
 	Name       string                              `json:"name"`
 	UID        types.UID                           `json:"uid"`
