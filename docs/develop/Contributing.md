@@ -8,6 +8,10 @@ nav_order: 1
 
 This document is the single source of truth on contributing towards this codebase. Feel free to browse the [open issues](https://github.com/splunk/splunk-operator/issues) and file new ones - all feedback is welcome!
 
+For implementation guidance on API design, package boundaries, reconciliation,
+testing, and validation, see the [SOK Code Contribution
+Guide](CodeContributionGuide).
+
 ## Prerequisites
 
 When contributing to this repository, first discuss the issue with a [repository maintainer](#maintainers) via GitHub issue, Slack message, or email.

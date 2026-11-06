@@ -12,6 +12,7 @@ When changing this guide, read [`AGENTS.maintenance.md`](AGENTS.maintenance.md).
 - **Package layout & import-layer rules**: [`pkg/splunk/README.md`](pkg/splunk/README.md) (each package has a `doc.go`)
 - **Local setup & prerequisites**: [`docs/develop/DevelopmentSetup.md`](docs/develop/DevelopmentSetup.md)
 - **Contributing workflow**: [`docs/develop/Contributing.md`](docs/develop/Contributing.md)
+- **API, package, controller, and code-change patterns**: [`docs/develop/CodeContributionGuide.md`](docs/develop/CodeContributionGuide.md)
 - **Implementation, build & validation workflow**: [`DEVELOPMENT.md`](DEVELOPMENT.md)
 - **Testing strategy**: [`docs/develop/IntegrationTesting.md`](docs/develop/IntegrationTesting.md)
 - **Webhooks / feature gates**: [`docs/develop/WebhookDevelopment.md`](docs/develop/WebhookDevelopment.md), [`docs/develop/FeatureGates.md`](docs/develop/FeatureGates.md)
@@ -36,8 +37,8 @@ generation, build, and test work continues in [`DEVELOPMENT.md`](DEVELOPMENT.md)
 
 Short, task-neutral boundaries; detailed procedures live in the docs routed above.
 
-- **Primary loop before every MR**: run `make fmt vet`, then `make test`, then `make build`; after changing API types (`api/enterprise/**`) also run `make manifests generate`. Full workflow and validation depth live in [`DEVELOPMENT.md`](DEVELOPMENT.md).
-- **Generated-code drift** (CRDs, RBAC, DeepCopy): re-run `make manifests generate`; never hand-edit generated files.
+- **Primary loop before every MR**: run `make fmt vet`, then `make test`, then `make build`. After changing API types (`api/enterprise/**`), also run `make manifests generate` and `make bundle`. Full workflow and validation depth live in [`DEVELOPMENT.md`](DEVELOPMENT.md).
+- **Generated-code drift** (CRDs, RBAC, DeepCopy): re-run `make manifests generate` and `make bundle`. Never hand-edit generated files.
 - **Human sign-off required** before CRD schema or API-version changes, RBAC changes, cluster deploy/undeploy, and anything under `pkg/postgresql/`; never introduce breaking changes to public CRD APIs without owner approval.
 - **Git**: do not commit or push unless the user asks; never force-push, rewrite history, or bundle unrelated changes.
 - **Cluster & legal safety**: before live Kubernetes work, verify the authorized context, namespace, and scope; never infer acceptance of the Splunk General Terms or populate `SPLUNK_GENERAL_TERMS`, and use only a value the user supplies after they follow [`docs/README.md`](docs/README.md). The sole documented exception is the checked-in `SOK_PIPELINE_MODE=scs_deploy` CI lane (in-house SCS Helm deploy by Splunk employees); it never extends to local commands or customer deployments.
