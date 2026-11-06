@@ -111,8 +111,9 @@ git checkout -b feature/your-feature develop
 #    - Controllers:     internal/controller/{group}/*.go
 #    - Business logic:  pkg/splunk/{group}/**/*.go
 
-# 3. If you modified API types, regenerate manifests and code
+# 3. If you modified API types, regenerate manifests and code, then build the OLM bundle
 make manifests generate
+make bundle
 
 # 4. Format and vet
 make fmt vet
