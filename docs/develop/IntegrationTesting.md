@@ -47,15 +47,12 @@ another namespace. The mapping propagates the same references to PostgreSQL and
 Pooler pods. Synthetic unit/envtest fixture images
 are intentionally not published and must never be used for live tests.
 
-The GitLab EKS PostgreSQL lanes supply these inputs through the shared
-`.runtime-postgres-suite-job` configuration in
-[`gitlab-ci/includes/runtime.yml`](../../gitlab-ci/includes/runtime.yml). They use
-public CloudNativePG GHCR images pinned by tag and multi-architecture index
-digest, pulled directly by workload nodes without registry credentials or a
-PostgreSQL ECR mirror. CI checks for missing inputs before provisioning the
-cluster. See the [CI image inputs](../../gitlab-ci/README.md#merge-request-lane)
-for overrides and switching to public Splunk-built images. Direct private-registry
-runs still need the namespace-local credentials described above.
+EKS PostgreSQL CI runs supply these inputs through shared pipeline configuration.
+They use public CloudNativePG GHCR images pinned by tag and multi-architecture
+index digest. Workload nodes pull them directly without registry credentials or
+a PostgreSQL ECR mirror. CI checks for missing inputs before provisioning the
+cluster. Use approved `tag@sha256` references when overriding images. Direct
+private-registry runs still need the namespace-local credentials described above.
 
 The PostgreSQL database happy path also checks generated admin/rw credentials
 with independent client Jobs over the published RW endpoint using `verify-full`

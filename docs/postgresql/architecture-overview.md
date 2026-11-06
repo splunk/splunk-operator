@@ -13,9 +13,7 @@ decision, follow the linked [Architecture Decision Records](adr/README.md);
 for the condensed problem/alternatives/chosen-approach narrative, see the
 [RFC summary](rfc-summary.md).
 
-> Diagrams below are authored as Mermaid, embedded directly in this page —
-> GitLab renders `` ```mermaid `` fences inline, so no separate build step or
-> PNG is needed.
+> Diagrams below are authored in Mermaid and embedded directly in this page.
 
 ## The big picture
 
