@@ -407,6 +407,12 @@ type PostgresClusterStatus struct {
 	// +optional
 	PostgresMajorUpgradeStatus []PostgresMajorUpgradeStatus `json:"postgresMajorUpgradeStatus,omitempty"`
 
+	// BlueGreenCommitSequence is the highest committed endpoint sequence for
+	// this cluster. It survives cleanup and pruning of individual attempts.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	BlueGreenCommitSequence int64 `json:"blueGreenCommitSequence,omitzero"`
+
 	// CurrentPgVersion is the PostgreSQL major version currently running against
 	// the data directory, as reported by CNPG (PGDataImageInfo.MajorVersion).
 	// Written on every reconcile; used as the source-version baseline for the
@@ -745,6 +751,11 @@ type PostgresBlueGreenUpgradeStatus struct {
 	// +optional
 	CommitReceipt *BlueGreenCommitReceiptStatus `json:"commitReceipt,omitempty"`
 
+	// CanonicalRecovery binds a recreated canonical ConfigMap to an existing
+	// commit receipt. It never authorizes a first endpoint commit.
+	// +optional
+	CanonicalRecovery *BlueGreenCanonicalRecoveryStatus `json:"canonicalRecovery,omitempty"`
+
 	// Switchover records the latched timeout and the durable handoff milestones.
 	// +optional
 	Switchover *BlueGreenSwitchoverStatus `json:"switchover,omitempty"`
@@ -949,6 +960,18 @@ type BlueGreenEndpointPreparationStatus struct {
 	// +optional
 	EndpointFingerprint *string `json:"endpointFingerprint,omitempty"`
 
+	// Routing is the prepared non-sensitive endpoint payload. It allows a
+	// previously committed canonical record to be repaired while green is down.
+	// +kubebuilder:validation:MaxProperties=8
+	// +optional
+	Routing map[string]string `json:"routing,omitempty"`
+
+	// AccessMetadata preserves only the canonical username and credential/CA
+	// Secret selectors. It never contains credential values.
+	// +kubebuilder:validation:MaxProperties=3
+	// +optional
+	AccessMetadata map[string]string `json:"accessMetadata,omitempty"`
+
 	// +listType=map
 	// +listMapKey=postgresDatabaseName
 	// +listMapKey=postgresDatabaseUID
@@ -1051,9 +1074,93 @@ type BlueGreenCommitReceiptStatus struct {
 	Target *corev1.ObjectReference `json:"target,omitempty"`
 }
 
+// BlueGreenCanonicalRecoveryStatus proves an endpoint projection was recreated
+// from the immutable payload of an already committed attempt.
+type BlueGreenCanonicalRecoveryStatus struct {
+	CommitSequence      int64                  `json:"commitSequence"`
+	ConfigMap           corev1.ObjectReference `json:"configMap"`
+	EndpointFingerprint string                 `json:"endpointFingerprint"`
+	// +optional
+	RecoveredAt *metav1.Time `json:"recoveredAt,omitempty"`
+}
+
 // BlueGreenSwitchoverStatus records the timeout policy and durable handoff
 // milestones for one attempt.
 type BlueGreenSwitchoverStatus struct {
+	// BlueGreenCutoverAccessStatus is attempt-scoped and survives every retry.
+	// Inlining preserves the existing v1alpha1 JSON representation.
+	BlueGreenCutoverAccessStatus `json:",inline"`
+	// BlueGreenSwitchoverWindow is replaced as a unit for each authorized retry.
+	BlueGreenSwitchoverWindow `json:",inline"`
+}
+
+// BlueGreenCutoverAccessStatus owns immutable access recovery baselines and
+// attempt-scoped guard removal, independently of any interruption window.
+type BlueGreenCutoverAccessStatus struct {
+	// ControlIdentity references the attempt-owned operator credential. Its
+	// password is never included in status or application connection metadata.
+	// +optional
+	ControlIdentity *BlueGreenControlIdentityStatus `json:"controlIdentity,omitempty"`
+
+	// OriginalHBA stores the source CNPG HBA rules before the operator adds its
+	// temporary switchover fence. A pointer preserves an intentionally empty list.
+	// +optional
+	OriginalHBA *[]string `json:"originalHBA,omitempty"`
+
+	// OriginalRoleLogins stores only login flags for managed application roles;
+	// role names and flags are restored after the endpoint publication barrier.
+	// +listType=map
+	// +listMapKey=roleName
+	// +optional
+	OriginalRoleLogins []BlueGreenRoleLoginStatus `json:"originalRoleLogins,omitempty"`
+
+	// GreenOriginalHBA records green's independent HBA baseline for opening it
+	// after the publication barrier.
+	// +optional
+	GreenOriginalHBA *[]string `json:"greenOriginalHBA,omitempty"`
+
+	// GreenOriginalRoleLogins records green's independent managed-role baseline.
+	// +listType=map
+	// +listMapKey=roleName
+	// +optional
+	GreenOriginalRoleLogins []BlueGreenRoleLoginStatus `json:"greenOriginalRoleLogins,omitempty"`
+
+	// GreenConfigurationFingerprint freezes the full defaulted candidate spec
+	// before control preparation or access overlays are applied.
+	// +optional
+	GreenConfigurationFingerprint *string `json:"greenConfigurationFingerprint,omitempty"`
+
+	// GreenCredentialFingerprints also freezes candidate-specific credentials,
+	// including a generated green superuser Secret distinct from blue's.
+	// +listType=map
+	// +listMapKey=secretName
+	// +listMapKey=secretUID
+	// +optional
+	GreenCredentialFingerprints []BlueGreenCredentialFingerprintStatus `json:"greenCredentialFingerprints,omitempty"`
+
+	// CandidateGuardsRemovedAt records guard removal while green was fenced.
+	// +optional
+	CandidateGuardsRemovedAt *metav1.Time `json:"candidateGuardsRemovedAt,omitempty"`
+
+	// CandidateGuardsRemovalStartedAt authorizes idempotent guard removal behind
+	// the verified green fence, including recovery after a lost SQL response.
+	// +optional
+	CandidateGuardsRemovalStartedAt *metav1.Time `json:"candidateGuardsRemovalStartedAt,omitempty"`
+}
+
+// BlueGreenSwitchoverWindow contains only interruption-scoped receipts. A retry
+// retains the access baseline and replaces this entire value.
+type BlueGreenSwitchoverWindow struct {
+	// Sequence identifies a bounded interruption window within this attempt.
+	// A later window requires verified blue restoration and a new retry request.
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	Sequence int64 `json:"sequence,omitempty"`
+
+	// RetryRequestedAt is the explicit retry request consumed for this window.
+	// +optional
+	RetryRequestedAt *metav1.Time `json:"retryRequestedAt,omitempty"`
+
 	// LatchedTimeout is the effective timeout copied from the spec when fencing
 	// begins.
 	// +optional
@@ -1061,6 +1168,41 @@ type BlueGreenSwitchoverStatus struct {
 
 	// +optional
 	StartedAt *metav1.Time `json:"startedAt,omitempty"`
+
+	// FenceAppliedAt records when the attempt-scoped access fence was applied
+	// to both PostgreSQL environments.
+	// +optional
+	FenceAppliedAt *metav1.Time `json:"fenceAppliedAt,omitempty"`
+
+	// FenceVerifiedAt records SQL and CNPG proof that application writes are
+	// blocked while the operator control and replication identities remain usable.
+	// +optional
+	FenceVerifiedAt *metav1.Time `json:"fenceVerifiedAt,omitempty"`
+
+	// DrainCompletedAt records completion of the bounded blue transaction drain
+	// and termination of ordinary or unclassified sessions in both environments.
+	// +optional
+	DrainCompletedAt *metav1.Time `json:"drainCompletedAt,omitempty"`
+
+	// BlueSessionsTerminatedAt records the post-publication removal of remaining
+	// read-only sessions from the former production environment.
+	// +optional
+	BlueSessionsTerminatedAt *metav1.Time `json:"blueSessionsTerminatedAt,omitempty"`
+
+	// GreenFenceRemovedAt records the verified opening of application access on
+	// green after database endpoint publication completes.
+	// +optional
+	GreenFenceRemovedAt *metav1.Time `json:"greenFenceRemovedAt,omitempty"`
+
+	// SourceFenceRestoredAt proves a failed pre-commit window restored blue's
+	// declared and effective login/HBA state before a later retry may start.
+	// +optional
+	SourceFenceRestoredAt *metav1.Time `json:"sourceFenceRestoredAt,omitempty"`
+
+	// FinalParityVerifiedAt records final LSN, sequence, fingerprint and slot
+	// proof. These facts are verified again immediately before canonical commit.
+	// +optional
+	FinalParityVerifiedAt *metav1.Time `json:"finalParityVerifiedAt,omitempty"`
 
 	// +optional
 	DeadlineAt *metav1.Time `json:"deadlineAt,omitempty"`
@@ -1073,6 +1215,11 @@ type BlueGreenSwitchoverStatus struct {
 	// the target fence has been removed.
 	// +optional
 	TargetAvailableAt *metav1.Time `json:"targetAvailableAt,omitempty"`
+
+	// EndpointPublicationEventRef identifies the deterministic publication Event
+	// created after Target Available. Retries adopt that same Event.
+	// +optional
+	EndpointPublicationEventRef *corev1.ObjectReference `json:"endpointPublicationEventRef,omitempty"`
 
 	// +optional
 	TimedOutAt *metav1.Time `json:"timedOutAt,omitempty"`
@@ -1089,6 +1236,32 @@ type BlueGreenSwitchoverStatus struct {
 
 	// +optional
 	Failure *string `json:"failure,omitempty"`
+}
+
+// BlueGreenControlIdentityStatus identifies an operator-only control identity
+// scoped to one blue/green attempt.
+type BlueGreenControlIdentityStatus struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	RoleName string `json:"roleName"`
+
+	// SecretRef includes the UID of the owned credential, preventing adoption
+	// of a replacement Secret with the same name.
+	SecretRef corev1.ObjectReference `json:"secretRef"`
+
+	// PreparedAt records verified least-privilege control access in blue and green.
+	// +optional
+	PreparedAt *metav1.Time `json:"preparedAt,omitempty"`
+}
+
+// BlueGreenRoleLoginStatus is the attempt's frozen login state for one
+// PostgresDatabase-managed role.
+type BlueGreenRoleLoginStatus struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	RoleName string `json:"roleName"`
+
+	Login bool `json:"login"`
 }
 
 // BlueGreenSequenceSynchronizationStatus records durable final-parity evidence

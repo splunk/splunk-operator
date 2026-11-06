@@ -66,7 +66,7 @@ func (c *configMapModel) CheckContracts() error {
 }
 
 func (c *configMapModel) Reconcile(ctx context.Context) error {
-	desiredCM, err := generateConfigMap(ctx, c.client, c.scheme, c.cluster, c.contracts.CNPGCluster, c.contracts.TLSBackend, c.contracts.Secret.Name, c.contracts.EnvironmentNamer)
+	desiredCM, err := generateConfigMap(ctx, c.client, c.cluster, c.contracts.CNPGCluster, c.contracts.TLSBackend, c.contracts.Secret.Name, c.contracts.EnvironmentNamer)
 	if err != nil {
 		return newReconcileFailure(reasonConfigMapFailed, err)
 	}
@@ -118,7 +118,7 @@ func (c *configMapModel) computeHealth(reconcileErr error) (componentHealth, err
 		c.cluster.Status.Resources.ConfigMapRef = &corev1.LocalObjectReference{Name: c.cm.Name}
 	}
 
-	for _, requiredKey := range requiredClusterConfigMapKeys() {
+	for _, requiredKey := range pgconninfo.RequiredClusterKeys() {
 		if _, ok := c.cm.Data[requiredKey]; !ok {
 			return newFailedHealth(configMapsReady, reasonConfigMapFailed, fmt.Sprintf(msgFmtConfigMapMissingRequiredKey, requiredKey)),
 				fmt.Errorf("configmap missing key %s", requiredKey)
@@ -129,7 +129,7 @@ func (c *configMapModel) computeHealth(reconcileErr error) (componentHealth, err
 	// the access ConfigMap exposes SERVER_CA_* metadata. This prevents a race
 	// where CNPG status is ahead of Secret materialization and the controller
 	// otherwise settles Ready without ever publishing CA discovery fields.
-	if _, ok := c.cm.Data[configMapKeyServerCASecretRef]; !ok {
+	if _, ok := c.cm.Data[pgconninfo.KeyServerCASecretRef]; !ok {
 		return newProvisioningHealth(configMapsReady, reasonConfigMapFailed, msgConfigMapCAMetadataPending), nil
 	}
 	h := newReadyHealth(configMapsReady, reasonConfigMapReady, msgAccessConfigMapReady)
@@ -168,7 +168,7 @@ func caMetadataForConfigMap(
 }
 
 // generateConfigMap builds a ConfigMap with connection details for the PostgresCluster.
-func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Scheme, cluster *platformv1alpha1.PostgresCluster, cnpgCluster *cnpgv1.Cluster, backend tlsBackendState, secretName string, environmentNamer clusteridentity.EnvironmentNamer) (*corev1.ConfigMap, error) {
+func generateConfigMap(ctx context.Context, c client.Client, cluster *platformv1alpha1.PostgresCluster, cnpgCluster *cnpgv1.Cluster, backend tlsBackendState, secretName string, environmentNamer clusteridentity.EnvironmentNamer) (*corev1.ConfigMap, error) {
 	cmName := fmt.Sprintf("%s%s", cluster.Name, defaultConfigMapSuffix)
 	if cluster.Status.Resources != nil && cluster.Status.Resources.ConfigMapRef != nil {
 		cmName = cluster.Status.Resources.ConfigMapRef.Name
@@ -207,21 +207,10 @@ func generateConfigMap(ctx context.Context, c client.Client, scheme *runtime.Sch
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve connection endpoints: %w", err)
 	}
-	data, _, err := buildClusterConfigMapData(endpoints, superUsername, secretName, caSecretRefValue)
+	data, _, err := pgconninfo.BuildClusterConfigMapData(endpoints, superUsername, secretName, caSecretRefValue)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build ConfigMap data: %w", err)
 	}
 
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cmName,
-			Namespace: cluster.Namespace,
-			Labels:    map[string]string{"app.kubernetes.io/managed-by": "postgrescluster-controller"},
-		},
-		Data: data,
-	}
-	if err := ctrl.SetControllerReference(cluster, cm, scheme); err != nil {
-		return nil, fmt.Errorf("failed to set controller reference: %w", err)
-	}
-	return cm, nil
+	return pgconninfo.NewClusterConfigMap(cluster, cmName, data), nil
 }

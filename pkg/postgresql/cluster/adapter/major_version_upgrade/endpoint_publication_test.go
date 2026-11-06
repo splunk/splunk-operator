@@ -39,7 +39,7 @@ func TestEndpointProofResolverUsesGreenWithoutBlueAfterCommit(t *testing.T) {
 	green := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "green", Namespace: "ns", UID: "green-uid"},
 		Spec:       cnpgv1.ClusterSpec{Instances: 1},
-		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, ReadyInstances: 1, WriteService: "green-rw"},
+		Status:     cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, ReadyInstances: 1, WriteService: "green-rw", Certificates: cnpgv1.CertificatesStatus{ServerCASecret: "shared-ca"}},
 	}
 	objects := []client.Object{green}
 	portName := "postgres"
@@ -176,4 +176,19 @@ func TestEndpointCoordinatorStoreReadsObjectsAndWritesStatus(t *testing.T) {
 	require.Error(t, err)
 	_, err = store.ReadConfigMap(ctx, types.NamespacedName{Namespace: "ns", Name: "missing"})
 	require.Error(t, err)
+}
+
+func TestEndpointCoordinatorRejectsMissingClients(t *testing.T) {
+	c := fake.NewClientBuilder().Build()
+	for _, ports := range []struct {
+		writer client.Client
+		reader client.Reader
+	}{{nil, c}, {c, nil}} {
+		coordinator, err := NewEndpointCoordinator(ports.writer, ports.reader)
+		require.Error(t, err)
+		require.Nil(t, coordinator)
+	}
+	coordinator, err := NewEndpointCoordinator(c, c)
+	require.NoError(t, err)
+	require.NotNil(t, coordinator)
 }
