@@ -48,7 +48,7 @@ const (
 // rollback-after-commit from a genuine rollback failure.
 var ErrTxAlreadyClosed = pgx.ErrTxClosed
 
-// Conn is a single superuser connection to a PostgreSQL database.
+// Conn is a single authenticated connection to a PostgreSQL database.
 type Conn interface {
 	Begin(ctx context.Context) (Tx, error)
 	Close(ctx context.Context) error
@@ -105,6 +105,15 @@ func Connect(ctx context.Context, host, dbName, password string) (Conn, error) {
 // the cluster's shared Service identity; blue/green control operations must
 // not send the superuser password to an unauthenticated peer.
 func ConnectVerified(ctx context.Context, host, dbName, password, serverName string, serverCA []byte) (Conn, error) {
+	return ConnectAsVerified(ctx, host, dbName, SuperUsername, password, serverName, serverCA)
+}
+
+// ConnectAsVerified connects as the explicitly supplied identity and verifies
+// the server certificate. It is used by temporary upgrade control identities.
+func ConnectAsVerified(ctx context.Context, host, dbName, username, password, serverName string, serverCA []byte) (Conn, error) {
+	if username == "" {
+		return nil, fmt.Errorf("verified connection username is required")
+	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(serverCA) {
 		return nil, fmt.Errorf("server CA is not valid PEM certificate data")
@@ -112,18 +121,27 @@ func ConnectVerified(ctx context.Context, host, dbName, password, serverName str
 	if serverName == "" {
 		return nil, fmt.Errorf("verified connection server name is required")
 	}
-	return connect(ctx, host, dbName, password, &tls.Config{RootCAs: roots, ServerName: serverName, MinVersion: tls.VersionTLS12})
+	return connectAs(ctx, host, dbName, username, password, &tls.Config{RootCAs: roots, ServerName: serverName, MinVersion: tls.VersionTLS12})
 }
 
 func connect(ctx context.Context, host, dbName, password string, verifiedTLS *tls.Config) (Conn, error) {
+	return connectAs(ctx, host, dbName, SuperUsername, password, verifiedTLS)
+}
+
+func connectAs(ctx context.Context, host, dbName, username, password string, verifiedTLS *tls.Config) (Conn, error) {
 	cfg, err := pgx.ParseConfig(fmt.Sprintf(
-		"postgres://%s@%s:%s/%s?sslmode=require&connect_timeout=%d",
-		SuperUsername, host, Port, dbName,
+		"postgres://%s@localhost:%s/postgres?sslmode=require&connect_timeout=%d",
+		SuperUsername, Port,
 		int(ConnectTimeout.Seconds()),
 	))
 	if err != nil {
 		return nil, fmt.Errorf("parsing connection config for %s/%s: %w", host, dbName, err)
 	}
+	// Set identity and database as fields rather than interpolating them in a
+	// URL: quoted database and role names must remain literal values.
+	cfg.Host = host
+	cfg.Database = dbName
+	cfg.User = username
 	cfg.Password = password
 	if verifiedTLS != nil {
 		cfg.TLSConfig = verifiedTLS
