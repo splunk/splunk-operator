@@ -21,7 +21,6 @@ import (
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgdatabase "github.com/splunk/splunk-operator/pkg/postgresql/database/core"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
-	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -43,15 +42,13 @@ func postgresDeploymentFixture(t *testing.T, custom bool) (*enterpriseApi.KVServ
 	cr := &enterpriseApi.KVService{
 		TypeMeta:   metav1.TypeMeta{APIVersion: enterpriseApi.GroupVersion.String(), Kind: "KVService"},
 		ObjectMeta: metav1.ObjectMeta{Name: "kv", Namespace: "test", UID: types.UID("kv-id")},
-		Spec:       enterpriseApi.KVServiceSpec{Replicas: 1, Postgres: &enterpriseApi.KVServicePostgresSpec{}},
+		Spec:       enterpriseApi.KVServiceSpec{Replicas: 1, Postgres: enterpriseApi.KVServicePostgresSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}}},
 	}
 	cr.Spec.Image = "kvstore/kvservice:test"
 	cr.Spec.ImagePullPolicy = "IfNotPresent"
 	resourceName, logicalName := "kvstore-database", "kvstore"
 	if custom {
-		resourceName, logicalName = "tenant-database", "tenantdb"
-		cr.Spec.Postgres.DatabaseRef = &corev1.LocalObjectReference{Name: resourceName}
-		cr.Spec.Postgres.DatabaseName = logicalName
+		resourceName, logicalName = "tenantdb-database", "tenantdb"
 	}
 	database := &platformApi.PostgresDatabase{
 		ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: cr.Namespace},
@@ -64,12 +61,7 @@ func postgresDeploymentFixture(t *testing.T, custom bool) (*enterpriseApi.KVServ
 		pgconninfo.KeyClusterRWEndpoint: "postgres-rw.test.svc", pgconninfo.KeyDefaultClusterPort: "5432", pgdatabase.ConfigMapKeyAdminUser: "kv-admin",
 	}}
 	admin := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg-admin", Namespace: cr.Namespace}, Data: map[string][]byte{"password": []byte("test-db-password")}}
-	auth := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: splcommon.GetNamespaceScopedSecretName(cr.Namespace), Namespace: cr.Namespace}, Data: map[string][]byte{}}
-	for _, key := range splcommon.GetSplunkSecretTokenTypes() {
-		auth.Data[key] = []byte("test-" + key)
-	}
-	auth.Data["hec_token"] = []byte("ABCDEF01-2345-6789-ABCD-EF0123456789")
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, database, connection, admin, auth).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, database, connection, admin).Build()
 	return cr, database, c
 }
 
@@ -81,9 +73,7 @@ func TestKVServicePostgresDeploymentConfiguration(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			cr, database, c := postgresDeploymentFixture(t, custom)
-			assert.Equal(t, database.Name, KVServicePostgresDatabaseResourceName(cr))
-			assert.Equal(t, database.Status.Databases[0].Name, KVServicePostgresLogicalDatabaseName(cr))
-			deployment, err := GetKVServiceDeployment(t.Context(), c, cr, nil)
+			deployment, err := tenantDeployment(t, c, cr, database)
 			require.NoError(t, err)
 			env := map[string]corev1.EnvVar{}
 			for _, value := range deployment.Spec.Template.Spec.Containers[0].Env {
@@ -107,28 +97,24 @@ func TestKVServicePostgresDeploymentConfiguration(t *testing.T) {
 				assert.Empty(t, env[name].Value, "credentials must remain Secret references")
 				assert.Equal(t, database.Status.Databases[0].AdminUserSecretRef, env[name].ValueFrom.SecretKeyRef)
 			}
-			auth := env["KVSERVICE_SINGLE_TENANT_PASS4_SYMM_KEY"]
-			require.NotNil(t, auth.ValueFrom)
-			assert.Equal(t, &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: splcommon.GetNamespaceScopedSecretName(cr.Namespace)}, Key: "pass4SymmKey"}, auth.ValueFrom.SecretKeyRef)
+			assert.NotContains(t, env, "KVSERVICE_SINGLE_TENANT_PASS4_SYMM_KEY")
 			assert.Len(t, deployment.Spec.Template.Annotations["enterprise.splunk.com/kvservice-postgres-config"], 64)
-			for _, key := range []string{"enterprise.splunk.com/kvservice-postgres-admin-secret", "enterprise.splunk.com/kvservice-pass4-secret"} {
+			for _, key := range []string{"enterprise.splunk.com/kvservice-postgres-admin-secret"} {
 				value := deployment.Spec.Template.Annotations[key]
 				assert.Contains(t, value, cr.Namespace+"/")
 				assert.NotContains(t, value, "test-db-password")
 				assert.NotContains(t, value, "test-pass4SymmKey")
 			}
 
-			dependencies, ready, err := ResolveKVServicePostgresDependencies(t.Context(), c, cr, database, database.Status.Databases[0].Name)
+			dependencies, ready, err := ResolveKVServiceTenantDependencies(t.Context(), c, cr, database, database.Status.Databases[0].Name)
 			require.NoError(t, err)
-			require.True(t, ready)
+			require.NotNil(t, ready)
 			require.NoError(t, c.Delete(t.Context(), database))
 			snapshot, err := GetKVServiceDeploymentWithPostgresDependencies(t.Context(), c, cr, dependencies, nil)
 			require.NoError(t, err, "the validated snapshot must not reread the PostgresDatabase")
 			assert.Equal(t, deployment.Spec.Template, snapshot.Spec.Template)
 			_, err = GetKVServiceDeploymentWithPostgresDependencies(t.Context(), c, cr, nil, nil)
 			require.ErrorContains(t, err, "validated PostgreSQL dependencies are required")
-			_, err = GetKVServiceDeployment(t.Context(), c, cr, nil)
-			require.Error(t, err, "the direct resolver must report a missing database")
 		})
 	}
 }
@@ -142,17 +128,15 @@ func TestKVServicePostgresDependencyChangesRollDeployment(t *testing.T) {
 		{name: "port", kind: "config", key: pgconninfo.KeyDefaultClusterPort, value: "6432", changedAnnotation: "enterprise.splunk.com/kvservice-postgres-config"},
 		{name: "username", kind: "config", key: pgdatabase.ConfigMapKeyAdminUser, value: "new-admin", changedAnnotation: "enterprise.splunk.com/kvservice-postgres-config"},
 		{name: "database password", kind: "admin", key: "password", value: "new-password", changedAnnotation: "enterprise.splunk.com/kvservice-postgres-admin-secret"},
-		{name: "authentication key", kind: "auth", key: "pass4SymmKey", value: "new-pass4-secret", changedAnnotation: "enterprise.splunk.com/kvservice-pass4-secret"},
 		{name: "unrelated ConfigMap key", kind: "config", key: "unrelated", value: "ignored"},
 		{name: "unrelated admin key changes revision", kind: "admin", key: "unrelated", value: "ignored", changedAnnotation: "enterprise.splunk.com/kvservice-postgres-admin-secret"},
-		{name: "unrelated authentication key changes revision", kind: "auth", key: "unrelated", value: "ignored", changedAnnotation: "enterprise.splunk.com/kvservice-pass4-secret"},
 		{name: "ConfigMap insertion order", kind: "reorder"},
 		{name: "ConfigMap metadata", kind: "metadata"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cr, _, c := postgresDeploymentFixture(t, false)
-			original, err := GetKVServiceDeployment(t.Context(), c, cr, nil)
+			cr, database, c := postgresDeploymentFixture(t, false)
+			original, err := tenantDeployment(t, c, cr, database)
 			require.NoError(t, err)
 			initialAnnotations := original.Spec.Template.DeepCopy().Annotations
 			_, err = ApplyDeployment(t.Context(), c, original)
@@ -161,11 +145,9 @@ func TestKVServicePostgresDependencyChangesRollDeployment(t *testing.T) {
 			key := types.NamespacedName{Namespace: cr.Namespace, Name: original.Name}
 			require.NoError(t, c.Get(t.Context(), key, stored))
 			version := stored.ResourceVersion
-			if tt.kind == "admin" || tt.kind == "auth" {
+			if tt.kind == "admin" {
 				name := "pg-admin"
-				if tt.kind == "auth" {
-					name = splcommon.GetNamespaceScopedSecretName(cr.Namespace)
-				}
+
 				secret := &corev1.Secret{}
 				require.NoError(t, c.Get(t.Context(), types.NamespacedName{Namespace: cr.Namespace, Name: name}, secret))
 				secret.Data[tt.key] = []byte(tt.value)
@@ -183,7 +165,7 @@ func TestKVServicePostgresDependencyChangesRollDeployment(t *testing.T) {
 				}
 				require.NoError(t, c.Update(t.Context(), cm))
 			}
-			desired, err := GetKVServiceDeployment(t.Context(), c, cr, nil)
+			desired, err := tenantDeployment(t, c, cr, database)
 			require.NoError(t, err)
 			for annotation, value := range initialAnnotations {
 				if annotation == tt.changedAnnotation {
@@ -206,7 +188,7 @@ func TestKVServicePostgresDependencyChangesRollDeployment(t *testing.T) {
 }
 
 func TestKVServicePostgresDependencyReadinessAndReadErrors(t *testing.T) {
-	for _, name := range []string{"no database info", "not ready", "no ConfigMap reference", "no Secret reference", "missing ConfigMap", "missing admin Secret", "missing namespace Secret"} {
+	for _, name := range []string{"no database info", "not ready", "no ConfigMap reference", "no Secret reference", "missing ConfigMap", "missing admin Secret"} {
 		t.Run(name, func(t *testing.T) {
 			cr, database, c := postgresDeploymentFixture(t, false)
 			switch name {
@@ -222,21 +204,25 @@ func TestKVServicePostgresDependencyReadinessAndReadErrors(t *testing.T) {
 				require.NoError(t, c.Delete(t.Context(), &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "pg-connection", Namespace: cr.Namespace}}))
 			case "missing admin Secret":
 				require.NoError(t, c.Delete(t.Context(), &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pg-admin", Namespace: cr.Namespace}}))
-			case "missing namespace Secret":
-				require.NoError(t, c.Delete(t.Context(), &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: splcommon.GetNamespaceScopedSecretName(cr.Namespace), Namespace: cr.Namespace}}))
+
 			}
-			dependencies, ready, err := ResolveKVServicePostgresDependencies(t.Context(), c, cr, database, "kvstore")
+			dependencies, ready, err := ResolveKVServiceTenantDependencies(t.Context(), c, cr, database, "kvstore")
 			assert.Nil(t, dependencies)
-			assert.False(t, ready)
-			if name == "missing ConfigMap" || name == "missing admin Secret" || name == "missing namespace Secret" {
+			assert.Nil(t, ready)
+			if name == "missing ConfigMap" || name == "missing admin Secret" {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 			}
-			require.NoError(t, c.Update(t.Context(), database))
-			deployment, err := GetKVServiceDeployment(t.Context(), c, cr, nil)
-			require.Error(t, err, "incomplete PostgreSQL dependencies must block Deployment construction")
-			assert.Nil(t, deployment)
+
 		})
 	}
+}
+
+func tenantDeployment(t *testing.T, c client.Client, cr *enterpriseApi.KVService, database *platformApi.PostgresDatabase) (*appsv1.Deployment, error) {
+	t.Helper()
+	snapshot, info, err := ResolveKVServiceTenantDependencies(t.Context(), c, cr, database, database.Status.Databases[0].Name)
+	require.NoError(t, err)
+	require.NotNil(t, info)
+	return GetKVServiceDeploymentWithPostgresDependencies(t.Context(), c, cr, snapshot, nil)
 }

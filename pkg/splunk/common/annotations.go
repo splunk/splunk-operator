@@ -41,3 +41,6 @@ const PostgresDatabaseBindingAnnotation = "enterprise.splunk.com/postgres-databa
 
 // AnnotationKVServiceAddr supplies the KVService address as provided by the namespace owner.
 const AnnotationKVServiceAddr = "platform.splunk.com/kvservice-addr"
+
+// KVServiceTenantDatabaseOwnerAnnotation records the KVService managing a retained database.
+const KVServiceTenantDatabaseOwnerAnnotation = "enterprise.splunk.com/kvservice-owner"

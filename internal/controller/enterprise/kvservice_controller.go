@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -34,8 +35,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlbuilder "sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -66,7 +69,7 @@ type KVServiceReconciler struct {
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=kvservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=kvservices/finalizers,verbs=update
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
-// +kubebuilder:rbac:groups=platform.splunk.com,resources=postgresdatabases,verbs=get;list;watch
+// +kubebuilder:rbac:groups=platform.splunk.com,resources=postgresdatabases,verbs=get;list;watch;create;update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -104,12 +107,43 @@ func (r *KVServiceReconciler) mapConfigMapToKVServices(ctx context.Context, obj 
 	return requests
 }
 
+// Peer creation detects admission races/bypass. Peer deletion wakes a terminally
+// blocked survivor; status-only updates must not create a reconciliation loop.
+func kvServicePeerChangedPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc:  func(event.CreateEvent) bool { return true },
+		DeleteFunc:  func(event.DeleteEvent) bool { return true },
+		UpdateFunc:  func(event.UpdateEvent) bool { return false },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
+}
+
+func (r *KVServiceReconciler) mapKVServicePeers(ctx context.Context, obj client.Object) []reconcile.Request {
+	if _, ok := obj.(*enterpriseApi.KVService); !ok {
+		return nil
+	}
+	services, err := k8sops.ListKVServices(ctx, r.Client, client.InNamespace(obj.GetNamespace()))
+	if err != nil {
+		log.FromContext(ctx).Error(err, "could not list KVService peers", "namespace", obj.GetNamespace(), "kvservice", obj.GetName())
+		return nil
+	}
+	var requests []reconcile.Request
+	for _, service := range services {
+		if service.Name != obj.GetName() && service.DeletionTimestamp == nil {
+			requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&service)})
+		}
+	}
+	return requests
+}
+
 func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorder("kvservice-controller")
 	}
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.KVService{}).
+		Watches(&enterpriseApi.KVService{}, handler.EnqueueRequestsFromMapFunc(r.mapKVServicePeers),
+			ctrlbuilder.WithPredicates(kvServicePeerChangedPredicate())).
 		WithEventFilter(predicate.Or(
 			common.GenerationChangedPredicate(),
 			common.AnnotationChangedPredicate(),
@@ -120,6 +154,8 @@ func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			common.ConfigMapChangedPredicate(),
 			common.CrdChangedPredicate(),
 			common.PostgresStatusChangedPredicate(),
+			common.KVServiceNamespaceChangedPredicate(),
+			common.DeletionTimestampChangedPredicate[*corev1.Namespace](),
 		)).
 		Watches(&appsv1.Deployment{},
 			handler.EnqueueRequestForOwner(
@@ -152,12 +188,16 @@ func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			certs.CertSecretMapper(mgr.GetClient(), &enterpriseApi.KVServiceList{})))
 	}
 	if config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
+		if err := mgr.GetFieldIndexer().IndexField(context.Background(), &platformApi.PostgresDatabase{}, k8sops.KVServiceDatabaseDependencyIndex, k8sops.KVServiceDatabaseDependencies); err != nil {
+			return fmt.Errorf("index KVService PostgreSQL database dependencies: %w", err)
+		}
 		mapper := k8sops.KVServicePostgresMapper{Client: r.Client}
 		builder = builder.
+			Watches(&corev1.Namespace{}, handler.EnqueueRequestsFromMapFunc(mapper.MapTenantNamespace)).
+			Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(mapper.MapTenantNamespaceSecret)).
 			Watches(&platformApi.PostgresDatabase{}, handler.EnqueueRequestsFromMapFunc(mapper.MapDatabase)).
 			Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(mapper.MapConfigMap)).
-			Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(mapper.MapAdminSecret)).
-			Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(mapper.MapNamespaceSecret))
+			Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(mapper.MapAdminSecret))
 	}
 	return builder.WithOptions(controller.Options{
 		MaxConcurrentReconciles: enterpriseApi.TotalWorker,

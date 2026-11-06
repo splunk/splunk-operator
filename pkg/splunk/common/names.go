@@ -160,3 +160,6 @@ func GetLabelTypes() map[string]string {
 
 // KVServicePort is the KVService HTTP port.
 const KVServicePort = 8066
+
+// KVServiceTenantVerificationKeysName is the generated multi-tenant request keyring.
+const KVServiceTenantVerificationKeysName = "tenant-verification-keys"
