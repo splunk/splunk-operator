@@ -26,17 +26,17 @@ func canonicalFixture() (*platformv1alpha1.PostgresCluster, *platformv1alpha1.Po
 			Target:             &corev1.ObjectReference{Name: "green", UID: "green-uid"},
 		},
 	}
-	parent := &platformv1alpha1.PostgresCluster{Status: platformv1alpha1.PostgresClusterStatus{
+	parent := &platformv1alpha1.PostgresCluster{Name: "cluster", Namespace: "ns", UID: "parent-uid", Status: platformv1alpha1.PostgresClusterStatus{
 		ProvisionerRef: &corev1.ObjectReference{Name: "green", UID: "green-uid"},
 		Resources:      &platformv1alpha1.PostgresClusterResources{ConfigMapRef: &corev1.LocalObjectReference{Name: "canonical"}},
 	}}
 	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "canonical", UID: "canonical-uid", Annotations: map[string]string{
+		Name: "canonical", Namespace: parent.Namespace, UID: "canonical-uid", OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(parent, platformv1alpha1.GroupVersion.WithKind("PostgresCluster"))}, Annotations: map[string]string{
 			pgconninfo.AnnotationActiveEnvironment:        "green",
 			pgconninfo.AnnotationEndpointAttemptID:        "attempt",
 			pgconninfo.AnnotationEndpointIntentGeneration: "3",
 			pgconninfo.AnnotationEndpointFingerprint:      fingerprint,
-		}},
+		},
 		Data: data,
 	}
 	return parent, bg, cm, fingerprint
@@ -138,5 +138,36 @@ func TestCommittedCanonicalRoutingRequiresLiveIdentityAndPublicationStamp(t *tes
 	}
 	if PublicationStampMatches(cm, bg, 0, fingerprint) || PublicationStampMatches(cm, bg, 3, "") {
 		t.Fatal("incomplete publication stamp accepted")
+	}
+}
+
+func TestReceiptRecoveryRelaxesOnlyProviderProjection(t *testing.T) {
+	parent, bg, _, _ := canonicalFixture()
+	parent.Status.ProvisionerRef = nil
+	if CommitReceiptIdentityMatches(parent, bg, RequireAuthoritativeProvider) {
+		t.Fatal("normal receipt validation accepted a missing provider")
+	}
+	if !CommitReceiptIdentityMatches(parent, bg, AllowProviderRepair) {
+		t.Fatal("recovery cannot repair a missing provider")
+	}
+	if CommitReceiptIdentityMatches(parent, bg, CommitReceiptValidation(255)) {
+		t.Fatal("unknown recovery policy accepted")
+	}
+	for _, mutate := range []func(*platformv1alpha1.PostgresBlueGreenUpgradeStatus){
+		func(b *platformv1alpha1.PostgresBlueGreenUpgradeStatus) { b.CommitReceipt.Target.UID = "replacement" },
+		func(b *platformv1alpha1.PostgresBlueGreenUpgradeStatus) {
+			b.CommitReceipt.CanonicalConfigMap.Name = "other"
+		},
+		func(b *platformv1alpha1.PostgresBlueGreenUpgradeStatus) { b.CommitReceipt.CanonicalConfigMap.UID = "" },
+		func(b *platformv1alpha1.PostgresBlueGreenUpgradeStatus) { b.CommitReceipt.Sequence = 0 },
+	} {
+		copy := bg.DeepCopy()
+		mutate(copy)
+		if CommitReceiptIdentityMatches(parent, copy, AllowProviderRepair) {
+			t.Fatal("recovery accepted an invalid immutable receipt identity")
+		}
+	}
+	if CommitReceiptIdentityMatches(nil, bg, AllowProviderRepair) {
+		t.Fatal("missing parent accepted")
 	}
 }

@@ -25,25 +25,52 @@ import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// CommitReceiptValidation names the one permitted recovery relaxation: the
+// authoritative provider reference may still need repair from the receipt.
+type CommitReceiptValidation uint8
+
+const (
+	RequireAuthoritativeProvider CommitReceiptValidation = iota
+	AllowProviderRepair
 )
 
 // DurableCommitStatusMatches validates the persisted identity of the green
 // commit. It does not inspect the live canonical ConfigMap, whose UID can
 // change after the production cutover has completed.
 func DurableCommitStatusMatches(parent *platformv1alpha1.PostgresCluster, bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool {
-	if parent == nil || bg == nil || bg.Green == nil || bg.Green.Ref.Name == "" || bg.Green.Ref.UID == "" || bg.CommitReceipt == nil {
+	return CommitReceiptIdentityMatches(parent, bg, RequireAuthoritativeProvider)
+}
+
+// CommitReceiptTargetsGreen checks the immutable receipt payload independently
+// of repairable parent projections. Callers without a parent still use this
+// same identity check, then verify their own additional live evidence.
+func CommitReceiptTargetsGreen(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool {
+	if bg == nil || bg.Green == nil || bg.Green.Ref.Name == "" || bg.Green.Ref.UID == "" || bg.CommitReceipt == nil {
 		return false
 	}
-	receipt := bg.CommitReceipt
-	return receipt.Sequence > 0 && receipt.CanonicalConfigMap != nil &&
-		receipt.CanonicalConfigMap.Name != "" && receipt.CanonicalConfigMap.UID != "" &&
-		receipt.Target != nil && receipt.Target.Name == bg.Green.Ref.Name &&
-		receipt.Target.UID == bg.Green.Ref.UID &&
-		parent.Status.ProvisionerRef != nil &&
-		parent.Status.ProvisionerRef.Name == bg.Green.Ref.Name &&
-		parent.Status.ProvisionerRef.UID == bg.Green.Ref.UID &&
-		parent.Status.Resources != nil && parent.Status.Resources.ConfigMapRef != nil &&
-		parent.Status.Resources.ConfigMapRef.Name == receipt.CanonicalConfigMap.Name
+	r := bg.CommitReceipt
+	return r.Sequence > 0 && r.CanonicalConfigMap != nil && r.CanonicalConfigMap.Name != "" && r.CanonicalConfigMap.UID != "" &&
+		r.Target != nil && r.Target.Name == bg.Green.Ref.Name && r.Target.UID == bg.Green.Ref.UID
+}
+
+// CommitReceiptIdentityMatches always binds the canonical name and green UID.
+// Only recovery may omit the provider projection it is about to repair.
+func CommitReceiptIdentityMatches(parent *platformv1alpha1.PostgresCluster, bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus, validation CommitReceiptValidation) bool {
+	if parent == nil || !CommitReceiptTargetsGreen(bg) || parent.Status.Resources == nil || parent.Status.Resources.ConfigMapRef == nil ||
+		parent.Status.Resources.ConfigMapRef.Name != bg.CommitReceipt.CanonicalConfigMap.Name {
+		return false
+	}
+	switch validation {
+	case AllowProviderRepair:
+		return true
+	case RequireAuthoritativeProvider:
+		return parent.Status.ProvisionerRef != nil && parent.Status.ProvisionerRef.Name == bg.Green.Ref.Name && parent.Status.ProvisionerRef.UID == bg.Green.Ref.UID
+	default:
+		return false
+	}
 }
 
 // CompleteRouting requires the same endpoint shape in both controllers.
@@ -84,12 +111,13 @@ func PublicationStampMatchesValues(annotations map[string]string, environment, a
 
 // CommittedCanonicalRouting validates a fresh canonical ConfigMap against the
 // durable receipt and returns only shared endpoint keys. Active publication
-// requires the original ConfigMap UID even if a later completed attempt may
-// release its ordinary writer using durable status alone.
+// accepts the original ConfigMap UID or an explicit controller-owned recovery
+// projection bound to the same pre-existing commit and payload.
 func CommittedCanonicalRouting(parent *platformv1alpha1.PostgresCluster, bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus, cm *corev1.ConfigMap, generation int64, fingerprint string) (map[string]string, bool) {
 	if !DurableCommitStatusMatches(parent, bg) || cm == nil ||
+		!CanonicalOwnedByParent(parent, cm) ||
 		cm.Name != bg.CommitReceipt.CanonicalConfigMap.Name ||
-		cm.UID != bg.CommitReceipt.CanonicalConfigMap.UID ||
+		!canonicalUIDMatches(parent, bg, cm, fingerprint) ||
 		!CompleteRouting(cm.Data) ||
 		pgconninfo.FingerprintEndpointData(cm.Data) != fingerprint ||
 		!PublicationStampMatches(cm, bg, generation, fingerprint) {
@@ -102,4 +130,26 @@ func CommittedCanonicalRouting(parent *platformv1alpha1.PostgresCluster, bg *pla
 		}
 	}
 	return routing, true
+}
+
+func canonicalUIDMatches(parent *platformv1alpha1.PostgresCluster, bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus, cm *corev1.ConfigMap, fingerprint string) bool {
+	if cm.UID == bg.CommitReceipt.CanonicalConfigMap.UID {
+		return true
+	}
+	r := bg.CanonicalRecovery
+	return r != nil && r.CommitSequence == bg.CommitReceipt.Sequence && r.EndpointFingerprint == fingerprint &&
+		r.ConfigMap.APIVersion == "v1" && r.ConfigMap.Kind == "ConfigMap" &&
+		r.ConfigMap.Name == cm.Name && r.ConfigMap.Namespace == parent.Namespace && r.ConfigMap.UID == cm.UID &&
+		r.ConfigMap.UID != "" && r.RecoveredAt != nil && metav1.IsControlledBy(cm, parent)
+}
+
+// CanonicalOwnedByParent binds a canonical projection to the exact controller
+// identity and namespace shared by the parent and child endpoint controllers.
+func CanonicalOwnedByParent(parent *platformv1alpha1.PostgresCluster, cm *corev1.ConfigMap) bool {
+	if parent == nil || cm == nil || parent.DeletionTimestamp != nil || cm.DeletionTimestamp != nil || cm.Namespace != parent.Namespace {
+		return false
+	}
+	controller := metav1.GetControllerOf(cm)
+	return controller != nil && parent.UID != "" && controller.UID == parent.UID && controller.Name == parent.Name &&
+		controller.Kind == "PostgresCluster" && controller.APIVersion == platformv1alpha1.GroupVersion.String()
 }

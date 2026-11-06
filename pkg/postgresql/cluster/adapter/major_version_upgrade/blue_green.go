@@ -158,63 +158,6 @@ func applyBlueGreenProgress(current *platformv1alpha1.PostgresMajorUpgradeStatus
 	}
 }
 
-// validateBlueGreenProgress protects controller-owned status invariants before
-// replacing an attempt record. A writer must never rename an attempt or erase
-// a completed source-preparation receipt or regress its endpoint-commit receipt.
-func validateBlueGreenProgress(intent mvutypes.Intent, progress mvutypes.Progress) error {
-	if intent.Strategy != mvutypes.MajorUpgradeFlowBlueGreen {
-		return nil
-	}
-	if intent.AttemptID == "" {
-		return fmt.Errorf("blue/green major upgrade progress requires an attempt ID")
-	}
-	if progress.BlueGreen != nil && progress.BlueGreen.AttemptID != intent.AttemptID {
-		return fmt.Errorf("blue/green progress attempt ID %q does not match intent attempt ID %q", progress.BlueGreen.AttemptID, intent.AttemptID)
-	}
-	if err := validateSourcePreparationReceipt(intent.AttemptID, progress.BlueGreen); err != nil {
-		return err
-	}
-
-	for i := len(intent.State) - 1; i >= 0; i-- {
-		current := intent.State[i]
-		if !mvutypes.MatchesIntent(current, intent) || current.BlueGreen == nil {
-			continue
-		}
-		return validateExistingBlueGreenProgress(intent.AttemptID, current.BlueGreen, progress.BlueGreen)
-	}
-	return nil
-}
-
-func validateSourcePreparationReceipt(attemptID string, proposed *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {
-	if proposed != nil && proposed.SourcePreparation != nil &&
-		(proposed.SourcePreparation.CompletedAt == nil || proposed.SourceConfigurationFingerprint == nil) {
-		return fmt.Errorf("blue/green source-preparation receipt requires completion time and configuration baseline for attempt %q", attemptID)
-	}
-	return nil
-}
-
-func validateExistingBlueGreenProgress(attemptID string, current, proposed *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {
-	if previous := current.SourcePreparation; previous != nil && previous.CompletedAt != nil && proposed != nil {
-		receipt := proposed.SourcePreparation
-		if receipt == nil || receipt.CompletedAt == nil || !previous.CompletedAt.Time.Equal(receipt.CompletedAt.Time) {
-			return fmt.Errorf("blue/green progress cannot change source-preparation receipt for attempt %q", attemptID)
-		}
-		if current.SourceConfigurationFingerprint == nil || proposed.SourceConfigurationFingerprint == nil ||
-			*current.SourceConfigurationFingerprint != *proposed.SourceConfigurationFingerprint {
-			return fmt.Errorf("blue/green progress cannot change source configuration baseline for attempt %q", attemptID)
-		}
-	}
-	if current.CommitReceipt != nil {
-		if proposed == nil || proposed.CommitReceipt == nil {
-			return fmt.Errorf("blue/green progress cannot remove endpoint commit receipt for attempt %q", attemptID)
-		}
-		if proposed.CommitReceipt.Sequence < current.CommitReceipt.Sequence {
-			return fmt.Errorf("blue/green progress cannot regress endpoint commit receipt for attempt %q", attemptID)
-		}
-	}
-	return nil
-}
-
 const maxCleanedBlueGreenHistory = 10
 
 // compactBlueGreenHistory retains only the durable summary required after a

@@ -78,7 +78,7 @@ func (r *majorUpgradeInfoStoreAdapter) ReadMajorUpgradeIntent(ctx context.Contex
 }
 
 func (r *majorUpgradeInfoStoreAdapter) SaveMajorUpgradeProgress(ctx context.Context, intent mvutypes.Intent, progress mvutypes.Progress) error {
-	if err := validateBlueGreenProgress(intent, progress); err != nil {
+	if err := mvutypes.ValidateBlueGreenProgress(intent, progress); err != nil {
 		return err
 	}
 	return r.store.SetMajorUpgradeStatus(ctx, stateWithProgress(intent, progress))

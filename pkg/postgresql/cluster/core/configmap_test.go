@@ -25,7 +25,7 @@ import (
 
 func TestBuildClusterConfigMapData(t *testing.T) {
 	t.Run("builds shared and cluster-specific keys", func(t *testing.T) {
-		data, required, err := buildClusterConfigMapData(
+		data, required, err := pgconninfo.BuildClusterConfigMapData(
 			pgconninfo.Endpoints{
 				RWHost:       "cluster-rw.default.svc.cluster.local",
 				ROHost:       "cluster-ro.default.svc.cluster.local",
@@ -39,21 +39,21 @@ func TestBuildClusterConfigMapData(t *testing.T) {
 		)
 
 		require.NoError(t, err)
-		assert.Equal(t, "postgres", data[configMapKeySuperUserName])
-		assert.Equal(t, "cluster-secret", data[configMapKeySuperUserSecretRef])
-		assert.Equal(t, "server-ca-ref", data[configMapKeyServerCASecretRef])
+		assert.Equal(t, "postgres", data[pgconninfo.KeySuperUserName])
+		assert.Equal(t, "cluster-secret", data[pgconninfo.KeySuperUserSecretRef])
+		assert.Equal(t, "server-ca-ref", data[pgconninfo.KeyServerCASecretRef])
 		assert.ElementsMatch(t, []string{
 			pgconninfo.KeyClusterRWEndpoint,
 			pgconninfo.KeyClusterROEndpoint,
 			pgconninfo.KeyClusterREndpoint,
 			pgconninfo.KeyDefaultClusterPort,
-			configMapKeySuperUserName,
-			configMapKeySuperUserSecretRef,
+			pgconninfo.KeySuperUserName,
+			pgconninfo.KeySuperUserSecretRef,
 		}, required)
 	})
 
 	t.Run("fails when required superuser values are missing", func(t *testing.T) {
-		_, _, err := buildClusterConfigMapData(
+		_, _, err := pgconninfo.BuildClusterConfigMapData(
 			pgconninfo.Endpoints{
 				RWHost: "cluster-rw.default.svc.cluster.local",
 				ROHost: "cluster-ro.default.svc.cluster.local",
@@ -75,7 +75,7 @@ func TestRequiredClusterConfigMapKeys(t *testing.T) {
 		pgconninfo.KeyClusterROEndpoint,
 		pgconninfo.KeyClusterREndpoint,
 		pgconninfo.KeyDefaultClusterPort,
-		configMapKeySuperUserName,
-		configMapKeySuperUserSecretRef,
-	}, requiredClusterConfigMapKeys())
+		pgconninfo.KeySuperUserName,
+		pgconninfo.KeySuperUserSecretRef,
+	}, pgconninfo.RequiredClusterKeys())
 }

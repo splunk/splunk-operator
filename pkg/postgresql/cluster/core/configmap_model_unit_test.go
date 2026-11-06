@@ -54,7 +54,7 @@ func TestGenerateConfigMap(t *testing.T) {
 
 	t.Run("base endpoints without poolers", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
+		cm, err := generateConfigMap(t.Context(), c, cluster.DeepCopy(), cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-configmap", cm.Name)
@@ -63,8 +63,8 @@ func TestGenerateConfigMap(t *testing.T) {
 		assert.Equal(t, "my-cluster-ro.default.svc.cluster.local", cm.Data[pgconninfo.KeyClusterROEndpoint])
 		assert.Equal(t, "my-cluster-r.default.svc.cluster.local", cm.Data[pgconninfo.KeyClusterREndpoint])
 		assert.Equal(t, pgconninfo.DefaultPort, cm.Data[pgconninfo.KeyDefaultClusterPort])
-		assert.Equal(t, "postgres", cm.Data[configMapKeySuperUserName])
-		assert.Equal(t, "my-secret", cm.Data[configMapKeySuperUserSecretRef])
+		assert.Equal(t, "postgres", cm.Data[pgconninfo.KeySuperUserName])
+		assert.Equal(t, "my-secret", cm.Data[pgconninfo.KeySuperUserSecretRef])
 		assert.NotContains(t, cm.Data, pgconninfo.KeyPoolerRWEndpoint)
 		require.Len(t, cm.OwnerReferences, 1)
 		assert.Equal(t, "cluster-uid", string(cm.OwnerReferences[0].UID))
@@ -78,7 +78,7 @@ func TestGenerateConfigMap(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "my-cluster-pooler-ro", Namespace: "default"},
 		}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(rwPooler, roPooler).Build()
-		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
+		cm, err := generateConfigMap(t.Context(), c, cluster.DeepCopy(), cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.Equal(t, "my-cluster-pooler-rw.default.svc.cluster.local", cm.Data[pgconninfo.KeyPoolerRWEndpoint])
@@ -92,7 +92,7 @@ func TestGenerateConfigMap(t *testing.T) {
 			ConfigMapRef: &corev1.LocalObjectReference{Name: "custom-configmap"},
 		}
 
-		cm, err := generateConfigMap(t.Context(), c, scheme, pg, cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
+		cm, err := generateConfigMap(t.Context(), c, pg, cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
 
 		require.NoError(t, err)
 		assert.Equal(t, "custom-configmap", cm.Name)
@@ -107,16 +107,16 @@ func TestGenerateConfigMap(t *testing.T) {
 		cnpg.Status.Certificates.ServerCASecret = "my-server-ca"
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(caSecret).Build()
 		backend := tlsBackendState{observed: true, ConnectionCARef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "my-server-ca"}, Key: defaultServerCACertKey}}
-		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpg, backend, "my-secret", testEnvironmentNamer)
+		cm, err := generateConfigMap(t.Context(), c, cluster.DeepCopy(), cnpg, backend, "my-secret", testEnvironmentNamer)
 		require.NoError(t, err)
-		assert.Equal(t, "my-server-ca/"+defaultServerCACertKey, cm.Data[configMapKeyServerCASecretRef])
+		assert.Equal(t, "my-server-ca/"+defaultServerCACertKey, cm.Data[pgconninfo.KeyServerCASecretRef])
 	})
 
 	t.Run("omits CA metadata when CNPG has no CA secret set", func(t *testing.T) {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		cm, err := generateConfigMap(t.Context(), c, scheme, cluster.DeepCopy(), cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
+		cm, err := generateConfigMap(t.Context(), c, cluster.DeepCopy(), cnpgCluster, tlsBackendState{}, "my-secret", testEnvironmentNamer)
 		require.NoError(t, err)
-		assert.NotContains(t, cm.Data, configMapKeyServerCASecretRef)
+		assert.NotContains(t, cm.Data, pgconninfo.KeyServerCASecretRef)
 	})
 }
 
@@ -174,7 +174,7 @@ func TestConfigMapConverge_RequeuesWhenCNPGPublishesCASecretButMetadataMissing(t
 			pgconninfo.KeyClusterROEndpoint:  "pg1-ro.default.svc.cluster.local",
 			pgconninfo.KeyClusterREndpoint:   "pg1-r.default.svc.cluster.local",
 			pgconninfo.KeyDefaultClusterPort: pgconninfo.DefaultPort,
-			configMapKeySuperUserSecretRef:   "pg1-secret",
+			pgconninfo.KeySuperUserSecretRef: "pg1-secret",
 		},
 	}
 	cnpg := &cnpgv1.Cluster{
