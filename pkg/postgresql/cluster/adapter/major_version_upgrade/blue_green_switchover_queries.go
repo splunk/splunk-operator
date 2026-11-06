@@ -56,6 +56,11 @@ func cutoverSessionPredicate(id cutoverIdentity) string {
 		quoteSQLStringLiteral(id.Role) + "," + quoteSQLStringLiteral(replicationRoleName(id.AttemptID)) + ",'streaming_replica','cnpg_pooler_pgbouncer') AND (client_addr IS NOT NULL OR usename <> 'postgres')"
 }
 
+// controlHelperCallSQL invokes an operator-owned helper in the fixed control schema.
+func controlHelperCallSQL(function string) string {
+	return "SELECT " + pginfra.QuoteIdentifier(candidateGuardSchema) + "." + pginfra.QuoteIdentifier(function) + "()"
+}
+
 const controlRoleSQL = `SELECT COALESCE((SELECT rolcanlogin AND NOT rolsuper AND rolinherit AND NOT rolcreaterole AND NOT rolcreatedb AND NOT rolreplication AND NOT rolbypassrls AND rolconnlimit=-1 AND rolvaliduntil IS NULL FROM pg_catalog.pg_roles WHERE rolname=$1),false)`
 
 const controlHelperProofSQL = `SELECT COALESCE((SELECT p.prosecdef AND p.prokind='f'
@@ -136,3 +141,23 @@ const cutoverRoleLoginsRestoredSQL = `SELECT NOT EXISTS (SELECT 1 FROM jsonb_to_
 const cutoverWriteProbeCreateSQL = "CREATE TEMP TABLE pg_temp.splunk_operator_cutover_probe (value boolean NOT NULL) ON COMMIT DROP"
 
 const cutoverWriteProbeVerifySQL = "SELECT COALESCE(bool_and(value),false) FROM pg_temp.splunk_operator_cutover_probe"
+
+const cutoverPublicationInventorySQL = `SELECT count(*)=1 AND COALESCE(bool_and(
+  pubname=$1 AND pubowner=(SELECT oid FROM pg_catalog.pg_roles WHERE rolname='postgres')
+  AND puballtables AND pubinsert AND pubupdate AND pubdelete AND pubtruncate AND NOT pubviaroot
+  AND COALESCE(to_jsonb(publication)->>'pubgencols', 'n')='n'
+), false) FROM pg_catalog.pg_publication publication`
+
+const cutoverSourceFinalWALPositionSQL = `SELECT pg_catalog.pg_current_wal_insert_lsn()::text`
+
+const cutoverUnsupportedMaintenanceObjectsSQL = `SELECT 'tablespace:'||spcname FROM pg_catalog.pg_tablespace WHERE spcname NOT IN ('pg_default','pg_global') UNION ALL SELECT 'maintenance-object:'||n.nspname||'.'||c.relname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND c.relkind IN ('r','p','v','m','S')`
+
+const cutoverGuardPresenceSQL = `SELECT pg_catalog.to_regprocedure($1) IS NOT NULL OR EXISTS (SELECT 1 FROM pg_catalog.pg_trigger WHERE NOT tgisinternal AND tgname=$2)`
+
+const cutoverSubscriptionRosterSQL = `SELECT d.datname||'/'||sub.subname FROM pg_catalog.pg_subscription sub JOIN pg_catalog.pg_database d ON d.oid=sub.subdbid ORDER BY 1`
+
+const cutoverSubscriptionInventorySQL = `SELECT count(*)=1 AND bool_and(subname=$1 AND subenabled AND subfailover AND subslotname=$2) FROM pg_catalog.pg_subscription WHERE subdbid=(SELECT oid FROM pg_catalog.pg_database WHERE datname=current_database())`
+
+const cutoverSequenceInventorySQL = `SELECT n.nspname,c.relname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE c.relkind='S' AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' ORDER BY n.nspname,c.relname`
+
+const cutoverGuardsRemainSQL = `SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_trigger WHERE NOT tgisinternal AND tgname=$1) OR pg_catalog.to_regprocedure($2) IS NOT NULL`

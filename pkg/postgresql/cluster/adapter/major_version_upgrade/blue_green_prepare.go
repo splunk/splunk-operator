@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	cnpgpostgres "github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	clusterCnpg "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
@@ -538,6 +539,23 @@ func setLogicalSlotSynchronization(spec *cnpgv1.ClusterSpec) bool {
 	}
 	alreadyEnabled := spec.ReplicationSlots.HighAvailability.SynchronizeLogicalDecoding
 	spec.ReplicationSlots.HighAvailability.SynchronizeLogicalDecoding = true
+	if !spec.ReplicationSlots.HighAvailability.GetEnabled() {
+		spec.ReplicationSlots.HighAvailability.Enabled = new(true)
+		alreadyEnabled = false
+	}
+	// CNPG admission requires these native PG17+ prerequisites in the same
+	// update that enables logical-slot synchronization. They remain part of the
+	// prepared source baseline until retained replication is cleaned up.
+	if spec.PostgresConfiguration.Parameters == nil {
+		spec.PostgresConfiguration.Parameters = make(map[string]string)
+	}
+	for _, parameter := range []string{"hot_standby_feedback", "sync_replication_slots"} {
+		enabled, _ := cnpgpostgres.ParsePostgresConfigBoolean(spec.PostgresConfiguration.Parameters[parameter])
+		if !enabled {
+			spec.PostgresConfiguration.Parameters[parameter] = "on"
+			alreadyEnabled = false
+		}
+	}
 	return alreadyEnabled
 }
 
