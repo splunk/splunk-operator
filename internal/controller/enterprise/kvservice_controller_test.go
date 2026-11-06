@@ -18,25 +18,48 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/config"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 )
 
 var _ = Describe("KVService Controller", func() {
+	It("routes peer events within the hosting namespace without status loops", func() {
+		survivor := &enterprisev4.KVService{ObjectMeta: metav1.ObjectMeta{Name: "survivor", Namespace: "shared"}}
+		peer := &enterprisev4.KVService{ObjectMeta: metav1.ObjectMeta{Name: "peer", Namespace: "shared"}}
+		elsewhere := &enterprisev4.KVService{ObjectMeta: metav1.ObjectMeta{Name: "elsewhere", Namespace: "other"}}
+		c := fake.NewClientBuilder().WithScheme(k8sClient.Scheme()).WithObjects(survivor, peer, elsewhere).Build()
+		r := &KVServiceReconciler{Client: c}
+		Expect(r.mapKVServicePeers(context.Background(), peer)).To(Equal([]reconcile.Request{{NamespacedName: client.ObjectKeyFromObject(survivor)}}))
+		updated := peer.DeepCopy()
+		updated.Status.Phase = enterprisev4.PhaseError
+		Expect(kvServicePeerChangedPredicate().Update(event.UpdateEvent{ObjectOld: peer, ObjectNew: updated})).To(BeFalse())
+		Expect(kvServicePeerChangedPredicate().Generic(event.GenericEvent{Object: peer})).To(BeFalse())
+		Expect(r.mapKVServicePeers(context.Background(), &corev1.ConfigMap{})).To(BeEmpty())
+	})
+
 	DescribeTable("records paused status with a valid phase",
 		func(initialPhase enterprisev4.Phase) {
 			ctx := context.Background()
@@ -51,6 +74,9 @@ var _ = Describe("KVService Controller", func() {
 						Spec: enterprisev4.Spec{ImagePullPolicy: "IfNotPresent"},
 					},
 					Replicas: 1,
+					Postgres: enterprisev4.KVServicePostgresSpec{
+						ClusterRef: corev1.LocalObjectReference{Name: "paused-postgres"},
+					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -87,60 +113,163 @@ var _ = Describe("KVService Controller", func() {
 
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
+		const clusterName = "test-postgres"
+		const backendNamespacePrefix = "kvservice-backend-"
 
 		ctx := context.Background()
 
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
-		}
+		var typeNamespacedName types.NamespacedName
 		kvservice := &enterprisev4.KVService{}
 
 		BeforeEach(func() {
 			Expect(os.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")).To(Succeed())
-			Expect(k8sClient.Create(ctx, &corev1.ServiceAccount{
-				ObjectMeta: metav1.ObjectMeta{Name: "kvservice-test-sa", Namespace: "default"},
-			})).To(Succeed())
-			By("creating the custom resource for the Kind KVService")
-			err := k8sClient.Get(ctx, typeNamespacedName, kvservice)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &enterprisev4.KVService{
-					TypeMeta: metav1.TypeMeta{
-						APIVersion: "enterprise.splunk.com/v4",
-						Kind:       "KVService",
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					Spec: enterprisev4.KVServiceSpec{
-						CommonWorkloadSpec: enterprisev4.CommonWorkloadSpec{
-							Spec: enterprisev4.Spec{
-								ImagePullPolicy: "IfNotPresent",
-							},
-							ServiceAccount:              "kvservice-test-sa",
-							LivenessInitialDelaySeconds: 90,
-						},
-						ReadinessProbe: &enterprisev4.Probe{TimeoutSeconds: 7},
-						Replicas:       1,
-					},
+			postgresEnabled := config.DefaultMutableFeatureGate.Enabled(config.PostgresController)
+			Expect(config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.PostgresController): true})).To(Succeed())
+			DeferCleanup(func() {
+				Expect(config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.PostgresController): postgresEnabled})).To(Succeed())
+			})
+			watchNamespace, watchNamespaceSet := os.LookupEnv("WATCH_NAMESPACE")
+			Expect(os.Setenv("WATCH_NAMESPACE", "")).To(Succeed())
+			DeferCleanup(func() {
+				if watchNamespaceSet {
+					Expect(os.Setenv("WATCH_NAMESPACE", watchNamespace)).To(Succeed())
+				} else {
+					Expect(os.Unsetenv("WATCH_NAMESPACE")).To(Succeed())
 				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			})
+
+			createFixture := func(object client.Object) {
+				Expect(k8sClient.Create(ctx, object)).To(Succeed())
+				DeferCleanup(func() {
+					Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, object))).To(Succeed())
+				})
 			}
+			backendNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{GenerateName: backendNamespacePrefix}}
+			createFixture(backendNamespace)
+			tenantName := "controller" + backendNamespace.Name[len(backendNamespacePrefix):]
+			typeNamespacedName = types.NamespacedName{Name: resourceName, Namespace: backendNamespace.Name}
+			createFixture(&corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: "kvservice-test-sa", Namespace: backendNamespace.Name},
+			})
+			By("creating the KVService with a required PostgreSQL cluster reference")
+			kvservice = &enterprisev4.KVService{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: backendNamespace.Name},
+				Spec: enterprisev4.KVServiceSpec{
+					CommonWorkloadSpec: enterprisev4.CommonWorkloadSpec{
+						Spec:                        enterprisev4.Spec{ImagePullPolicy: "IfNotPresent"},
+						ServiceAccount:              "kvservice-test-sa",
+						LivenessInitialDelaySeconds: 90,
+					},
+					ReadinessProbe: &enterprisev4.Probe{TimeoutSeconds: 7},
+					Replicas:       1,
+					Postgres: enterprisev4.KVServicePostgresSpec{
+						ClusterRef: corev1.LocalObjectReference{Name: clusterName},
+					},
+				},
+			}
+			createFixture(kvservice)
+
+			By("publishing independent ready tenant database connection dependencies")
+			tenantNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+				GenerateName: "kvservice-tenant-",
+				Labels: map[string]string{
+					splcommon.LabelKVService: splcommon.LabelKVServiceEnabled,
+					splcommon.LabelTenant:    tenantName,
+				},
+				Annotations: map[string]string{splcommon.AnnotationKVServiceAddr: fmt.Sprintf("%s.%s:%d",
+					splcommon.GetSplunkServiceName(splcommon.SplunkKVService, resourceName, false), backendNamespace.Name, splcommon.KVServicePort)},
+			}}
+			createFixture(tenantNamespace)
+			createFixture(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: splcommon.GetNamespaceScopedSecretName(tenantNamespace.Name), Namespace: tenantNamespace.Name},
+				Data:       map[string][]byte{"pass4SymmKey": []byte("controller-tenant-key")},
+			})
+			createFixture(&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "tenant-connection", Namespace: backendNamespace.Name},
+				Data: map[string]string{
+					"CLUSTER_RW_ENDPOINT":  "test-postgres-rw." + backendNamespace.Name,
+					"DEFAULT_CLUSTER_PORT": "5432",
+					"ADMIN_USER_NAME":      tenantName + "_admin",
+				},
+			})
+			createFixture(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "tenant-admin", Namespace: backendNamespace.Name},
+				Data:       map[string][]byte{"password": []byte("controller-database-password")},
+			})
+			// The PostgreSQL controller owns cluster readiness and connection publication.
+			// Supply its API contract directly; this suite needs no PostgreSQL server.
+			database := &platformv1alpha1.PostgresDatabase{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: tenantName + "-database", Namespace: backendNamespace.Name,
+					Annotations: map[string]string{"enterprise.splunk.com/kvservice-owner": backendNamespace.Name + "/" + resourceName},
+				},
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
+					ClusterRef: corev1.LocalObjectReference{Name: clusterName},
+					Databases: []platformv1alpha1.DatabaseDefinition{{
+						Name: tenantName, DeletionPolicy: "Retain", Extensions: []string{"pg_stat_statements", "pgcrypto"},
+					}},
+				},
+			}
+			createFixture(database)
+			ready, generation := "Ready", database.Generation
+			database.Status = platformv1alpha1.PostgresDatabaseStatus{
+				Phase: &ready, ObservedGeneration: &generation,
+				Databases: []platformv1alpha1.DatabaseInfo{{
+					Name: tenantName, Ready: true,
+					ConfigMapRef: &corev1.LocalObjectReference{Name: "tenant-connection"},
+					AdminUserSecretRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "tenant-admin"}, Key: "password",
+					},
+				}},
+			}
+			Expect(k8sClient.Status().Update(ctx, database)).To(Succeed())
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &enterprisev4.KVService{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance KVService")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-			Expect(k8sClient.Delete(ctx, &corev1.ServiceAccount{
-				ObjectMeta: metav1.ObjectMeta{Name: "kvservice-test-sa", Namespace: "default"},
-			})).To(Succeed())
 			Expect(os.Unsetenv("SPLUNK_GENERAL_TERMS")).To(Succeed())
+		})
+		It("recovers from bypassed duplicate admission through peer deletion events", func() {
+			duplicate := kvservice.DeepCopy()
+			duplicate.Name, duplicate.UID, duplicate.ResourceVersion = "duplicate", "", ""
+			duplicate.CreationTimestamp = metav1.Time{}
+			Expect(k8sClient.Create(ctx, duplicate)).To(Succeed())
+			DeferCleanup(func() {
+				Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, duplicate))).To(Succeed())
+			})
+			// Register the real controller and watch handlers. The normal suite
+			// uses explicit KVService reconciliation instead of this manager.
+			manager, err := ctrl.NewManager(cfg, ctrl.Options{
+				Scheme:                 k8sClient.Scheme(),
+				Metrics:                metricsserver.Options{BindAddress: "0"},
+				HealthProbeBindAddress: "0",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect((&KVServiceReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme()}).SetupWithManager(manager)).To(Succeed())
+			managerCtx, cancel := context.WithCancel(ctx)
+			done := make(chan error, 1)
+			go func() { done <- manager.Start(managerCtx) }()
+			DeferCleanup(func() {
+				cancel()
+				Eventually(done, 30*time.Second).Should(Receive(Succeed()))
+			})
+			isConflicted := func(key types.NamespacedName) bool {
+				current := &enterprisev4.KVService{}
+				if err := k8sClient.Get(ctx, key, current); err != nil {
+					return false
+				}
+				stalled := meta.FindStatusCondition(current.Status.Conditions, string(enterprisev4.ConditionStalled))
+				return stalled != nil && stalled.Status == metav1.ConditionTrue && strings.Contains(stalled.Message, "multiple KVServices")
+			}
+			Eventually(func() bool { return isConflicted(typeNamespacedName) }, 20*time.Second).Should(BeTrue())
+			Eventually(func() bool { return isConflicted(client.ObjectKeyFromObject(duplicate)) }, 20*time.Second).Should(BeTrue())
+			deploymentKey := types.NamespacedName{Namespace: typeNamespacedName.Namespace,
+				Name: splutil.GetSplunkDeploymentName(splcommon.SplunkKVService, resourceName)}
+			Expect(k8sClient.Get(ctx, deploymentKey, &appsv1.Deployment{})).To(MatchError(ContainSubstring("not found")))
+			Expect(k8sClient.Delete(ctx, duplicate)).To(Succeed())
+			// No manual reconcile or survivor spec edit: the peer watch must
+			// wake the terminal CR and allow provisioning to resume.
+			Eventually(func() error { return k8sClient.Get(ctx, deploymentKey, &appsv1.Deployment{}) }, 20*time.Second).Should(Succeed())
+			Eventually(func() bool { return isConflicted(typeNamespacedName) }, 20*time.Second).Should(BeFalse())
 		})
 		It("should successfully reconcile the resource", func() {
 			Expect(k8sClient.Get(ctx, typeNamespacedName, kvservice)).To(Succeed())

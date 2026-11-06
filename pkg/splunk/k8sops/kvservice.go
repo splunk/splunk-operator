@@ -15,7 +15,6 @@
 package k8sops
 
 import (
-	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -38,68 +37,23 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
-const (
-	// KVServicePostgresDefaultDatabaseResource is the default existing PostgresDatabase name.
-	KVServicePostgresDefaultDatabaseResource = "kvstore-database"
-	// KVServicePostgresDefaultDatabaseName is the default logical database name.
-	KVServicePostgresDefaultDatabaseName = "kvstore"
-	kvServicePass4SymmKey                = "pass4SymmKey"
-)
-
 // KVServicePostgresDependencies contains the validated PostgreSQL workload
 // configuration resolved during KVService reconciliation.
 type KVServicePostgresDependencies struct {
 	Environment             []corev1.EnvVar
+	Volumes                 []corev1.Volume
+	VolumeMounts            []corev1.VolumeMount
 	ConfigHash              string
 	AdminUserSecretRevision string
-	Pass4SymmKeyRevision    string
-}
 
-// KVServicePostgresDatabaseResourceName returns the configured or default database resource name.
-func KVServicePostgresDatabaseResourceName(cr *enterpriseApi.KVService) string {
-	if cr == nil || cr.Spec.Postgres == nil || cr.Spec.Postgres.DatabaseRef == nil {
-		return KVServicePostgresDefaultDatabaseResource
-	}
-	return cr.Spec.Postgres.DatabaseRef.Name
-}
-
-// KVServicePostgresLogicalDatabaseName returns the configured or default logical database name.
-func KVServicePostgresLogicalDatabaseName(cr *enterpriseApi.KVService) string {
-	if cr == nil || cr.Spec.Postgres == nil {
-		return KVServicePostgresDefaultDatabaseName
-	}
-	return cmp.Or(cr.Spec.Postgres.DatabaseName, KVServicePostgresDefaultDatabaseName)
-}
-
-// GetKVServiceDeployment resolves API-backed configuration before returning a complete workload.
-func GetKVServiceDeployment(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService, extraEnv []corev1.EnvVar) (*appsv1.Deployment, error) {
-	var postgresDependencies *KVServicePostgresDependencies
-	var err error
-	if cr.Spec.Postgres != nil {
-		database := &platformApi.PostgresDatabase{}
-		databaseKey := types.NamespacedName{
-			Namespace: cr.Namespace,
-			Name:      KVServicePostgresDatabaseResourceName(cr),
-		}
-		if err := c.Get(ctx, databaseKey, database); err != nil {
-			return nil, fmt.Errorf("get PostgresDatabase %s for KVService deployment: %w", databaseKey, err)
-		}
-		var ready bool
-		postgresDependencies, ready, err = ResolveKVServicePostgresDependencies(ctx, c, cr, database, KVServicePostgresLogicalDatabaseName(cr))
-		if err != nil {
-			return nil, fmt.Errorf("resolve PostgreSQL dependencies for KVService %q: %w", cr.Name, err)
-		}
-		if !ready {
-			return nil, fmt.Errorf("postgres database resource %q does not publish ready connection references for database %q", database.Name, KVServicePostgresLogicalDatabaseName(cr))
-		}
-	}
-	return getKVServiceDeployment(ctx, c, cr, postgresDependencies, extraEnv)
+	// TenantKeyringRevision identifies the entire verification-key Secret snapshot.
+	TenantKeyringRevision string
 }
 
 // GetKVServiceDeploymentWithPostgresDependencies builds a Deployment using the
 // dependency snapshot already validated by the KVService reconciler.
 func GetKVServiceDeploymentWithPostgresDependencies(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService, postgresDependencies *KVServicePostgresDependencies, extraEnv []corev1.EnvVar) (*appsv1.Deployment, error) {
-	if cr.Spec.Postgres != nil && postgresDependencies == nil {
+	if postgresDependencies == nil {
 		return nil, fmt.Errorf("validated PostgreSQL dependencies are required for KVService %q", cr.Name)
 	}
 	return getKVServiceDeployment(ctx, c, cr, postgresDependencies, extraEnv)
@@ -136,10 +90,10 @@ func getKVServiceDeployment(ctx context.Context, c splcommon.ControllerClient, c
 	desired.Spec.Template.Spec.Containers[0].Env = append(desired.Spec.Template.Spec.Containers[0].Env, extraEnv...)
 	if postgresDependencies != nil {
 		desired.Spec.Template.Spec.Containers[0].Env = append(desired.Spec.Template.Spec.Containers[0].Env, postgresDependencies.Environment...)
+		desired.Spec.Template.Spec.Volumes = append(desired.Spec.Template.Spec.Volumes, postgresDependencies.Volumes...)
+		desired.Spec.Template.Spec.Containers[0].VolumeMounts = append(desired.Spec.Template.Spec.Containers[0].VolumeMounts, postgresDependencies.VolumeMounts...)
 	}
-	if cr.Spec.Postgres != nil {
-		annotateKVServicePostgresDependencies(&desired.Spec.Template, postgresDependencies)
-	}
+	annotateKVServicePostgresDependencies(&desired.Spec.Template, postgresDependencies)
 	return desired, nil
 }
 
@@ -149,7 +103,8 @@ func annotateKVServicePostgresDependencies(template *corev1.PodTemplateSpec, dep
 	}
 	template.Annotations["enterprise.splunk.com/kvservice-postgres-config"] = dependencies.ConfigHash
 	template.Annotations["enterprise.splunk.com/kvservice-postgres-admin-secret"] = dependencies.AdminUserSecretRevision
-	template.Annotations["enterprise.splunk.com/kvservice-pass4-secret"] = dependencies.Pass4SymmKeyRevision
+	// Preserve the existing annotation key; its value covers the multi-tenant keyring.
+	template.Annotations["enterprise.splunk.com/kvservice-pass4-secret"] = dependencies.TenantKeyringRevision
 }
 
 func hashKVServiceData(data map[string]string, keys ...string) string {
@@ -168,49 +123,40 @@ func kvServiceSecretRevision(secret *corev1.Secret, key string) string {
 	return fmt.Sprintf("%s/%s:%s:%s:%s", secret.Namespace, secret.Name, secret.UID, secret.ResourceVersion, key)
 }
 
-// ResolveKVServicePostgresDependencies validates one database status snapshot and
-// resolves the environment, ConfigMap hash, and Secret revision metadata.
-func ResolveKVServicePostgresDependencies(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService, database *platformApi.PostgresDatabase, databaseName string) (*KVServicePostgresDependencies, bool, error) {
+// ResolveKVServiceTenantDependencies uses the same reviewed connection checks,
+// while request authentication comes from the per-tenant keyring instead.
+func ResolveKVServiceTenantDependencies(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService, database *platformApi.PostgresDatabase, databaseName string) (*KVServicePostgresDependencies, *platformApi.DatabaseInfo, error) {
 	infoIndex := slices.IndexFunc(database.Status.Databases, func(info platformApi.DatabaseInfo) bool {
 		return info.Name == databaseName
 	})
 	if infoIndex < 0 {
-		return nil, false, nil
+		return nil, nil, nil
 	}
 	info := &database.Status.Databases[infoIndex]
 	if !info.Ready || info.ConfigMapRef == nil || info.AdminUserSecretRef == nil {
-		return nil, false, nil
+		return nil, nil, nil
 	}
 	configMap := &corev1.ConfigMap{}
 	if err := c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: info.ConfigMapRef.Name}, configMap); err != nil {
-		return nil, false, fmt.Errorf("get PostgreSQL connection ConfigMap %q: %w", info.ConfigMapRef.Name, err)
+		return nil, nil, fmt.Errorf("get PostgreSQL connection ConfigMap %q: %w", info.ConfigMapRef.Name, err)
 	}
 	for _, key := range []string{pgconninfo.KeyClusterRWEndpoint, pgconninfo.KeyDefaultClusterPort, pgdatabase.ConfigMapKeyAdminUser} {
 		if configMap.Data[key] == "" {
-			return nil, false, fmt.Errorf("config map %q must contain non-empty key %q for KVService PostgreSQL configuration", configMap.Name, key)
+			return nil, nil, fmt.Errorf("config map %q must contain non-empty key %q for KVService PostgreSQL configuration", configMap.Name, key)
 		}
 	}
 	adminSecret := &corev1.Secret{}
 	if err := c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: info.AdminUserSecretRef.Name}, adminSecret); err != nil {
-		return nil, false, fmt.Errorf("get PostgreSQL admin Secret %q: %w", info.AdminUserSecretRef.Name, err)
+		return nil, nil, fmt.Errorf("get PostgreSQL admin Secret %q: %w", info.AdminUserSecretRef.Name, err)
 	}
 	adminPassword := adminSecret.Data[info.AdminUserSecretRef.Key]
 	if len(adminPassword) == 0 {
-		return nil, false, fmt.Errorf("secret %q must contain non-empty key %q for KVService PostgreSQL configuration", adminSecret.Name, info.AdminUserSecretRef.Key)
-	}
-	namespaceSecret := &corev1.Secret{}
-	if err := c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: splcommon.GetNamespaceScopedSecretName(cr.Namespace)}, namespaceSecret); err != nil {
-		return nil, false, fmt.Errorf("get namespace authentication Secret for KVService %q: %w", cr.Name, err)
-	}
-	if len(namespaceSecret.Data[kvServicePass4SymmKey]) == 0 {
-		return nil, false, fmt.Errorf("namespace Secret %q must contain non-empty key %q", namespaceSecret.Name, kvServicePass4SymmKey)
+		return nil, nil, fmt.Errorf("secret %q must contain non-empty key %q for KVService PostgreSQL configuration", adminSecret.Name, info.AdminUserSecretRef.Key)
 	}
 	configMapRef := corev1.LocalObjectReference{Name: info.ConfigMapRef.Name}
 	adminUserSecretRef := info.AdminUserSecretRef
-	namespaceSecretName := splcommon.GetNamespaceScopedSecretName(cr.Namespace)
 	env := []corev1.EnvVar{
 		{Name: "KVSERVICE_SINGLE_TENANT_K8S_MODE", Value: "true"},
-		{Name: "KVSERVICE_SINGLE_TENANT_PASS4_SYMM_KEY", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: namespaceSecretName}, Key: kvServicePass4SymmKey}}},
 		{Name: "KVSERVICE_DB_HOST", ValueFrom: &corev1.EnvVarSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: configMapRef, Key: pgconninfo.KeyClusterRWEndpoint}}},
 		{Name: "KVSERVICE_DB_PORT", ValueFrom: &corev1.EnvVarSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: configMapRef, Key: pgconninfo.KeyDefaultClusterPort}}},
 		{Name: "KVSERVICE_SINGLE_TENANT_PRIMARY_HOST", ValueFrom: &corev1.EnvVarSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: configMapRef, Key: pgconninfo.KeyClusterRWEndpoint}}},
@@ -226,8 +172,7 @@ func ResolveKVServicePostgresDependencies(ctx context.Context, c splcommon.Contr
 		Environment:             env,
 		ConfigHash:              hashKVServiceData(configMap.Data, pgconninfo.KeyClusterRWEndpoint, pgconninfo.KeyDefaultClusterPort, pgdatabase.ConfigMapKeyAdminUser),
 		AdminUserSecretRevision: kvServiceSecretRevision(adminSecret, info.AdminUserSecretRef.Key),
-		Pass4SymmKeyRevision:    kvServiceSecretRevision(namespaceSecret, kvServicePass4SymmKey),
-	}, true, nil
+	}, info, nil
 }
 
 // UpdateKVServiceStatus retries conflicts without overwriting concurrent spec updates.

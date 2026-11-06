@@ -38,6 +38,7 @@ import (
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -76,6 +77,9 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	Expect(cfg).NotTo(BeNil())
 
 	err = enterpriseApi.AddToScheme(clientgoscheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = platformApi.AddToScheme(clientgoscheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = enterpriseApiV3.AddToScheme(clientgoscheme.Scheme)

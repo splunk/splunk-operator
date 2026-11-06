@@ -59,33 +59,9 @@ func validateKVServiceSpec(ctx context.Context, c splcommon.ControllerClient, cr
 			logging.FromContext(ctx).ErrorContext(ctx, "couldn't get secret in the imagePullSecrets config", "Secret", secret.Name, "error", err)
 		}
 	}
-	if len(spec.Certs) > 0 {
-		reserved := map[string]struct{}{"TLS_CERTIFICATE": {}, "TLS_PRIVATE_KEY": {}, "TLS_HOST": {}, "TLS_PORT": {}}
-		for _, env := range spec.ExtraEnv {
-			if _, ok := reserved[env.Name]; ok {
-				return fmt.Errorf("spec.extraEnv cannot override operator-managed KVService TLS environment variable %q", env.Name)
-			}
-		}
-	}
-	if spec.Postgres != nil {
-		reserved := map[string]struct{}{
-			"KVSERVICE_SINGLE_TENANT_K8S_MODE":       {},
-			"KVSERVICE_SINGLE_TENANT_PASS4_SYMM_KEY": {},
-			"KVSERVICE_DB_HOST":                      {},
-			"KVSERVICE_DB_PORT":                      {},
-			"KVSERVICE_SINGLE_TENANT_PRIMARY_HOST":   {},
-			"KVSERVICE_SINGLE_TENANT_PRIMARY_PORT":   {},
-			"KVSERVICE_SINGLE_TENANT_REPLICA_HOST":   {},
-			"KVSERVICE_SINGLE_TENANT_REPLICA_PORT":   {},
-			"KVSERVICE_DB_ROOT_USER":                 {},
-			"KVSERVICE_DB_SERVICE_USER":              {},
-			"KVSERVICE_DB_PASSWORD":                  {},
-			"KVSERVICE_DB_SERVICE_PASSWORD":          {},
-		}
-		for _, env := range spec.ExtraEnv {
-			if _, ok := reserved[env.Name]; ok {
-				return fmt.Errorf("spec.extraEnv cannot override operator-managed KVService Postgres environment variable %q", env.Name)
-			}
+	for _, env := range spec.ExtraEnv {
+		if category, managed := splutil.KVServiceManagedEnvironmentCategory(env.Name, len(spec.Certs) > 0); managed {
+			return fmt.Errorf("spec.extraEnv cannot override operator-managed KVService %s environment variable %q", category, env.Name)
 		}
 	}
 	resources.SetKVServiceVolumeDefaults(spec)

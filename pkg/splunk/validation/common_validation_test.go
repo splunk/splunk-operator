@@ -1497,7 +1497,7 @@ func TestKVServiceExtraEnvAdmission(t *testing.T) {
 			{"IngestorCluster", IngestorClusterGVR},
 		} {
 			for _, operation := range []admissionv1.Operation{admissionv1.Create, admissionv1.Update} {
-				for _, name := range []string{"SPLUNK_KVSTORE_DEFAULT_TYPE", "SPLUNK_KVSERVICE_SCOPE", "SPLUNK_KVSERVICE_MODE", "SPLUNK_SCS_TENANT", "SPLUNK_SCS_ENVIRONMENT"} {
+				for _, name := range []string{"KVSERVICE_CONNECTION_STRING", "SPLUNK_KVSTORE_DEFAULT_TYPE", "SPLUNK_KVSERVICE_SCOPE", "SPLUNK_KVSERVICE_MODE", "SPLUNK_SCS_TENANT", "SPLUNK_SCS_ENVIRONMENT"} {
 					t.Run(label+"/"+resource.gvr.Resource+"/"+string(operation)+"/"+name, func(t *testing.T) {
 						env := []corev1.EnvVar{{Name: "UNRELATED", Value: "allowed"}, {Name: name, Value: "local"}}
 						ar := kvServiceEnvAdmissionReview(t, resource.kind, resource.gvr, operation, env)

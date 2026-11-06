@@ -1335,20 +1335,13 @@ spec:
                   These annotations override operator-provided pod annotations when keys overlap.
                 type: object
               postgres:
-                description: Postgres config used by KVService.
+                description: Postgres configures the required PostgresCluster connection
+                  for KVService.
                 properties:
-                  databaseName:
+                  clusterRef:
                     description: |-
-                      Logical PostgreSQL database name used by KVService.
-                      When omitted, the controller selects kvstore.
-                    maxLength: 30
-                    pattern: ^[a-z][a-z0-9]*$
-                    type: string
-                  databaseRef:
-                    description: |-
-                      Reference to an existing PostgresDatabase resource in this namespace.
-                      When omitted, the controller selects the existing kvstore-database resource.
-                      KVService never creates or modifies the referenced PostgresDatabase.
+                      ClusterRef references the PostgresCluster in this namespace used to provision
+                      databases for tenant namespaces that select this KVService.
                     properties:
                       name:
                         default: ""
@@ -1361,6 +1354,11 @@ spec:
                         type: string
                     type: object
                     x-kubernetes-map-type: atomic
+                    x-kubernetes-validations:
+                    - message: clusterRef.name must not be empty
+                      rule: has(self.name) && self.name != ''
+                required:
+                - clusterRef
                 type: object
               readinessInitialDelaySeconds:
                 description: |-
@@ -4207,6 +4205,8 @@ spec:
                   - name
                   type: object
                 type: array
+            required:
+            - postgres
             type: object
           status:
             description: KVServiceStatus defines the observed state of KVService
@@ -4309,6 +4309,8 @@ spec:
                 description: selector for pods, used by HorizontalPodAutoscaler
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

@@ -43,7 +43,7 @@ func kvServiceClientFixture(t *testing.T) *spltest.MockClient {
 	t.Helper()
 	t.Setenv("WATCH_NAMESPACE", "")
 	c := spltest.NewMockClient()
-	c.AddObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "workload", Labels: map[string]string{splcommon.LabelKVService: "enabled", splcommon.LabelTenant: "customer"}, Annotations: map[string]string{splcommon.AnnotationKVServiceAddr: "shared.backend:8066"}}})
+	c.AddObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "workload", Labels: map[string]string{splcommon.LabelKVService: "enabled", splcommon.LabelTenant: "customer"}, Annotations: map[string]string{splcommon.AnnotationKVServiceAddr: "splunk-shared-kvservice-service.backend:8066"}}})
 	_, err := splutil.ApplyNamespaceScopedSecretObject(t.Context(), c, "workload")
 	require.NoError(t, err)
 	c.AddObject(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: splutil.GetProbeConfigMapName("workload"), Namespace: "workload"}})
@@ -124,7 +124,7 @@ func TestGetSplunkStatefulSetKVServiceSystemLocalDefaults(t *testing.T) {
 			assert.Equal(t, "server", conf.ConfFileName)
 			assert.Empty(t, conf.Value.Directory, "use the implicit system/local target")
 			assert.Equal(t, splcommon.ConfFileStanzas{
-				"kvstore": {"defaultKVStoreType": "external", "kvserviceConnectionString": "shared.backend:8066"},
+				"kvstore": {"defaultKVStoreType": "external", "kvserviceConnectionString": "http://splunk-shared-kvservice-service.backend:8066"},
 				"scs":     {"tenant": "customer", "mvl-enabled": "true"},
 			}, conf.Value.Stanzas)
 			env := map[string]string{}
@@ -147,19 +147,16 @@ func TestGetKVServiceSettingsNamespaceMetadata(t *testing.T) {
 		found                          bool
 		wantError                      string
 	}{
-		{name: "enabled", enabled: "enabled", address: "shared.backend:8066", tenant: "customer", found: true},
-		{name: "tenant label is optional", enabled: "enabled", address: "shared.backend:8066", found: true},
-		{name: "disabled", enabled: "disabled", address: "shared.backend:8066"},
-		{name: "absent", address: "shared.backend:8066"},
-		{name: "case sensitive", enabled: "Enabled", address: "shared.backend:8066"},
+		{name: "enabled", enabled: "enabled", address: "splunk-shared-kvservice-service.backend:8066", tenant: "customer", found: true},
+		{name: "tenant label is optional", enabled: "enabled", address: "splunk-shared-kvservice-service.backend:8066", found: true},
+		{name: "invalid tenant", enabled: "enabled", address: "splunk-shared-kvservice-service.backend:8066", tenant: "bad-tenant", wantError: "invalid tenant"},
+		{name: "disabled", enabled: "disabled", address: "splunk-shared-kvservice-service.backend:8066"},
+		{name: "absent", address: "splunk-shared-kvservice-service.backend:8066"},
+		{name: "case sensitive", enabled: "Enabled", address: "splunk-shared-kvservice-service.backend:8066"},
 		{name: "disabled ignores missing address", enabled: "disabled"},
-		{name: "missing address", enabled: "enabled", wantError: "annotation platform.splunk.com/kvservice-addr must not be empty"},
-		{name: "custom port", enabled: "enabled", address: "shared.backend:9000", found: true},
-		{name: "no port added", enabled: "enabled", address: "shared", found: true},
-		{name: "scheme preserved", enabled: "enabled", address: "https://shared.backend:9000", found: true},
-		{name: "fqdn preserved", enabled: "enabled", address: "shared.backend.svc.cluster.local:8066", found: true},
-		{name: "ipv6 preserved", enabled: "enabled", address: "[2001:db8::1]:8066", found: true},
-		{name: "no normalization", enabled: "enabled", address: " supplied address ", found: true},
+		{name: "missing address", enabled: "enabled", wantError: "set annotation platform.splunk.com/kvservice-addr"},
+		{name: "scheme preserved", enabled: "enabled", address: "https://splunk-shared-kvservice-service.backend:8066", found: true},
+		{name: "invalid address rejected", enabled: "enabled", address: " supplied address ", wantError: "KVService address"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := spltest.NewMockClient()
@@ -224,7 +221,7 @@ func TestKVServiceDefaultsUpdateAndOwnership(t *testing.T) {
 	assert.True(t, *initial.Immutable)
 	set, err := splunkconfig.ForRole(k8sops.SplunkStandalone).
 		NonSensitiveConfDir("").
-		With(kvservice.Conf("changed.backend:8066", "customer")).Build()
+		With(kvservice.Conf("splunk-changed-kvservice-service.backend:8066", "customer")).Build()
 	require.NoError(t, err)
 	owner := splcommon.AsOwner(cr, true)
 	changed, err := configworkflow.EnsureConfigMap(t.Context(), c, cr, set.NonSensitive, &owner)
@@ -276,12 +273,12 @@ func TestNamespaceKVServiceChangesUpdateAndRestoreLocalPodDefaults(t *testing.T)
 	initial, initialName := build()
 	var namespace corev1.Namespace
 	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "workload"}, &namespace))
-	namespace.Annotations[splcommon.AnnotationKVServiceAddr] = "replacement.platform:9000"
+	namespace.Annotations[splcommon.AnnotationKVServiceAddr] = "splunk-replacement-kvservice-service.platform:8066"
 	c.AddObject(&namespace)
 	changed, addressName := build()
 	assert.NotEqual(t, initialName, addressName)
 	assert.NotEqual(t, initial.Spec.Template, changed.Spec.Template)
-	namespace.Labels[splcommon.LabelTenant] = "another-tenant"
+	namespace.Labels[splcommon.LabelTenant] = "anothertenant"
 	c.AddObject(&namespace)
 	_, tenantName := build()
 	assert.NotEqual(t, addressName, tenantName, "tenant changes update client defaults")
