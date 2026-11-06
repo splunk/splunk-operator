@@ -3,9 +3,11 @@ package majorupgradeadapter
 import (
 	"context"
 	"fmt"
+	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	endpointpublication "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases/major_version_upgrade/endpoint_publication"
 	pgcnpg "github.com/splunk/splunk-operator/pkg/postgresql/shared/cnpg"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
@@ -21,8 +23,14 @@ type EndpointCoordinatorStore struct {
 	Reader client.Reader
 }
 
-func NewEndpointCoordinator(writer client.Client, reader client.Reader) *endpointpublication.Coordinator {
-	return endpointpublication.NewCoordinator(&EndpointCoordinatorStore{Writer: writer, Reader: reader}, &EndpointProofResolver{Reader: reader})
+func NewEndpointCoordinator(writer client.Client, reader client.Reader) (*endpointpublication.Coordinator, error) {
+	if writer == nil || reader == nil {
+		return nil, fmt.Errorf("endpoint coordinator requires a writer and reader")
+	}
+	return endpointpublication.NewCoordinator(&EndpointCoordinatorStore{Writer: writer, Reader: reader}, &EndpointProofResolver{Reader: reader},
+		func(_ context.Context, _ *platformv1alpha1.PostgresCluster, bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus, now time.Time) error {
+			return mvutypes.AuthorizeCutoverCommit(bg, now)
+		}, time.Now)
 }
 
 // EndpointProofResolver resolves both routing payloads from live CNPG state.
@@ -40,7 +48,36 @@ func (r *EndpointProofResolver) Resolve(ctx context.Context, parent *platformv1a
 	if err != nil {
 		return endpointpublication.Proof{}, err
 	}
-	return endpointpublication.Proof{Blue: blue, Green: greenData, GreenUID: greenUID}, nil
+	access, err := r.resolveAccess(ctx, parent, bg.Green)
+	if err != nil {
+		return endpointpublication.Proof{}, err
+	}
+	return endpointpublication.Proof{Blue: blue, Green: greenData, GreenUID: greenUID, GreenAccess: access}, nil
+}
+
+func (r *EndpointProofResolver) ResolveBlueAccess(ctx context.Context, parent *platformv1alpha1.PostgresCluster, bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (map[string]string, error) {
+	return r.resolveAccess(ctx, parent, bg.Blue)
+}
+
+func (r *EndpointProofResolver) resolveAccess(ctx context.Context, parent *platformv1alpha1.PostgresCluster, environment *platformv1alpha1.BlueGreenEnvironmentStatus) (map[string]string, error) {
+	if parent == nil || environment == nil || environment.Ref.Name == "" || environment.Ref.UID == "" {
+		return nil, fmt.Errorf("cluster access metadata requires an immutable environment identity")
+	}
+	cluster := &cnpgv1.Cluster{}
+	if err := r.Reader.Get(ctx, types.NamespacedName{Namespace: parent.Namespace, Name: environment.Ref.Name}, cluster); err != nil {
+		return nil, err
+	}
+	if cluster.UID != environment.Ref.UID || cluster.GetSuperuserSecretName() == "" {
+		return nil, fmt.Errorf("cluster access metadata identity or superuser selector changed")
+	}
+	ca := cluster.Status.Certificates.ServerCASecret
+	if ca == "" && cluster.Spec.Certificates != nil {
+		ca = cluster.Spec.Certificates.ServerCASecret
+	}
+	if ca == "" {
+		return nil, fmt.Errorf("cluster access metadata CA selector is missing")
+	}
+	return pgconninfo.ClusterEnvironmentAccess(cluster.GetSuperuserSecretName(), ca), nil
 }
 
 func (r *EndpointProofResolver) ResolveGreen(ctx context.Context, parent *platformv1alpha1.PostgresCluster, bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (map[string]string, types.UID, error) {
@@ -116,6 +153,14 @@ func (s *EndpointCoordinatorStore) ReadConfigMap(ctx context.Context, key types.
 		return nil, err
 	}
 	return cm, nil
+}
+
+func (s *EndpointCoordinatorStore) UpdateConfigMap(ctx context.Context, cm *corev1.ConfigMap) error {
+	return s.Writer.Update(ctx, cm)
+}
+
+func (s *EndpointCoordinatorStore) CreateConfigMap(ctx context.Context, cm *corev1.ConfigMap) error {
+	return s.Writer.Create(ctx, cm)
 }
 
 func (s *EndpointCoordinatorStore) WriteParentStatus(ctx context.Context, parent *platformv1alpha1.PostgresCluster) error {

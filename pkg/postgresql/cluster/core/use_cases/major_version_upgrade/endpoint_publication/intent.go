@@ -31,15 +31,29 @@ func (c *Coordinator) PublishPreparationIntent(ctx context.Context, key types.Na
 			return false, err
 		}
 		if prep := bg.EndpointPreparation; prep != nil {
-			return false, validateExistingPreparation(prep, bg.EndpointIntentRevision, fingerprint, inventory)
+			if err := validateExistingPreparation(prep, bg.EndpointIntentRevision, fingerprint, inventory); err != nil {
+				return false, err
+			}
+			if !endpointDataMatches(prep.Routing, proof.Green) {
+				return false, fmt.Errorf("prepared endpoint payload differs from live proof")
+			}
+			return false, nil
 		}
 		if bg.EndpointIntentRevision == math.MaxInt64 {
 			return false, fmt.Errorf("endpoint intent revision overflow")
 		}
 		bg.EndpointIntentRevision++
 		acks := newPreparationAcknowledgements(inventory)
+		canonical, err := c.store.ReadConfigMap(ctx, types.NamespacedName{Namespace: parent.Namespace, Name: parent.Status.Resources.ConfigMapRef.Name})
+		if err != nil {
+			return false, err
+		}
 		bg.EndpointPreparation = &platformv1alpha1.BlueGreenEndpointPreparationStatus{
 			Generation: bg.EndpointIntentRevision, EndpointFingerprint: &fingerprint, Acknowledgements: acks,
+			Routing: routingCopy(proof.Green), AccessMetadata: accessMetadataCopy(canonical.Data),
+		}
+		if proof.GreenAccess != nil {
+			bg.EndpointPreparation.AccessMetadata = accessMetadataCopy(proof.GreenAccess)
 		}
 		return true, nil
 	})

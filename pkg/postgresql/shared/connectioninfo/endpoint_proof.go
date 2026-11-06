@@ -24,6 +24,8 @@ import (
 )
 
 const (
+	// AnnotationSourceRestoreFence invalidates a delayed commit after blue restoration.
+	AnnotationSourceRestoreFence = "platform.splunk.com/endpoint-source-restore-fence"
 	// These annotations make the canonical cluster ConfigMap the observable
 	// endpoint commit record. Database ConfigMaps also use the intent markers to
 	// reject an older publication after a newer one has been written.
