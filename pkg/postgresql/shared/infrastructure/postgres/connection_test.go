@@ -86,18 +86,31 @@ func TestConnectVerified(t *testing.T) {
 		gotConfig = cfg
 		return nil, nil
 	}
-	conn, err := ConnectVerified(t.Context(), "orders-1.orders-r.default.svc.cluster.local", "orders", "secret", "orders-rw.default.svc.cluster.local", serverCA)
+	conn, err := ConnectVerified(t.Context(), "10.42.0.17", "orders", "secret", "orders-rw.default.svc.cluster.local", serverCA)
 	require.NoError(t, err)
 	require.NotNil(t, conn)
 	require.NotNil(t, gotConfig)
 	require.NotNil(t, gotConfig.TLSConfig)
 	assert.Equal(t, "orders-rw.default.svc.cluster.local", gotConfig.TLSConfig.ServerName)
-	assert.Equal(t, "orders-1.orders-r.default.svc.cluster.local", gotConfig.Host)
+	assert.Equal(t, "10.42.0.17", gotConfig.Host)
 	assert.Equal(t, uint16(tls.VersionTLS12), gotConfig.TLSConfig.MinVersion)
 	assert.False(t, gotConfig.TLSConfig.InsecureSkipVerify)
 	assert.NotNil(t, gotConfig.TLSConfig.RootCAs)
 	assert.Empty(t, gotConfig.Fallbacks)
 	assert.Equal(t, "secret", gotConfig.Password)
+
+	conn, err = ConnectAsVerified(t.Context(), "fd00::17", `orders/db?sslmode=disable`, `control@role'`, "control-password", "orders-rw.default.svc.cluster.local", serverCA)
+	require.NoError(t, err)
+	require.NotNil(t, conn)
+	assert.Equal(t, `control@role'`, gotConfig.User)
+	assert.Equal(t, `orders/db?sslmode=disable`, gotConfig.Database)
+	assert.Equal(t, "control-password", gotConfig.Password)
+	assert.Equal(t, "fd00::17", gotConfig.Host)
+	assert.Equal(t, "orders-rw.default.svc.cluster.local", gotConfig.TLSConfig.ServerName)
+	assert.False(t, gotConfig.TLSConfig.InsecureSkipVerify)
+	assert.Empty(t, gotConfig.Fallbacks)
+	_, err = ConnectAsVerified(t.Context(), "orders-rw.default.svc.cluster.local", "orders", "", "password", "orders-rw.default.svc.cluster.local", serverCA)
+	require.ErrorContains(t, err, "username is required")
 
 	_, err = ConnectVerified(t.Context(), "orders-rw.default.svc.cluster.local", "orders", "secret", "orders-rw.default.svc.cluster.local", []byte("not a certificate"))
 	require.ErrorContains(t, err, "server CA is not valid PEM")

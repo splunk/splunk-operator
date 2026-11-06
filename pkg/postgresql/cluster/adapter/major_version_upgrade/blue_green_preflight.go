@@ -124,7 +124,9 @@ WITH capacity AS (
          current_setting('max_wal_senders')::int AS senders,
          current_setting('max_logical_replication_workers')::int AS logical_workers,
          current_setting('max_worker_processes')::int AS workers,
-         current_setting('max_active_replication_origins')::int AS origins,
+         -- PostgreSQL 17 bounds origins by replication slots; 18 adds a separate limit.
+         COALESCE(current_setting('max_active_replication_origins', true)::int,
+                  current_setting('max_replication_slots')::int) AS origins,
          current_setting('max_sync_workers_per_subscription')::int AS sync_per_subscription,
          GREATEST($2::int, (SELECT count(*) FROM pg_replication_slots WHERE slot_type = 'physical')) AS physical_slots,
          GREATEST($2::int, (SELECT count(*) FROM pg_stat_replication r WHERE NOT EXISTS (
@@ -417,18 +419,20 @@ func grantSchemaAccess(ctx context.Context, conn pginfra.Conn, databaseName, sch
 }
 
 func ensureReplicationRole(ctx context.Context, conn pginfra.Conn, role, password string) error {
-	quotedRole := pginfra.QuoteIdentifier(role)
-	quotedPassword := quoteSQLStringLiteral(password)
-	if _, err := conn.Exec(ctx, fmt.Sprintf("CREATE ROLE %s LOGIN REPLICATION PASSWORD %s", quotedRole, quotedPassword)); err != nil {
-		// ALTER below makes retry safe. SQLSTATE 42710 is duplicate_object.
-		if !isDuplicateRole(err) {
-			return fmt.Errorf("creating attempt replication role: %w", err)
+	return withSCRAMPasswordEncoding(ctx, conn, func() error {
+		quotedRole := pginfra.QuoteIdentifier(role)
+		passwordLiteral := quoteSQLStringLiteral(password)
+		if _, err := conn.Exec(ctx, fmt.Sprintf("CREATE ROLE %s LOGIN REPLICATION PASSWORD %s", quotedRole, passwordLiteral)); err != nil {
+			// ALTER below makes retry safe. SQLSTATE 42710 is duplicate_object.
+			if !isDuplicateRole(err) {
+				return fmt.Errorf("creating attempt replication role: %w", err)
+			}
 		}
-	}
-	if _, err := conn.Exec(ctx, fmt.Sprintf("ALTER ROLE %s LOGIN REPLICATION PASSWORD %s", quotedRole, quotedPassword)); err != nil {
-		return fmt.Errorf("updating attempt replication role: %w", err)
-	}
-	return nil
+		if _, err := conn.Exec(ctx, fmt.Sprintf("ALTER ROLE %s LOGIN REPLICATION PASSWORD %s", quotedRole, passwordLiteral)); err != nil {
+			return fmt.Errorf("updating attempt replication role: %w", err)
+		}
+		return nil
+	})
 }
 
 // Role options do not accept bind parameters. Use an escape string literal so
@@ -478,6 +482,11 @@ func queryOne(ctx context.Context, conn pginfra.Conn, dest any, sql string, args
 	}
 	if err := rows.Scan(dest); err != nil {
 		return err
+	}
+	// Exhaust the cursor before reading Err: PostgreSQL can report a terminal
+	// query error after delivering its first row. Every caller expects one row.
+	if rows.Next() {
+		return fmt.Errorf("query returned multiple rows")
 	}
 	return rows.Err()
 }
@@ -615,6 +624,12 @@ FROM (
 // Compare effective ACL entries so a NULL ACL and the explicit defaults left
 // by GRANT hash identically. Only this attempt's expected replication grants
 // are excluded; other privilege changes still invalidate the baseline.
+const sourcePublisherRoleDrift = `rolsuper OR NOT rolinherit OR rolcreaterole OR rolcreatedb
+      OR NOT rolcanlogin OR NOT rolreplication OR rolbypassrls OR rolconnlimit <> -1`
+
+const greenPublisherRoleDrift = `rolsuper OR NOT rolinherit OR rolcreaterole OR rolcreatedb
+      OR rolcanlogin OR rolreplication OR rolbypassrls OR rolconnlimit <> -1`
+
 const accessFingerprintSQL = `
 WITH attempt_role AS (
   SELECT (SELECT oid FROM pg_roles WHERE rolname = $1) AS oid
@@ -637,8 +652,7 @@ FROM (
   UNION ALL
   SELECT format('attempt-role-drift:%I:%s:%s:%s:%s:%s:%s:%s:%s', rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb,
     rolcanlogin, rolreplication, rolbypassrls, rolconnlimit) FROM pg_roles
-    WHERE rolname = $1 AND (rolsuper OR NOT rolinherit OR rolcreaterole OR rolcreatedb
-      OR NOT rolcanlogin OR NOT rolreplication OR rolbypassrls OR rolconnlimit <> -1)
+    WHERE rolname = $1 AND (` + sourcePublisherRoleDrift + `)
   UNION ALL
   SELECT format('membership:%s:%s:%s:%s:%s', role.rolname, member.rolname, membership.admin_option, membership.inherit_option, membership.set_option)
     FROM pg_auth_members membership
@@ -657,7 +671,7 @@ FROM (
   SELECT format('relation-acl:%I.%I:%s:%s:%s:%s', n.nspname, c.relname, pg_get_userbyid(acl.grantor),
     CASE WHEN acl.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl.grantee) END, acl.privilege_type, acl.is_grantable)
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-    CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault((CASE WHEN c.relkind = 'S' THEN 'S' ELSE 'r' END)::"char", c.relowner))) acl
+    CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault((CASE WHEN c.relkind = 'S' THEN 's' ELSE 'r' END)::"char", c.relowner))) acl
     WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'splunk_operator_bluegreen') AND n.nspname NOT LIKE 'pg_toast%'
       AND c.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
       AND NOT (c.relkind <> 'S' AND acl.grantee IS NOT DISTINCT FROM (SELECT oid FROM attempt_role)
@@ -680,6 +694,17 @@ FROM (
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'splunk_operator_bluegreen') AND n.nspname NOT LIKE 'pg_toast%'
 ) definitions`
+
+// Green retains only an inert role so pg_restore can preserve the publisher's
+// ACL references. Its role must exist without LOGIN or REPLICATION; application
+// ownership, memberships and grants keep the same complete fingerprint.
+func greenAccessFingerprintSQL() string {
+	sql := strings.Replace(accessFingerprintSQL, sourcePublisherRoleDrift, greenPublisherRoleDrift, 1)
+	return strings.Replace(sql, "  UNION ALL\n  SELECT format('membership:", `  UNION ALL
+  SELECT format('attempt-role-missing:%I', $1) WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1)
+  UNION ALL
+  SELECT format('membership:`, 1)
+}
 
 func isDuplicateRole(err error) bool {
 	pgErr, ok := errors.AsType[*pgconn.PgError](err)
