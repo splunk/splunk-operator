@@ -13,9 +13,12 @@ package majorupgradeadapter
 import (
 	"context"
 	"errors"
+	"os"
+	"strings"
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
@@ -45,10 +48,59 @@ func TestSourceCapacityReservesPhysicalAndTableSyncResources(t *testing.T) {
 	assert.Contains(t, query, "slot_type = 'physical'")
 	assert.Contains(t, query, "pg_stat_replication")
 	assert.Contains(t, query, "max_sync_workers_per_subscription")
-	assert.Contains(t, query, "max_active_replication_origins")
+	assert.Contains(t, query, "COALESCE(current_setting('max_active_replication_origins', true)::int,\n                  current_setting('max_replication_slots')::int) AS origins")
 	assert.Contains(t, query, "physical_slots + logical_slots")
 	assert.Contains(t, query, "physical_senders + logical_slots")
 	assert.Contains(t, query, "logical_workers > $1::int", "at least one table-sync worker must remain")
+}
+
+// Set SPLUNK_OPERATOR_TEST_POSTGRES_DSN to a disposable PostgreSQL 17+ database.
+// This check only reads the database and its configuration.
+func TestSourceCapacityAgainstPostgres(t *testing.T) {
+	dsn := os.Getenv("SPLUNK_OPERATOR_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("set SPLUNK_OPERATOR_TEST_POSTGRES_DSN to a disposable PostgreSQL 17+ database")
+	}
+	pgconn, err := pgx.Connect(t.Context(), dsn)
+	require.NoError(t, err)
+	defer pgconn.Close(t.Context())
+	conn := livePreflightSQLConn{Conn: pgconn}
+
+	// Capture the exact production statement, including its version-dependent
+	// setting lookup. PostgreSQL 17 must execute it without an unknown-GUC error.
+	capture := &preflightSQLTestConn{results: [][]any{{true}, {"orders"}}}
+	require.NoError(t, checkSourceCapacityAndDatabases(t.Context(), capture, []declaredDatabase{{name: "orders"}}, 0))
+	query := capture.queries[0]
+	var capacityOK bool
+	require.NoError(t, queryOne(t.Context(), conn, &capacityOK, query, 1, 0))
+
+	// Give the other resources ample room so only the origin limit controls the
+	// result. A missing setting models PostgreSQL 17; PostgreSQL 18's explicit
+	// limits must win over the larger replication-slot fallback, including zero.
+	query = strings.NewReplacer(
+		"current_setting('max_replication_slots')", "'1024'",
+		"current_setting('max_wal_senders')", "'1024'",
+		"current_setting('max_logical_replication_workers')", "'16'",
+		"current_setting('max_worker_processes')", "'1024'",
+		"current_setting('max_active_replication_origins', true)", "$3::text",
+		"current_setting('max_sync_workers_per_subscription')", "'2'",
+		"current_setting('max_slot_wal_keep_size')", "'1TB'",
+	).Replace(query)
+	for _, tt := range []struct {
+		name    string
+		origins any
+		want    bool
+	}{
+		{name: "PostgreSQL 17 uses replication slots", origins: nil, want: true},
+		{name: "PostgreSQL 18 disables origins", origins: "0", want: false},
+		{name: "PostgreSQL 18 lacks a table sync origin", origins: "2", want: false},
+		{name: "PostgreSQL 18 has enough origins", origins: "3", want: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			require.NoError(t, queryOne(t.Context(), conn, &capacityOK, query, 1, 0, tt.origins))
+			assert.Equal(t, tt.want, capacityOK)
+		})
+	}
 }
 
 func TestValidateSourceRolesUsesReservedRolePolicy(t *testing.T) {
@@ -96,6 +148,22 @@ func TestFingerprintQueriesCoverTheFreezeContract(t *testing.T) {
 	assert.Contains(t, accessFingerprintSQL, "string_agg(item::text, ',' ORDER BY item::text)")
 	assert.Contains(t, accessFingerprintSQL, "AS definition", "the outer aggregate must reference a named column")
 	assert.Contains(t, accessFingerprintSQL, "cnpg_pooler_pgbouncer")
+}
+
+func TestGreenFingerprintRequiresAnInertExistingPublisherRole(t *testing.T) {
+	green := greenAccessFingerprintSQL()
+	assert.Contains(t, accessFingerprintSQL, sourcePublisherRoleDrift)
+	assert.NotContains(t, accessFingerprintSQL, greenPublisherRoleDrift)
+	assert.NotContains(t, accessFingerprintSQL, "attempt-role-missing:", "blue's first baseline precedes publisher creation")
+	assert.Contains(t, green, greenPublisherRoleDrift)
+	assert.NotContains(t, green, sourcePublisherRoleDrift)
+	assert.Contains(t, green, "SELECT format('attempt-role-missing:%I', $1) WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1)")
+	for _, definition := range []string{"database-acl:", "schema-acl:", "relation-acl:", "column-acl:", "default-acl:", "function-acl:", "membership:"} {
+		assert.Contains(t, green, definition, "the green shadow role cannot mask application access drift")
+	}
+	assert.Contains(t, green, "acl.privilege_type = 'SELECT' AND NOT acl.is_grantable")
+	assert.Contains(t, green, "acl.privilege_type = 'USAGE' AND NOT acl.is_grantable")
+	assert.Contains(t, green, "acl.privilege_type = 'CONNECT' AND NOT acl.is_grantable")
 }
 
 func TestAttemptPublicationAcceptsOnlyTheAttemptOwnedPublication(t *testing.T) {
@@ -205,11 +273,10 @@ func TestEnsureReplicationRoleGrantsDeclaredDatabaseAccess(t *testing.T) {
 	databaseConn := &preflightSQLTestConn{results: [][]any{{"public", "analytics"}}}
 	preflight, source := newSourcePreflightForTest(t, sourceConn, databaseConn)
 	require.NoError(t, preflight.EnsureReplicationRole(t.Context(), source, []declaredDatabase{{name: "orders"}}, "replica", "secret"))
-	assert.Equal(t, []string{
-		`CREATE ROLE "replica" LOGIN REPLICATION PASSWORD E'secret'`,
-		`ALTER ROLE "replica" LOGIN REPLICATION PASSWORD E'secret'`,
-		`GRANT CONNECT ON DATABASE "orders" TO "replica"`,
-	}, sourceConn.execs)
+	require.Len(t, sourceConn.execs, 3)
+	assert.Equal(t, `CREATE ROLE "replica" LOGIN REPLICATION PASSWORD E'secret'`, sourceConn.execs[0])
+	assert.Equal(t, `ALTER ROLE "replica" LOGIN REPLICATION PASSWORD E'secret'`, sourceConn.execs[1])
+	assert.Equal(t, `GRANT CONNECT ON DATABASE "orders" TO "replica"`, sourceConn.execs[2])
 	assert.Equal(t, []string{
 		`GRANT USAGE ON SCHEMA "public" TO "replica"`,
 		`GRANT SELECT ON ALL TABLES IN SCHEMA "public" TO "replica"`,

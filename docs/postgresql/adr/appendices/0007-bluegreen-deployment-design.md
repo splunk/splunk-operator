@@ -323,6 +323,8 @@ While `ReadyForSwitchover`, the operator continues replication and invariant che
 
 Shortly before switchover, the workflow creates an attempt-specific operator-only control role and Secret in both environments. It receives only the elevated capabilities needed to apply and verify the fence, terminate sessions, synchronize sequences, inspect replication, remove DML guards, and recover after a controller restart. It is never published to applications.
 
+The attempt-specific control and replication passwords use SCRAM-SHA-256 verifiers independently of the cluster's `password_encryption` default, so both identities can reconnect through the temporary SCRAM HBA rules. PostgreSQL encodes them using a temporary setting on the preparation connection, whose previous value is restored on success or failure. Preparing these credentials does not change the cluster default or application passwords.
+
 Fencing is declarative. The operator applies a CNPG operational overlay that:
 
 - sets every write-capable managed application role to `login: false`;

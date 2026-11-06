@@ -289,6 +289,9 @@ func (c *preflightSQLTestConn) Close(context.Context) error { return nil }
 
 func (c *preflightSQLTestConn) Query(_ context.Context, sql string, _ ...any) (pginfra.Rows, error) {
 	c.queries = append(c.queries, sql)
+	if sql == "SHOW password_encryption" {
+		return &preflightSQLTestRows{values: []any{scramSHA256}}, nil
+	}
 	if len(c.queryErrors) != 0 {
 		err := c.queryErrors[0]
 		c.queryErrors = c.queryErrors[1:]
