@@ -114,3 +114,37 @@ func instancePodReady(pod *corev1.Pod) bool {
 	}
 	return false
 }
+
+type cutoverInstanceTarget struct {
+	name    string
+	address string
+}
+
+func (s *postgresSwitchoverSQL) instanceHosts(ctx context.Context, cluster *cnpgv1.Cluster) ([]cutoverInstanceTarget, error) {
+	if !sourceReadyForFailover(cluster) {
+		return nil, nil
+	}
+	names, pods, err := healthyInstancePods(ctx, s.client, cluster)
+	if err != nil {
+		return nil, err
+	}
+	return cutoverInstanceTargets(names, pods), nil
+}
+
+// Retired source availability is independent of its former HA topology. The
+// caller must first prove that the committed source retains its durable fence.
+func retainedSourceHosts(ctx context.Context, reader client.Reader, cluster *cnpgv1.Cluster) ([]cutoverInstanceTarget, error) {
+	names, pods, err := retainedInstancePods(ctx, reader, cluster)
+	if err != nil {
+		return nil, err
+	}
+	return cutoverInstanceTargets(names, pods), nil
+}
+
+func cutoverInstanceTargets(names []string, pods map[string]corev1.Pod) []cutoverInstanceTarget {
+	targets := make([]cutoverInstanceTarget, 0, len(names))
+	for _, name := range names {
+		targets = append(targets, cutoverInstanceTarget{name: name, address: pods[name].Status.PodIP})
+	}
+	return targets
+}
