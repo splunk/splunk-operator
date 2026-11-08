@@ -18,31 +18,42 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
+	"strings"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// DiscoverKVServiceTenants resolves the same Namespace metadata used by Enterprise clients.
-// Only watched, non-terminating namespaces selecting this backend participate.
+// TenantDiscoveryError reports namespace-local policy failures alongside valid membership.
+// Kubernetes read failures are returned separately and preserve the last good publication.
+type TenantDiscoveryError struct {
+	Blocked []enterpriseApi.KVServiceTenantStatus
+}
+
+func (e *TenantDiscoveryError) Error() string {
+	messages := make([]string, 0, len(e.Blocked))
+	for _, tenant := range e.Blocked {
+		messages = append(messages, tenant.Message)
+	}
+	return strings.Join(messages, "; ")
+}
+
+// DiscoverKVServiceTenants excludes every participant in a duplicate assignment;
+// an invalid namespace never suppresses discovery of unrelated healthy tenants.
 func DiscoverKVServiceTenants(ctx context.Context, c client.Reader, cr *enterpriseApi.KVService) (map[string]string, error) {
 	var namespaces corev1.NamespaceList
-	if err := c.List(ctx, &namespaces, client.MatchingLabels{
-		splcommon.LabelKVService: splcommon.LabelKVServiceEnabled,
-	}); err != nil {
+	if err := c.List(ctx, &namespaces, client.MatchingLabels{splcommon.LabelKVService: splcommon.LabelKVServiceEnabled}); err != nil {
 		return nil, fmt.Errorf("discover KVService tenant namespaces: %w", err)
 	}
-	mapping := make(map[string]string)
-	invalid := func(message string, cause error) (map[string]string, error) {
-		return nil, splcommon.NewTerminalError(splcommon.EventReasonValidateSpecFailed, message, cause)
-	}
+	groups := make(map[string][]string)
+	blocked := &TenantDiscoveryError{}
 	for i := range namespaces.Items {
 		namespace := &namespaces.Items[i]
 		if namespace.DeletionTimestamp != nil {
@@ -53,23 +64,30 @@ func DiscoverKVServiceTenants(ctx context.Context, c client.Reader, cr *enterpri
 			continue
 		} // Excludes namespaces outside WATCH_NAMESPACE.
 		endpoint, err := namespaceKVServiceAddress(ctx, namespace)
-		if err != nil {
-			continue
-		}
-		if endpoint.KVServiceName != cr.Name || endpoint.Namespace != cr.Namespace {
+		if err != nil || endpoint.KVServiceName != cr.Name || endpoint.Namespace != cr.Namespace {
 			continue
 		}
 		if err := splutil.ValidateKVServiceTenantName(tenant); err != nil {
-			return invalid(
-				fmt.Sprintf("Namespace %q has an invalid tenant name. Set label %s to a name matching ^[a-z][a-z0-9]{0,29}$.", namespace.Name, splcommon.LabelTenant),
-				fmt.Errorf("validate tenant %q from namespace %q for KVService %s/%s: %w", tenant, namespace.Name, cr.Namespace, cr.Name, err))
+			blocked.Blocked = append(blocked.Blocked, enterpriseApi.KVServiceTenantStatus{Name: tenant, Namespace: namespace.Name, Reason: "InvalidTenantName", Message: fmt.Sprintf("Set namespace %q label %s to a unique supported tenant name: %v", namespace.Name, splcommon.LabelTenant, err)})
+			continue
 		}
-		if previous, exists := mapping[tenant]; exists {
-			return invalid(
-				fmt.Sprintf("Tenant %q is selected by both namespaces %q and %q. Assign a unique %s label to each namespace selecting this backend.", tenant, previous, namespace.Name, splcommon.LabelTenant),
-				fmt.Errorf("duplicate tenant %q discovered in namespaces %q and %q for KVService %s/%s", tenant, previous, namespace.Name, cr.Namespace, cr.Name))
+		groups[tenant] = append(groups[tenant], namespace.Name)
+	}
+	mapping := make(map[string]string)
+	for _, tenant := range slices.Sorted(maps.Keys(groups)) {
+		names := groups[tenant]
+		slices.Sort(names)
+		if len(names) == 1 {
+			mapping[tenant] = names[0]
+			continue
 		}
-		mapping[tenant] = namespace.Name
+		for _, namespace := range names {
+			blocked.Blocked = append(blocked.Blocked, enterpriseApi.KVServiceTenantStatus{Name: tenant, Namespace: namespace, Reason: "DuplicateTenant", Message: fmt.Sprintf("Tenant %q is selected by namespaces %q. Assign a unique %s label to each namespace selecting this backend.", tenant, names, splcommon.LabelTenant)})
+		}
+	}
+	slices.SortFunc(blocked.Blocked, func(a, b enterpriseApi.KVServiceTenantStatus) int { return strings.Compare(a.Namespace, b.Namespace) })
+	if len(blocked.Blocked) > 0 {
+		return mapping, blocked
 	}
 	return mapping, nil
 }
@@ -99,28 +117,4 @@ func ApplyKVServiceTenantConfig(ctx context.Context, c client.Client, cr *enterp
 		}
 	}
 	return existing, nil
-}
-
-// SuspendKVService scales the owned KVService Deployment to zero replicas.
-// Databases and the Service remain untouched.
-func SuspendKVService(ctx context.Context, c client.Client, cr *enterpriseApi.KVService) error {
-	deployment := &appsv1.Deployment{}
-	key := client.ObjectKey{Namespace: cr.Namespace, Name: splutil.GetSplunkDeploymentName(splcommon.SplunkKVService, cr.Name)}
-	if err := c.Get(ctx, key, deployment); apierrors.IsNotFound(err) {
-		return nil
-	} else if err != nil {
-		return fmt.Errorf("get KVService Deployment %s for suspension: %w", key, err)
-	}
-	if owner := metav1.GetControllerOf(deployment); owner == nil || owner.UID != cr.UID {
-		return fmt.Errorf("cannot suspend KVService Deployment %s: not owned by this KVService", key)
-	}
-	if deployment.Spec.Replicas == nil || *deployment.Spec.Replicas != 0 {
-		zero := int32(0)
-		deployment.Spec.Replicas = &zero
-		if err := c.Update(ctx, deployment); err != nil {
-			return fmt.Errorf("suspend KVService Deployment %s: %w", key, err)
-		}
-		return nil
-	}
-	return nil
 }

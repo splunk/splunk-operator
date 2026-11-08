@@ -66,17 +66,17 @@ func TestKVServiceReadinessAndConfigurationFailure(t *testing.T) {
 	require.NoError(t, c.List(ctx, secrets))
 	for _, secret := range secrets.Items {
 		if secret.Namespace == cr.Namespace {
-			assert.Contains(t, []string{"alpha-owner", "bravo-owner", splcommon.KVServiceTenantVerificationKeysName}, secret.Name)
+			assert.Contains(t, []string{"alpha-owner", "bravo-owner", "kvservicesystem-owner", splcommon.KVServiceTenantVerificationKeysName}, secret.Name)
 		}
 	}
 	configMaps := &corev1.ConfigMapList{}
 	require.NoError(t, c.List(ctx, configMaps))
-	assert.Len(t, configMaps.Items, 3, "only two database connection maps and the tenant map are needed")
+	assert.Len(t, configMaps.Items, 4, "service and tenant connection maps plus membership are needed")
 	for _, configMap := range configMaps.Items {
 		assert.NotContains(t, configMap.Data, "default.yml", "KVService must not create Enterprise defaults")
 	}
 	assert.NotContains(t, deployment.Spec.Template.Annotations, "defaultConfigRev")
-	assert.Equal(t, "alpha", envValue(deployment.Spec.Template.Spec.Containers[0].Env, "KVSERVICE_CMPK_SERVICE_DATABASE"))
+	assert.Equal(t, splcommon.KVServiceSystemDatabase, envValue(deployment.Spec.Template.Spec.Containers[0].Env, "KVSERVICE_CMPK_SERVICE_DATABASE"))
 	assert.Empty(t, envValue(deployment.Spec.Template.Spec.Containers[0].Env, "SPLUNK_HOME"))
 	assert.Empty(t, envValue(deployment.Spec.Template.Spec.Containers[0].Env, "SPLUNK_DEFAULTS_URL"))
 	// Reconciling an older Deployment must remove the inherited Enterprise setup.
@@ -91,7 +91,7 @@ func TestKVServiceReadinessAndConfigurationFailure(t *testing.T) {
 	_, err = Apply(ctx, c, key, recorder)
 	require.NoError(t, err)
 	require.NoError(t, c.Get(ctx, deploymentKey, deployment))
-	assert.Equal(t, "alpha", envValue(deployment.Spec.Template.Spec.Containers[0].Env, "KVSERVICE_CMPK_SERVICE_DATABASE"))
+	assert.Equal(t, splcommon.KVServiceSystemDatabase, envValue(deployment.Spec.Template.Spec.Containers[0].Env, "KVSERVICE_CMPK_SERVICE_DATABASE"))
 	assert.Empty(t, envValue(deployment.Spec.Template.Spec.Containers[0].Env, "SPLUNK_HOME"))
 	assert.Empty(t, envValue(deployment.Spec.Template.Spec.Containers[0].Env, "SPLUNK_DEFAULTS_URL"))
 	assert.Len(t, deployment.Spec.Template.Spec.Volumes, 4, "tenant map, verification keys, and both tenant password Secrets must be restored")
@@ -221,7 +221,7 @@ func TestKVServicePostgresPreservesTenantPendingMessage(t *testing.T) {
 	ready := meta.FindStatusCondition(current.Status.Conditions, string(enterpriseApi.ConditionReady))
 	require.NotNil(t, ready)
 	assert.Equal(t, metav1.ConditionFalse, ready.Status)
-	assert.Equal(t, "waiting for tenant databases: alpha, bravo", ready.Message)
+	assert.Equal(t, "waiting for service database kvservicesystem and its connection credentials", ready.Message)
 	t.Run("PostgreSQL reconciliation lifecycle", testKVServicePostgresReconciliationLifecycle)
 	t.Run("PostgreSQL with TLS", testKVServicePostgresTLSReconciliation)
 }
@@ -243,7 +243,7 @@ func TestEnsurePostgresReadyWaitsForCurrentNonDeletingDatabase(t *testing.T) {
 			require.NoError(t, err)
 			assert.False(t, ready)
 			assert.Nil(t, dependencies)
-			assert.Contains(t, message, "waiting for tenant databases: alpha")
+			assert.Contains(t, message, "waiting for service database kvservicesystem")
 		})
 	}
 }

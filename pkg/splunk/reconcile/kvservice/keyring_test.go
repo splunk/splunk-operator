@@ -123,7 +123,9 @@ func TestTenantKeyringPublishesRotationAndRevocationOnceWithUnreadableSource(t *
 			})
 			updated, err := reconcileKVServiceTenantKeys(ctx, guarded, cr, mapping)
 			require.ErrorIs(t, err, readErr)
-			require.Equal(t, missing, onlyMissingTenantSecrets(err))
+			var failures tenantKeyErrors
+			require.ErrorAs(t, err, &failures)
+			require.ErrorIs(t, failures["bravo"], readErr)
 			require.Equal(t, 1, writes)
 			require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(ring), ring))
 			require.Equal(t, updated.Data, ring.Data)
@@ -157,7 +159,9 @@ func TestTenantKeyringAggregatesSourceFailures(t *testing.T) {
 	require.ErrorIs(t, err, unavailable)
 	require.ErrorContains(t, err, `tenant "alpha"`)
 	require.ErrorContains(t, err, `tenant "bravo"`)
-	require.False(t, onlyMissingTenantSecrets(err))
+	var failures tenantKeyErrors
+	require.ErrorAs(t, err, &failures)
+	require.Len(t, failures, 2)
 }
 
 func TestTenantKeyringAllowsSharedRetainedKeyAndRevokesRemovedTenant(t *testing.T) {
@@ -179,7 +183,9 @@ func TestTenantKeyringAllowsSharedRetainedKeyAndRevokesRemovedTenant(t *testing.
 	}})
 	_, err = reconcileKVServiceTenantKeys(ctx, guarded, cr, mapping)
 	require.True(t, apierrors.IsNotFound(err))
-	require.True(t, onlyMissingTenantSecrets(err), "a shared key must not introduce an additional validation failure")
+	var failures tenantKeyErrors
+	require.ErrorAs(t, err, &failures)
+	require.Len(t, failures, 1, "a shared key must not introduce an additional validation failure")
 	_, terminal := splcommon.TerminalMessage(err)
 	require.False(t, terminal)
 	require.Equal(t, 1, writes)
@@ -232,14 +238,6 @@ func TestTenantKeyringWriteFailureRemainsRetryableWithInvalidSource(t *testing.T
 	require.True(t, terminal)
 	require.Contains(t, message, "ns-a/splunk-ns-a-secret")
 	require.Equal(t, []byte(`["bravo-new","bravo-key"]`), ring.Data["bravo"])
-}
-
-func TestOnlyMissingTenantSecrets(t *testing.T) {
-	missing := apierrors.NewNotFound(schema.GroupResource{Resource: "secrets"}, "source")
-	other := errors.New("other")
-	require.False(t, onlyMissingTenantSecrets(nil))
-	require.True(t, onlyMissingTenantSecrets(fmt.Errorf("tenant: %w", errors.Join(missing, missing))))
-	require.False(t, onlyMissingTenantSecrets(fmt.Errorf("tenant: %w", errors.Join(missing, other))))
 }
 
 func TestTenantKeyringAllowsSharedCurrentAndPreviousKeys(t *testing.T) {

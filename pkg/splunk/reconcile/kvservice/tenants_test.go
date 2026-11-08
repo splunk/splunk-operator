@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -77,9 +76,13 @@ func tenantFixture(t *testing.T) (context.Context, *enterpriseApi.KVService, cli
 
 func readyTenantDatabases(t *testing.T, ctx context.Context, c client.Client) {
 	t.Helper()
-	for _, tenant := range []string{"alpha", "bravo"} {
+	for _, tenant := range []string{"alpha", "bravo", splcommon.KVServiceSystemDatabase} {
 		db := &platformApi.PostgresDatabase{}
-		require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "shared", Name: tenant + "-database"}, db))
+		name := tenant + "-database"
+		if tenant == splcommon.KVServiceSystemDatabase {
+			name = splcommon.KVServiceSystemDatabaseResource
+		}
+		require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "shared", Name: name}, db))
 		ready := "Ready"
 		generation := db.Generation
 		db.Status = platformApi.PostgresDatabaseStatus{Phase: &ready, ObservedGeneration: &generation, Databases: []platformApi.DatabaseInfo{{Name: tenant, Ready: true,
@@ -97,8 +100,7 @@ func TestTenantDiscoveryCreatesEveryDatabaseBeforeWaiting(t *testing.T) {
 	_, ready, message, err := ensureTenantPostgresReady(ctx, c, cr)
 	require.NoError(t, err)
 	require.False(t, ready)
-	require.Contains(t, message, "alpha")
-	require.Contains(t, message, "bravo")
+	require.Contains(t, message, "service database kvservicesystem")
 	for _, tenant := range []string{"alpha", "bravo"} {
 		db := &platformApi.PostgresDatabase{}
 		require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: tenant + "-database"}, db))
@@ -124,7 +126,7 @@ func TestTenantDatabaseReadinessDoesNotDependOnClusterReads(t *testing.T) {
 	_, ready, message, err := ensureTenantPostgresReady(ctx, guarded, cr)
 	require.NoError(t, err)
 	require.False(t, ready)
-	require.Contains(t, message, "waiting for tenant databases")
+	require.Contains(t, message, "waiting for service database kvservicesystem")
 	for _, tenant := range []string{"alpha", "bravo"} {
 		db := &platformApi.PostgresDatabase{}
 		require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: cr.Namespace, Name: tenant + "-database"}, db))
@@ -158,7 +160,7 @@ func TestTenantDeploymentUsesScopedCredentialsAndNoFixedRequestKey(t *testing.T)
 		}
 	}
 	require.NotNil(t, servicePasswordRef, "the reviewed service password setting must survive tenant resolution")
-	require.Equal(t, "alpha-owner", servicePasswordRef.Name)
+	require.Equal(t, "kvservicesystem-owner", servicePasswordRef.Name)
 	require.Equal(t, "password", servicePasswordRef.Key)
 	encoded, err := json.Marshal(dependencies)
 	require.NoError(t, err)
@@ -241,7 +243,7 @@ func TestTenantDatabaseRetainedOnRemovalAndRecreation(t *testing.T) {
 	require.True(t, ready)
 }
 
-func TestTenantLastNamespaceRemovalSuspendsServingButRetainsDatabases(t *testing.T) {
+func TestTenantLastNamespaceRemovalKeepsServiceRunningAndRetainsDatabases(t *testing.T) {
 	ctx, cr, c := tenantFixture(t)
 	_, _, _, err := ensureTenantPostgresReady(ctx, c, cr)
 	require.NoError(t, err)
@@ -258,14 +260,14 @@ func TestTenantLastNamespaceRemovalSuspendsServingButRetainsDatabases(t *testing
 	}
 	_, ready, message, err := ensureTenantPostgresReady(ctx, c, cr)
 	require.NoError(t, err)
-	require.False(t, ready)
-	require.Contains(t, message, "enabled tenant namespaces")
+	require.True(t, ready)
+	require.Empty(t, message)
 	require.EqualValues(t, 3, cr.Spec.Replicas)
 	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(deployment), deployment))
-	require.Zero(t, *deployment.Spec.Replicas)
+	require.EqualValues(t, 3, *deployment.Spec.Replicas)
 	var databases platformApi.PostgresDatabaseList
 	require.NoError(t, c.List(ctx, &databases))
-	require.Len(t, databases.Items, 2)
+	require.Len(t, databases.Items, 3)
 	config := &corev1.ConfigMap{}
 	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: cr.Namespace, Name: "splunk-kvs2-kvservice-tenants"}, config))
 	require.Empty(t, config.Data)
@@ -309,7 +311,12 @@ func TestTenantDiscoveryValidationAndForeignDatabaseProtection(t *testing.T) {
 	foreign := &platformApi.PostgresDatabase{ObjectMeta: metav1.ObjectMeta{Name: "alpha-database", Namespace: "shared"}}
 	require.NoError(t, c.Create(ctx, foreign))
 	_, _, _, err := ensureTenantPostgresReady(ctx, c, cr)
-	require.ErrorContains(t, err, "not managed")
+	require.NoError(t, err)
+	require.Equal(t, "DatabaseConflict", cr.Status.Tenants[0].Reason)
+	require.Contains(t, cr.Status.Tenants[0].Message, "not managed")
+	stored := &platformApi.PostgresDatabase{}
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(foreign), stored))
+	require.Empty(t, stored.Spec.Databases)
 }
 
 func TestTenantMissingSecretStillCreatesAllDatabases(t *testing.T) {
@@ -318,10 +325,11 @@ func TestTenantMissingSecretStillCreatesAllDatabases(t *testing.T) {
 	_, ready, message, err := ensureTenantPostgresReady(ctx, c, cr)
 	require.NoError(t, err)
 	require.False(t, ready)
-	require.True(t, strings.Contains(message, "authentication"))
+	require.Contains(t, message, "service database kvservicesystem")
+	require.Equal(t, "AuthenticationPending", cr.Status.Tenants[0].Reason)
 	var databases platformApi.PostgresDatabaseList
 	require.NoError(t, c.List(ctx, &databases))
-	require.Len(t, databases.Items, 2)
+	require.Len(t, databases.Items, 3)
 }
 
 func TestTenantDiscoveryCreatesNewlyAddedTenantWithoutWaitingForExistingTenant(t *testing.T) {
@@ -448,53 +456,30 @@ func TestTenantReplacementReusesRetainedDatabasesAfterPreviousManagerIsGone(t *t
 	require.Equal(t, "shared/replacement", db.Annotations[splcommon.KVServiceTenantDatabaseOwnerAnnotation])
 }
 
-func TestTenantInvalidDiscoveryRevokesServingAndRecovers(t *testing.T) {
+func TestTenantInvalidDiscoveryIsolatesOnlyAffectedTenantAndRecovers(t *testing.T) {
 	ctx, cr, c := tenantFixture(t)
 	_, _, _, err := ensureTenantPostgresReady(ctx, c, cr)
 	require.NoError(t, err)
 	readyTenantDatabases(t, ctx, c)
-	_, ready, _, err := ensureTenantPostgresReady(ctx, c, cr)
-	require.NoError(t, err)
-	require.True(t, ready)
-	cr.Spec.Replicas = 2
-	cr.Status.ReadyReplicas = 2
-	deployment := resources.NewKVServiceDeployment(cr)
-	deployment.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(cr, enterpriseApi.GroupVersion.WithKind("KVService"))}
-	require.NoError(t, c.Create(ctx, deployment))
-	// Revoke bravo and make the remaining selected namespace invalid in the
-	// same update window. Invalid metadata must not preserve either old key.
-	require.NoError(t, c.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns-b"}}))
-	ns := &corev1.Namespace{}
-	require.NoError(t, c.Get(ctx, client.ObjectKey{Name: "ns-a"}, ns))
-	ns.Labels[splcommon.LabelTenant] = "invalid-tenant"
-	require.NoError(t, c.Update(ctx, ns))
-	_, ready, _, err = ensureTenantPostgresReady(ctx, c, cr)
-	require.False(t, ready)
-	_, terminal := splcommon.TerminalMessage(err)
-	require.True(t, terminal)
-	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(deployment), deployment))
-	require.Zero(t, *deployment.Spec.Replicas)
-	require.Zero(t, cr.Status.ReadyReplicas)
-	ring := &corev1.Secret{}
-	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: cr.Namespace, Name: splcommon.KVServiceTenantVerificationKeysName}, ring))
-	require.Empty(t, ring.Data)
-	membership := &corev1.ConfigMap{}
-	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: cr.Namespace, Name: "splunk-kvs2-kvservice-tenants"}, membership))
-	require.Empty(t, membership.Data)
-	var databases platformApi.PostgresDatabaseList
-	require.NoError(t, c.List(ctx, &databases))
-	require.Len(t, databases.Items, 2)
-	ns.Labels[splcommon.LabelTenant] = "alpha"
-	require.NoError(t, c.Update(ctx, ns))
+	namespace := &corev1.Namespace{}
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Name: "ns-a"}, namespace))
+	namespace.Labels[splcommon.LabelTenant] = "invalid-name"
+	require.NoError(t, c.Update(ctx, namespace))
 	dependencies, ready, _, err := ensureTenantPostgresReady(ctx, c, cr)
 	require.NoError(t, err)
 	require.True(t, ready)
-	desired, err := k8sops.GetKVServiceDeploymentWithPostgresDependencies(ctx, c, cr, dependencies, nil)
+	require.Len(t, dependencies.VolumeMounts, 3)
+	config := &corev1.ConfigMap{}
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: cr.Namespace, Name: "splunk-kvs2-kvservice-tenants"}, config))
+	require.Equal(t, map[string]string{"bravo": "ns-b"}, config.Data)
+	require.Equal(t, "InvalidTenantName", cr.Status.Tenants[0].Reason)
+	namespace.Labels[splcommon.LabelTenant] = "alpha"
+	require.NoError(t, c.Update(ctx, namespace))
+	_, ready, _, err = ensureTenantPostgresReady(ctx, c, cr)
 	require.NoError(t, err)
-	require.EqualValues(t, 2, *desired.Spec.Replicas)
-	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(ring), ring))
-	require.Contains(t, ring.Data, "alpha")
-	require.NotContains(t, ring.Data, "bravo")
+	require.True(t, ready)
+	require.True(t, cr.Status.Tenants[0].Ready)
+	require.True(t, cr.Status.Tenants[1].Ready)
 }
 
 func TestTenantTransientDiscoveryFailureKeepsLastGoodAuthorization(t *testing.T) {
@@ -546,7 +531,7 @@ func TestTenantKeyringRemainsProtectedAfterDuplicateOwnerDeleted(t *testing.T) {
 	_, ready, message, err = ensureTenantPostgresReady(ctx, c, other)
 	require.NoError(t, err)
 	require.False(t, ready)
-	require.Contains(t, message, "enabled tenant namespaces")
+	require.Contains(t, message, "service database kvservicesystem")
 }
 
 func TestTenantSingletonConflictRecoversAfterDuplicateDeletion(t *testing.T) {
@@ -571,9 +556,9 @@ func TestTenantSingletonConflictRecoversAfterDuplicateDeletion(t *testing.T) {
 	_, ready, message, err := ensureTenantPostgresReady(ctx, c, cr)
 	require.NoError(t, err)
 	require.False(t, ready)
-	require.Contains(t, message, "waiting for tenant databases")
+	require.Contains(t, message, "waiting for service database kvservicesystem")
 	require.NoError(t, c.List(ctx, &databases))
-	require.Len(t, databases.Items, 2)
+	require.Len(t, databases.Items, 3)
 }
 
 func TestTenantForeignKeyringNeverAdopted(t *testing.T) {
@@ -612,35 +597,25 @@ func TestTenantKeyringCreationRaceRetriesBeforeDatabaseWrites(t *testing.T) {
 	require.Empty(t, databases.Items)
 }
 
-func TestTenantDiscoveryRevocationWriteErrorClassification(t *testing.T) {
+func TestTenantMembershipWriteErrorPreservesClassification(t *testing.T) {
 	for _, terminalWrite := range []bool{false, true} {
-		t.Run(fmt.Sprintf("terminalWrite=%t", terminalWrite), func(t *testing.T) {
+		t.Run(fmt.Sprint(terminalWrite), func(t *testing.T) {
 			ctx, cr, c := tenantFixture(t)
-			_, _, _, err := ensureTenantPostgresReady(ctx, c, cr)
-			require.NoError(t, err)
-			ns := &corev1.Namespace{}
-			require.NoError(t, c.Get(ctx, client.ObjectKey{Name: "ns-a"}, ns))
-			ns.Labels[splcommon.LabelTenant] = "invalid-tenant"
-			require.NoError(t, c.Update(ctx, ns))
-			cause := errors.New("keyring update failure")
-			var writeErr error = cause
+			cause := errors.New("membership update failed")
+			var failure error = cause
 			if terminalWrite {
-				writeErr = tenantTerminal("Resolve the keyring ownership conflict.", cause)
+				failure = tenantTerminal("correct shared membership ownership", cause)
 			}
-			guarded := interceptor.NewClient(c, interceptor.Funcs{Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
-				if _, ok := obj.(*corev1.Secret); ok {
-					return writeErr
+			failing := interceptor.NewClient(c, interceptor.Funcs{Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+				if _, ok := obj.(*corev1.ConfigMap); ok {
+					return failure
 				}
-				return c.Update(ctx, obj, opts...)
+				return c.Create(ctx, obj, opts...)
 			}})
-			_, _, _, err = ensureTenantPostgresReady(ctx, guarded, cr)
+			_, _, _, err := ensureTenantPostgresReady(ctx, failing, cr)
 			require.ErrorIs(t, err, cause)
-			require.ErrorContains(t, err, "revoke tenant keys")
 			_, terminal := splcommon.TerminalMessage(err)
-			require.Equal(t, terminalWrite, terminal, "write errors must retain their classification")
-			_, _, _, err = ensureTenantPostgresReady(ctx, c, cr)
-			_, terminal = splcommon.TerminalMessage(err)
-			require.True(t, terminal, "invalid tenant configuration remains terminal after the write succeeds")
+			require.Equal(t, terminalWrite, terminal)
 		})
 	}
 }

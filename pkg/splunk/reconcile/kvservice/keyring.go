@@ -92,9 +92,22 @@ func validateTenantKeyEntries(data map[string][]byte) error {
 	return nil
 }
 
+// tenantKeyErrors retains independent failures without classifying the service as blocked.
+// Unwrap preserves the existing diagnostic and error-classification contracts.
+type tenantKeyErrors map[string]error
+
+func (e tenantKeyErrors) Unwrap() []error {
+	result := make([]error, 0, len(e))
+	for _, tenant := range slices.Sorted(maps.Keys(e)) {
+		result = append(result, e[tenant])
+	}
+	return result
+}
+func (e tenantKeyErrors) Error() string { return errors.Join(e.Unwrap()...).Error() }
+
 // reconcileKVServiceTenantKeys computes one publication from all source snapshots.
 // Missing/unreadable sources retain their last entry; removals always disappear.
-// Malformed retained entries fall back to revocation-only publication.
+// Malformed retained entries are revoked independently.
 func reconcileKVServiceTenantKeys(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService, mapping map[string]string) (*corev1.Secret, error) {
 	keyring := &corev1.Secret{}
 	err := c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: splcommon.KVServiceTenantVerificationKeysName}, keyring)
@@ -108,54 +121,60 @@ func reconcileKVServiceTenantKeys(ctx context.Context, c splcommon.ControllerCli
 		return nil, fmt.Errorf("validate tenant keyring ownership: %w", err)
 	}
 
-	retained := make(map[string][]byte, len(mapping))
 	desired := make(map[string][]byte, len(mapping))
-	var failures []error
+	failures := make(tenantKeyErrors)
 	for _, tenant := range slices.Sorted(maps.Keys(mapping)) {
 		raw, exists := keyring.Data[tenant]
 		if exists {
-			retained[tenant] = raw
 			desired[tenant] = raw
 		}
 		source := &corev1.Secret{}
 		namespace := mapping[tenant]
 		if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: splcommon.GetNamespaceScopedSecretName(namespace)}, source); err != nil {
-			failures = append(failures, fmt.Errorf("read namespace authentication Secret %s/%s for tenant %q: %w", namespace, splcommon.GetNamespaceScopedSecretName(namespace), tenant, err))
+			failures[tenant] = fmt.Errorf("read namespace authentication Secret %s/%s for tenant %q: %w", namespace, splcommon.GetNamespaceScopedSecretName(namespace), tenant, err)
 			continue
 		}
 		keys, err := parseTenantKeys(raw)
 		if err != nil {
-			failures = append(failures, tenantTerminal(
+			failures[tenant] = tenantTerminal(
 				fmt.Sprintf("Tenant %q has an invalid keyring entry in Secret %s/%s. Set the entry to a JSON array with the current key and at most one previous key.", tenant, cr.Namespace, keyring.Name),
-				fmt.Errorf("parse verification-key entry for tenant %q: %w", tenant, err)))
+				fmt.Errorf("parse verification-key entry for tenant %q: %w", tenant, err))
 			continue
 		}
 		next := string(source.Data["pass4SymmKey"])
 		if next == "" {
-			failures = append(failures, tenantTerminal(
+			failures[tenant] = tenantTerminal(
 				fmt.Sprintf("Set a non-empty pass4SymmKey in namespace Secret %s/%s for tenant %q.", namespace, source.Name, tenant),
-				fmt.Errorf("namespace authentication Secret %s/%s for tenant %q has no non-empty pass4SymmKey", namespace, source.Name, tenant)))
+				fmt.Errorf("namespace authentication Secret %s/%s for tenant %q has no non-empty pass4SymmKey", namespace, source.Name, tenant))
 			continue
 		}
 		keys, err = keys.rotate(next)
 		if err != nil {
-			failures = append(failures, tenantTerminal(
+			failures[tenant] = tenantTerminal(
 				fmt.Sprintf("Tenant %q has an unretired previous key. Confirm clients use the current key, then remove the previous entry in Secret %s/%s before rotating again.", tenant, cr.Namespace, keyring.Name),
-				fmt.Errorf("rotate verification keys for tenant %q: %w", tenant, err)))
+				fmt.Errorf("rotate verification keys for tenant %q: %w", tenant, err))
 			continue
 		}
 		value, err := json.Marshal(keys.values())
 		if err != nil {
-			failures = append(failures, fmt.Errorf("encode keyring entry for tenant %q: %w", tenant, err))
+			failures[tenant] = fmt.Errorf("encode keyring entry for tenant %q: %w", tenant, err)
 			continue
 		}
 		desired[tenant] = value
 	}
-	if err := validateTenantKeyEntries(desired); err != nil {
-		failures = append(failures, fmt.Errorf("validate tenant keyring entries: %w", err))
-		desired = retained // Still revoke removed tenants without replacing malformed retained entries.
+	// Validate retained entries individually so one malformed entry cannot undo
+	// healthy tenants' rotations or removals.
+	for tenant, raw := range desired {
+		if err := validateTenantKeyEntries(map[string][]byte{tenant: raw}); err != nil {
+			failures[tenant] = tenantTerminal(fmt.Sprintf("Tenant %q has an invalid keyring entry in Secret %s/%s. Correct it to contain a current key and at most one previous key.", tenant, cr.Namespace, keyring.Name), err)
+			delete(desired, tenant)
+		}
 	}
-	collected := errors.Join(failures...)
+	var collected error
+	if len(failures) > 0 {
+		collected = failures
+	}
+
 	if create || !maps.EqualFunc(keyring.Data, desired, bytes.Equal) {
 		keyring.Data = desired
 		if create {
@@ -179,28 +198,4 @@ func reconcileKVServiceTenantKeys(ctx context.Context, c splcommon.ControllerCli
 		return keyring, fmt.Errorf("reconcile tenant keyring entries: %w", collected)
 	}
 	return keyring, nil
-}
-
-// A joined NotFound plus an API or validation failure must not become a generic
-// Pending result that hides the other error. Only all-missing sources qualify.
-func onlyMissingTenantSecrets(err error) bool {
-	if err == nil {
-		return false
-	}
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		children := joined.Unwrap()
-		if len(children) == 0 {
-			return false
-		}
-		for _, child := range children {
-			if !onlyMissingTenantSecrets(child) {
-				return false
-			}
-		}
-		return true
-	}
-	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
-		return onlyMissingTenantSecrets(wrapped.Unwrap())
-	}
-	return apierrors.IsNotFound(err)
 }

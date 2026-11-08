@@ -147,9 +147,9 @@ part of the KVService API.
   `spec.certs`, these variables remain allowed; they do not select HTTPS.
 - `spec.postgres.clusterRef.name` is required and names the PostgreSQL cluster
   used for tenant provisioning. Enable the
-  `PostgresController` feature gate. KVService waits on tenant database readiness
-  and published connection references, leaving cluster/class validation and
-  readiness to the PostgreSQL controller.
+  `PostgresController` feature gate. KVService startup waits on the service
+  database and its connection references; tenant prerequisites are tracked
+  independently. Cluster/class validation remains with the PostgreSQL controller.
 - PostgreSQL credential rollout annotations contain only Secret identity, key
   name, UID, and resourceVersion; they contain no credential values or hashes of
   credential values. Any update to a referenced Secret, including metadata or
@@ -195,15 +195,29 @@ HTTP for Enterprise clients; specify `https://` for an HTTPS listener. The tenan
 label overrides the namespace name. Each selected namespace represents one tenant,
 and tenant names must match `^[a-z][a-z0-9]{0,29}$`. Use a valid tenant label for
 namespace names containing dashes. Tenant names must be unique for a backend.
-Invalid selected tenant configuration stalls reconciliation and suspends serving;
-transient Kubernetes read failures retain the previous valid authorization state.
+Invalid or duplicate selected tenant configuration excludes only the affected
+tenants. Healthy tenants continue serving. Transient Kubernetes discovery read
+failures retain the previous valid authorization state. The name
+`kvservicesystem` is reserved for service state and cannot be used as a tenant.
 
 The controller requests a `<tenant>-database` PostgresDatabase in the KVService
 namespace for every discovered tenant, without waiting for one tenant before
 requesting another. The PostgreSQL controller creates the logical database and
-publishes its readiness, connection information and credentials. KVService waits
-for the tenant databases and their connection information; it does not separately
-wait for PostgresCluster or PostgresClusterClass readiness.
+publishes its readiness, connection information and credentials.
+
+KVService also requests `kvservice-service-database`, containing the non-tenant
+SQL database `kvservicesystem`, in its hosting namespace. Its database-scoped
+owner credentials supply the service startup connection. Only this database and
+its connection credentials gate pod startup; tenant provisioning proceeds
+independently. No separate PostgresCluster or PostgresClusterClass readiness
+check is needed.
+
+A tenant is published to the runtime only when its database, connection
+ConfigMap, owner password Secret and namespace authentication key are usable.
+The runtime initializes each tenant schema independently and retries failures;
+an API request may also complete initialization. The listener can be available
+while a tenant schema is still initializing. It also remains available with
+zero tenants. Service-state credentials are never used for tenant operations.
 
 Each tenant namespace must contain `splunk-<namespace>-secret` with a non-empty
 `pass4SymmKey`. The KVService image must support the mounted multi-tenant runtime
@@ -222,7 +236,8 @@ pass4SymmKey; rotation and retirement are tracked independently for each tenant.
 
 An unavailable tenant Secret retains that tenant's last published keys while other
 tenants can rotate. Removing a tenant revokes its keys even when another tenant's
-Secret is unavailable. A key value used by another tenant does not block publication.
+Secret is unavailable. Retained keys do not keep an unavailable tenant in the
+published membership. A key value used by another tenant does not block publication.
 
 ### Runtime refresh and pod rollouts
 
@@ -239,7 +254,7 @@ Deployment update; neither mechanism guarantees an immediate revocation cutoff.
 
 ### Retention and replacement
 
-Generated tenant databases use `Retain` and survive tenant removal or KVService
+Generated service and tenant databases use `Retain` and survive tenant removal or KVService
 deletion. A recreated KVService can reuse its retained databases; a differently
 named replacement can reuse compatible managed databases after the previous
 KVService is gone. Unrelated or incompatible databases are never overwritten.
@@ -255,9 +270,9 @@ Creating or deleting a peer requeues other KVServices in that namespace;
 status-only changes do not. Updates and deletion remain available to resolve
 conflicts. The keyring ownership check also prevents taking over a previous
 KVService's Secret before garbage collection finishes.
-If no tenant namespaces select the backend, KVService reports Pending, suspends
-its workload, and removes generated membership and authentication keys while
-retaining the databases. Re-enabling a tenant resumes provisioning.
+If no tenant namespaces select the backend, KVService publishes empty membership
+and authentication keys, retains its databases and keeps its workload running
+using `kvservicesystem`. Adding a tenant resumes tenant provisioning.
 
 Enterprise clients use the same Namespace metadata. SOK writes the external KV
 Store selection, `kvserviceConnectionString`, tenant, and MVL configuration through
@@ -275,10 +290,16 @@ For example:
 kubectl wait --for=condition=Ready kvservice/<name> --timeout=5m
 ```
 
-Invalid tenant configuration or a disabled
-`PostgresController` feature gate reports `phase: Error` and `Stalled=True`.
-These failures are terminal until the configuration is corrected. Missing or
-provisioning PostgreSQL dependencies report `Pending` and continue to reconcile.
+`status.tenants` reports each selected namespace, tenant, database resource,
+readiness, reason and corrective message. `TenantsReady=False` identifies blocked
+tenant prerequisites without making a healthy service unready. Changed tenant
+status emits a `TenantNotReady` warning or `TenantReady` event. Namespace, Secret
+and database watches recover corrected tenants; pending dependencies also retry.
+This prerequisite status does not acknowledge completion of runtime schema setup.
+
+A disabled `PostgresController` gate or hosting-namespace singleton conflict
+reports `phase: Error` and `Stalled=True` until corrected. A provisioning service
+database reports `Pending`; tenant failures do not globally stall the service.
 
 The `kvservice.enterprise.splunk.com/paused` annotation pauses reconciliation only
 when its value is `"true"`. Setting it to `"false"`, setting it to an empty value,

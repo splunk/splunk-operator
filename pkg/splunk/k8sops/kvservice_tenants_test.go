@@ -99,9 +99,10 @@ func TestDiscoverKVServiceRejectsDuplicateTenants(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 	cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "kvs", Namespace: "shared"}}
 	_, err := DiscoverKVServiceTenants(context.Background(), c, cr)
-	require.ErrorContains(t, err, "both namespaces")
-	_, terminal := splcommon.TerminalMessage(err)
-	require.True(t, terminal)
+	require.ErrorContains(t, err, "namespaces")
+	var discovery *TenantDiscoveryError
+	require.ErrorAs(t, err, &discovery)
+	require.Len(t, discovery.Blocked, 2)
 }
 
 type tenantListFailure struct{ client.Client }
@@ -157,14 +158,13 @@ func TestTenantDiscoveryMessageIncludesNamespaceAndRepair(t *testing.T) {
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tenant-one", Labels: map[string]string{splcommon.LabelKVService: "enabled", splcommon.LabelTenant: "invalid-tenant"}, Annotations: map[string]string{splcommon.AnnotationKVServiceAddr: "splunk-kvs-kvservice-service.shared:8066"}}}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ns).Build()
 	_, err := DiscoverKVServiceTenants(t.Context(), c, &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "kvs", Namespace: "shared"}})
-	message, terminal := splcommon.TerminalMessage(err)
-	require.True(t, terminal)
-	require.Contains(t, message, "tenant-one")
-	require.Contains(t, message, "Set label platform.splunk.com/tenant")
-	require.Contains(t, message, "^[a-z][a-z0-9]{0,29}$")
-	var validation *splcommon.TerminalError
-	require.ErrorAs(t, err, &validation)
-	require.NotNil(t, validation.Err)
+	var discovery *TenantDiscoveryError
+	require.ErrorAs(t, err, &discovery)
+	require.Len(t, discovery.Blocked, 1)
+	require.Equal(t, "tenant-one", discovery.Blocked[0].Namespace)
+	require.Contains(t, discovery.Blocked[0].Message, "label platform.splunk.com/tenant")
+	require.Contains(t, discovery.Blocked[0].Message, "^[a-z][a-z0-9]{0,29}$")
+
 }
 
 func TestKVServiceAddressContractAcrossConsumers(t *testing.T) {

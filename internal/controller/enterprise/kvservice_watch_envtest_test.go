@@ -67,9 +67,10 @@ var _ = Describe("KVService automatic dependency watches", func() {
 
 	It("recovers from invalid Namespace metadata, provisions its tenant, and revokes an opted-out tenant", func(ctx SpecContext) {
 		fixture := newKVServiceWatchFixture(ctx, true, false)
-		fixture.waitStalled(ctx)
-		// No Reconcile call: a terminal result has no polling retry. Changing
-		// this Namespace must enqueue the KVService through its real informer.
+		fixture.makeServiceReady(ctx)
+		fixture.waitTenantBlocked(ctx)
+		// No Reconcile call: invalid tenant metadata has no polling retry.
+		// This Namespace update must enqueue KVService through its real informer.
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(fixture.namespace), fixture.namespace)).To(Succeed())
 		fixture.namespace.Labels[splcommon.LabelTenant] = fixture.tenant
 		Expect(k8sClient.Update(ctx, fixture.namespace)).To(Succeed())
@@ -91,7 +92,7 @@ var _ = Describe("KVService automatic dependency watches", func() {
 		Eventually(func(g Gomega) {
 			deployment := &appsv1.Deployment{}
 			g.Expect(k8sClient.Get(ctx, fixture.deploymentKey(), deployment)).To(Succeed())
-			g.Expect(deployment.Spec.Replicas).To(HaveValue(BeZero()))
+			g.Expect(deployment.Spec.Replicas).To(HaveValue(Equal(int32(1))))
 			membership := &corev1.ConfigMap{}
 			g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: fixture.cr.Namespace, Name: "splunk-" + fixture.cr.Name + "-kvservice-tenants"}, membership)).To(Succeed())
 			g.Expect(membership.Data).To(BeEmpty())
@@ -104,7 +105,8 @@ var _ = Describe("KVService automatic dependency watches", func() {
 
 	It("recovers on a cross-namespace source Secret update and publishes both rotation keys", func(ctx SpecContext) {
 		fixture := newKVServiceWatchFixture(ctx, false, true)
-		fixture.waitStalled(ctx)
+		fixture.makeServiceReady(ctx)
+		fixture.waitTenantBlocked(ctx)
 		Expect(fixture.source.Namespace).NotTo(Equal(fixture.cr.Namespace))
 		Expect(fixture.source.OwnerReferences).To(BeEmpty(), "the source cannot rely on an owner watch")
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(fixture.source), fixture.source)).To(Succeed())
@@ -140,7 +142,9 @@ var _ = Describe("KVService automatic dependency watches", func() {
 		Eventually(func(g Gomega) {
 			current := &enterpriseApi.KVService{}
 			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(fixture.cr), current)).To(Succeed())
-			g.Expect(current.Status.Phase).To(Equal(enterpriseApi.PhasePending))
+			g.Expect(current.Status.Phase).To(Equal(enterpriseApi.PhaseReady))
+			g.Expect(current.Status.Tenants).To(HaveLen(1))
+			g.Expect(current.Status.Tenants[0].Ready).To(BeFalse())
 			g.Expect(splcommon.IsStalled(current.Status.Conditions)).To(BeFalse())
 		}, 10*time.Second, 50*time.Millisecond).Should(Succeed())
 	}, SpecTimeout(60*time.Second))
@@ -253,30 +257,16 @@ func (f *kvserviceWatchFixture) waitIdleReady(ctx context.Context) {
 	Consistently(f.recorder.Events, time.Second, 50*time.Millisecond).ShouldNot(Receive(), "Ready must be idle before testing the next watch")
 }
 
-func (f *kvserviceWatchFixture) waitStalled(ctx context.Context) {
+func (f *kvserviceWatchFixture) waitTenantBlocked(ctx context.Context) {
 	Eventually(func(g Gomega) {
 		current := &enterpriseApi.KVService{}
 		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(f.cr), current)).To(Succeed())
-		g.Expect(splcommon.IsStalled(current.Status.Conditions)).To(BeTrue())
+		g.Expect(current.Status.Phase).To(Equal(enterpriseApi.PhaseReady))
+		g.Expect(current.Status.Tenants).To(HaveLen(1))
+		g.Expect(current.Status.Tenants[0].Reason).To(BeElementOf("InvalidTenantName", "AuthenticationInvalid"))
+		g.Expect(splcommon.IsStalled(current.Status.Conditions)).To(BeFalse())
 	}, 10*time.Second, 50*time.Millisecond).Should(Succeed())
-	// Let startup events from owned projections and database creation drain.
-	// Every terminal reconcile emits Stalled; a quiet recorder establishes an
-	// idle controller before the sole recovery stimulus (Namespace or Secret).
-	lastStall := time.Now()
-	sawStall := false
-	Eventually(func() bool {
-		for {
-			select {
-			case message := <-f.recorder.Events:
-				if strings.HasPrefix(message, "Warning "+splcommon.EventReasonStalled+" ") {
-					sawStall = true
-					lastStall = time.Now()
-				}
-			default:
-				return sawStall && time.Since(lastStall) >= time.Second
-			}
-		}
-	}, 10*time.Second, 50*time.Millisecond).Should(BeTrue())
+	f.waitIdleReady(ctx)
 }
 
 func (f *kvserviceWatchFixture) waitKeys(ctx context.Context, expected []string) {
@@ -293,23 +283,31 @@ func (f *kvserviceWatchFixture) waitRecovered(ctx context.Context) {
 	Eventually(func(g Gomega) {
 		current := &enterpriseApi.KVService{}
 		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(f.cr), current)).To(Succeed())
+		g.Expect(current.Status.Tenants).To(HaveLen(1))
+		g.Expect(current.Status.Tenants[0].Name).To(Equal(f.tenant))
+		g.Expect(current.Status.Tenants[0].Reason).NotTo(BeElementOf("InvalidTenantName", "AuthenticationInvalid"))
 		g.Expect(splcommon.IsStalled(current.Status.Conditions)).To(BeFalse())
 	}, 10*time.Second, 50*time.Millisecond).Should(Succeed())
-	Eventually(func() bool {
-		for {
-			select {
-			case message := <-f.recorder.Events:
-				if strings.HasPrefix(message, "Normal "+splcommon.EventReasonStalledResolved+" ") {
-					return true
-				}
-			default:
-				return false
-			}
-		}
-	}, 5*time.Second, 50*time.Millisecond).Should(BeTrue(), "automatic recovery must publish the standard event")
+}
+
+func (f *kvserviceWatchFixture) makeServiceReady(ctx context.Context) {
+	database := &platformApi.PostgresDatabase{}
+	Eventually(func() error {
+		return k8sClient.Get(ctx, client.ObjectKey{Namespace: f.cr.Namespace, Name: splcommon.KVServiceSystemDatabaseResource}, database)
+	}, 10*time.Second, 50*time.Millisecond).Should(Succeed())
+	if database.Status.Phase != nil && *database.Status.Phase == "Ready" {
+		return
+	}
+	Expect(k8sClient.Create(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "watch-service-connection", Namespace: f.cr.Namespace}, Data: map[string]string{"CLUSTER_RW_ENDPOINT": "watch-postgres-rw." + f.cr.Namespace, "DEFAULT_CLUSTER_PORT": "5432", "ADMIN_USER_NAME": "kvservicesystem_admin"}})).To(Succeed())
+	Expect(k8sClient.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "watch-service-owner", Namespace: f.cr.Namespace}, Data: map[string][]byte{"password": []byte("service-database-password")}})).To(Succeed())
+	ready, generation := "Ready", database.Generation
+	database.Status = platformApi.PostgresDatabaseStatus{Phase: &ready, ObservedGeneration: &generation, Databases: []platformApi.DatabaseInfo{{Name: splcommon.KVServiceSystemDatabase, Ready: true, ConfigMapRef: &corev1.LocalObjectReference{Name: "watch-service-connection"}, AdminUserSecretRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "watch-service-owner"}, Key: "password"}}}}
+	Expect(k8sClient.Status().Update(ctx, database)).To(Succeed())
+	f.markDeploymentReady(ctx)
 }
 
 func (f *kvserviceWatchFixture) makeReady(ctx context.Context, database *platformApi.PostgresDatabase) {
+	f.makeServiceReady(ctx)
 	// Supply the PostgreSQL controller's connection/status contract. Envtest
 	// runs no database or Deployment controller; neither requires a live pod.
 	Expect(k8sClient.Create(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "watch-connection", Namespace: f.cr.Namespace}, Data: map[string]string{
@@ -325,13 +323,25 @@ func (f *kvserviceWatchFixture) makeReady(ctx context.Context, database *platfor
 		}},
 	}
 	Expect(k8sClient.Status().Update(ctx, database)).To(Succeed())
-	deployment := &appsv1.Deployment{}
-	Eventually(func() error { return k8sClient.Get(ctx, f.deploymentKey(), deployment) }, 10*time.Second, 50*time.Millisecond).Should(Succeed())
-	deployment.Status = appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1}
-	Expect(k8sClient.Status().Update(ctx, deployment)).To(Succeed())
+	f.markDeploymentReady(ctx)
 	Eventually(func(g Gomega) {
 		current := &enterpriseApi.KVService{}
 		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(f.cr), current)).To(Succeed())
 		g.Expect(current.Status.Phase).To(Equal(enterpriseApi.PhaseReady))
+		g.Expect(current.Status.Tenants).To(HaveLen(1))
+		g.Expect(current.Status.Tenants[0].Ready).To(BeTrue())
 	}, 15*time.Second, 50*time.Millisecond).Should(Succeed())
+}
+
+// Envtest has no Deployment controller. Retry the simulated status update against
+// the latest object while KVService concurrently refreshes the pod template.
+func (f *kvserviceWatchFixture) markDeploymentReady(ctx context.Context) {
+	Eventually(func() error {
+		deployment := &appsv1.Deployment{}
+		if err := k8sClient.Get(ctx, f.deploymentKey(), deployment); err != nil {
+			return err
+		}
+		deployment.Status = appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1}
+		return k8sClient.Status().Update(ctx, deployment)
+	}, 10*time.Second, 50*time.Millisecond).Should(Succeed())
 }

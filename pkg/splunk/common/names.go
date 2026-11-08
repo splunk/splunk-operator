@@ -163,3 +163,9 @@ const KVServicePort = 8066
 
 // KVServiceTenantVerificationKeysName is the generated multi-tenant request keyring.
 const KVServiceTenantVerificationKeysName = "tenant-verification-keys"
+
+// KVServiceSystemDatabase is reserved for service startup and system state.
+const KVServiceSystemDatabase = "kvservicesystem"
+
+// KVServiceSystemDatabaseResource is stable across KVService replacement.
+const KVServiceSystemDatabaseResource = "kvservice-service-database"

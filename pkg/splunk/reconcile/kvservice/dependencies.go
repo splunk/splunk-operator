@@ -28,6 +28,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
@@ -41,11 +42,6 @@ import (
 
 func tenantTerminal(message string, cause error) error {
 	return splcommon.NewTerminalError(splcommon.EventReasonValidateSpecFailed, message, cause)
-}
-
-// tenantWriteError adds operation context without changing error classification.
-func tenantWriteError(operation string, err error) error {
-	return fmt.Errorf("%s: %w", operation, err)
 }
 
 // tenantReservationError represents contention, which must retry when another
@@ -99,32 +95,11 @@ func checkTenantReservation(ctx context.Context, c splcommon.ControllerClient, c
 	return nil
 }
 
-// revokeAllTenants fails closed on invalid authoritative metadata.
-// Transient discovery API errors never call this: they retain the last good state.
-// Write failures preserve their terminal or retryable classification.
-func revokeAllTenants(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService) error {
-	if err := k8sops.SuspendKVService(ctx, c, cr); err != nil {
-		return tenantWriteError("suspend KVService after invalid tenant discovery", err)
-	}
-	if _, err := reconcileKVServiceTenantKeys(ctx, c, cr, map[string]string{}); err != nil {
-		return tenantWriteError("revoke tenant keys", err)
-	}
-	if _, err := k8sops.ApplyKVServiceTenantConfig(ctx, c, cr, map[string]string{}); err != nil {
-		return tenantWriteError("revoke tenant membership", err)
-	}
-	cr.Status.ReadyReplicas = 0
-	return nil
-}
-
+// ensureTenantPostgresReady gates deployment only on the service database.
+// Tenant-local failures remain visible in status and never suspend other tenants.
 func ensureTenantPostgresReady(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService) (*k8sops.KVServicePostgresDependencies, bool, string, error) {
 	if !config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
-		return nil, false, "", tenantTerminal(
-			fmt.Sprintf("Enable the %s feature gate on the Operator (--feature-gates=%s=true) to provision tenant databases for KVService %s/%s.", config.PostgresController, config.PostgresController, cr.Namespace, cr.Name),
-			fmt.Errorf("PostgreSQL tenant provisioning is disabled for KVService %s/%s: feature gate %s is false", cr.Namespace, cr.Name, config.PostgresController))
-	}
-	pending := func(message string) (*k8sops.KVServicePostgresDependencies, bool, string, error) {
-		cr.Status.Phase = enterpriseApi.PhasePending
-		return nil, false, message, nil
+		return nil, false, "", tenantTerminal(fmt.Sprintf("Enable the %s feature gate on the Operator (--feature-gates=%s=true) to provision databases for KVService %s/%s.", config.PostgresController, config.PostgresController, cr.Namespace, cr.Name), fmt.Errorf("PostgreSQL provisioning is disabled for KVService %s/%s", cr.Namespace, cr.Name))
 	}
 	services, err := k8sops.ListKVServices(ctx, c, client.InNamespace(cr.Namespace))
 	if err != nil {
@@ -136,84 +111,118 @@ func ensureTenantPostgresReady(ctx context.Context, c splcommon.ControllerClient
 	if err := checkTenantReservation(ctx, c, cr); err != nil {
 		var reservation *tenantReservationError
 		if errors.As(err, &reservation) {
-			return pending(reservation.Error())
+			cr.Status.Phase = enterpriseApi.PhasePending
+			return nil, false, reservation.Error(), nil
 		}
 		return nil, false, "", fmt.Errorf("check tenant namespace reservation: %w", err)
 	}
 	mapping, err := k8sops.DiscoverKVServiceTenants(ctx, c, cr)
-	if err != nil {
-		if _, terminal := splcommon.TerminalMessage(err); terminal {
-			if revokeErr := revokeAllTenants(ctx, c, cr); revokeErr != nil {
-				return nil, false, "", fmt.Errorf("revoke tenants after invalid discovery: %w", revokeErr)
-			}
-		}
+	var discovery *k8sops.TenantDiscoveryError
+	if err != nil && !errors.As(err, &discovery) {
 		return nil, false, "", fmt.Errorf("discover KVService tenants: %w", err)
 	}
-	tenants := slices.Sorted(maps.Keys(mapping))
-	if len(tenants) == 0 {
-		if err := revokeAllTenants(ctx, c, cr); err != nil {
-			return nil, false, "", fmt.Errorf("revoke tenants after empty discovery: %w", err)
-		}
-		return pending("waiting for enabled tenant namespaces selecting this KVService")
+	statuses := []enterpriseApi.KVServiceTenantStatus{}
+	if discovery != nil {
+		statuses = append(statuses, discovery.Blocked...)
 	}
-	// Resolve keys before gating on PostgreSQL so removals and rotations do not
-	// depend on database health. Defer key errors until all DB CRs are requested.
+	// Removals and authentication updates are published before service readiness is checked.
 	keyring, keyErr := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
-	var reservation *tenantReservationError
-	if errors.As(keyErr, &reservation) {
-		return pending(reservation.Error())
+	if keyring == nil {
+		var reservation *tenantReservationError
+		if errors.As(keyErr, &reservation) {
+			cr.Status.Phase = enterpriseApi.PhasePending
+			return nil, false, reservation.Error(), nil
+		}
+		return nil, false, "", fmt.Errorf("publish tenant verification keys: %w", keyErr)
 	}
-	databases, waiting, err := ensureTenantDatabases(ctx, c, cr, tenants, services)
-	if err != nil {
-		return nil, false, "", fmt.Errorf("ensure tenant databases: %w", err)
-	}
-	if onlyMissingTenantSecrets(keyErr) {
-		return pending("waiting for tenant namespace authentication Secrets")
-	}
-	if keyErr != nil {
+	var keyFailures tenantKeyErrors
+	if keyErr != nil && !errors.As(keyErr, &keyFailures) {
 		return nil, false, "", fmt.Errorf("reconcile tenant verification keys: %w", keyErr)
 	}
-	if len(waiting) > 0 {
-		return pending("waiting for tenant databases: " + strings.Join(waiting, ", "))
+	serviceDB, serviceReady, serviceErr := ensureDatabase(ctx, c, cr, resources.NewKVServiceSystemDatabase(cr), services)
+	var service *k8sops.KVServicePostgresDependencies
+	if serviceErr == nil && serviceReady {
+		var info *platformApi.DatabaseInfo
+		service, info, serviceErr = k8sops.ResolveKVServiceTenantDependencies(ctx, c, cr, serviceDB, splcommon.KVServiceSystemDatabase)
+		serviceReady = info != nil && serviceErr == nil
 	}
-	dependencies, ready, message, err := buildTenantRuntime(ctx, c, cr, tenants, mapping, databases, keyring)
+	ready := make(map[string]string)
+	var databases []tenantDatabase
+	for _, tenant := range slices.Sorted(maps.Keys(mapping)) {
+		status := enterpriseApi.KVServiceTenantStatus{Name: tenant, Namespace: mapping[tenant], DatabaseName: splutil.KVServiceTenantDatabaseName(tenant), Reason: "DatabasePending", Message: "Waiting for tenant database readiness and connection references"}
+		db, dbReady, dbErr := ensureDatabase(ctx, c, cr, resources.NewKVServiceTenantDatabase(cr, tenant), services)
+		if dbErr != nil {
+			status.Message = "Tenant database is unavailable; check its status and Operator logs"
+			if message, terminal := splcommon.TerminalMessage(dbErr); terminal {
+				status.Reason = "DatabaseConflict"
+				status.Message = message
+			}
+			logging.FromContext(ctx).ErrorContext(ctx, "tenant database reconciliation failed", "tenant", tenant, "namespace", status.Namespace, "error", dbErr)
+		} else if authErr := keyFailures[tenant]; authErr != nil {
+			status.Reason = "AuthenticationPending"
+			status.Message = "Waiting for the tenant namespace authentication Secret"
+			if message, terminal := splcommon.TerminalMessage(authErr); terminal {
+				status.Reason = "AuthenticationInvalid"
+				status.Message = message
+			}
+		} else if dbReady {
+			snapshot, info, resolveErr := k8sops.ResolveKVServiceTenantDependencies(ctx, c, cr, db, tenant)
+			if resolveErr != nil {
+				status.Reason = "CredentialsPending"
+				status.Message = "Waiting for usable tenant connection ConfigMap and database credentials"
+				logging.FromContext(ctx).ErrorContext(ctx, "tenant connection dependencies unavailable", "tenant", tenant, "error", resolveErr)
+			} else if info != nil {
+				status.Ready = true
+				status.Reason = "Ready"
+				status.Message = "Tenant database and authentication dependencies are ready"
+				ready[tenant] = mapping[tenant]
+				databases = append(databases, tenantDatabase{tenant: tenant, dependencies: snapshot, info: info})
+			}
+		}
+		statuses = append(statuses, status)
+	}
+	slices.SortFunc(statuses, func(a, b enterpriseApi.KVServiceTenantStatus) int { return strings.Compare(a.Namespace, b.Namespace) })
+	cr.Status.Tenants = statuses
+	runtimeConfig, err := k8sops.ApplyKVServiceTenantConfig(ctx, c, cr, ready)
+	if err != nil {
+		return nil, false, "", fmt.Errorf("publish tenant membership: %w", err)
+	}
+	if serviceErr != nil {
+		return nil, false, "", fmt.Errorf("prepare service database %s/%s: %w", cr.Namespace, splcommon.KVServiceSystemDatabaseResource, serviceErr)
+	}
+	if !serviceReady {
+		cr.Status.Phase = enterpriseApi.PhasePending
+		return nil, false, "waiting for service database kvservicesystem and its connection credentials", nil
+	}
+	dependencies, err := buildTenantRuntime(cr, ready, databases, keyring, service, runtimeConfig.Name)
 	if err != nil {
 		return nil, false, "", fmt.Errorf("build tenant runtime: %w", err)
 	}
-	return dependencies, ready, message, nil
+	return dependencies, true, "", nil
 }
 
-// tenantDatabase keeps a tenant and its validated database snapshot together.
+// tenantDatabase keeps an eligible tenant and its validated connection snapshot together.
 type tenantDatabase struct {
-	tenant   string
-	database *platformApi.PostgresDatabase
+	tenant       string
+	dependencies *k8sops.KVServicePostgresDependencies
+	info         *platformApi.DatabaseInfo
 }
 
-func ensureTenantDatabases(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService, tenants []string, services []enterpriseApi.KVService) ([]tenantDatabase, []string, error) {
-	var databases []tenantDatabase
-	var waiting []string
-	for _, tenant := range tenants {
-		db := &platformApi.PostgresDatabase{}
-		key := types.NamespacedName{Namespace: cr.Namespace, Name: splutil.KVServiceTenantDatabaseName(tenant)}
-		if err := c.Get(ctx, key, db); apierrors.IsNotFound(err) {
-			db = resources.NewKVServiceTenantDatabase(cr, tenant)
-			if err := c.Create(ctx, db); err != nil && !apierrors.IsAlreadyExists(err) {
-				return nil, nil, fmt.Errorf("create tenant database %s/%s for tenant %q: %w", cr.Namespace, key.Name, tenant, err)
-			}
-			waiting = append(waiting, tenant)
-			continue
-		} else if err != nil {
-			return nil, nil, fmt.Errorf("get tenant database %s/%s for tenant %q: %w", cr.Namespace, key.Name, tenant, err)
+func ensureDatabase(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService, desired *platformApi.PostgresDatabase, services []enterpriseApi.KVService) (*platformApi.PostgresDatabase, bool, error) {
+	db := &platformApi.PostgresDatabase{}
+	if err := c.Get(ctx, client.ObjectKeyFromObject(desired), db); apierrors.IsNotFound(err) {
+		if err := c.Create(ctx, desired); err != nil && !apierrors.IsAlreadyExists(err) {
+			return nil, false, fmt.Errorf("create PostgresDatabase %s/%s: %w", desired.Namespace, desired.Name, err)
 		}
-		if err := reconcileTenantDatabaseOwnership(ctx, c, cr, db, tenant, services); err != nil {
-			return nil, nil, fmt.Errorf("reconcile database %s/%s for tenant %q: %w", db.Namespace, db.Name, tenant, err)
-		}
-		if db.DeletionTimestamp != nil || db.Status.ObservedGeneration == nil || *db.Status.ObservedGeneration != db.Generation || db.Status.Phase == nil || *db.Status.Phase != "Ready" {
-			waiting = append(waiting, tenant)
-		}
-		databases = append(databases, tenantDatabase{tenant: tenant, database: db})
+		return nil, false, nil
+	} else if err != nil {
+		return nil, false, fmt.Errorf("get PostgresDatabase %s/%s: %w", desired.Namespace, desired.Name, err)
 	}
-	return databases, waiting, nil
+	if err := reconcileTenantDatabaseOwnership(ctx, c, cr, db, desired.Spec.Databases[0].Name, services); err != nil {
+		return nil, false, fmt.Errorf("validate PostgresDatabase %s/%s: %w", db.Namespace, db.Name, err)
+	}
+	ready := db.DeletionTimestamp == nil && db.Status.ObservedGeneration != nil && *db.Status.ObservedGeneration == db.Generation && db.Status.Phase != nil && *db.Status.Phase == "Ready"
+	return db, ready, nil
 }
 
 // classifyTenantDatabase is pure policy: foreign and incompatible resources are never adopted.
@@ -268,53 +277,29 @@ func reconcileTenantDatabaseOwnership(ctx context.Context, c splcommon.Controlle
 	return nil
 }
 
-func buildTenantRuntime(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService, tenants []string, mapping map[string]string, databases []tenantDatabase, keyring *corev1.Secret) (*k8sops.KVServicePostgresDependencies, bool, string, error) {
-	pending := func(message string) (*k8sops.KVServicePostgresDependencies, bool, string, error) {
-		cr.Status.Phase = enterpriseApi.PhasePending
-		return nil, false, message, nil
-	}
-	runtimeConfig, err := k8sops.ApplyKVServiceTenantConfig(ctx, c, cr, mapping)
-	if err != nil {
-		return nil, false, "", fmt.Errorf("publish tenant membership: %w", err)
-	}
-	dependencies := &k8sops.KVServicePostgresDependencies{}
+func buildTenantRuntime(cr *enterpriseApi.KVService, mapping map[string]string, databases []tenantDatabase, keyring *corev1.Secret, dependencies *k8sops.KVServicePostgresDependencies, membership string) (*k8sops.KVServicePostgresDependencies, error) {
 	var credentials []resources.KVServiceTenantCredential
-	var configs, revisions []string
-	for i := range databases {
-		entry := &databases[i]
-		tenant, db := entry.tenant, entry.database
-		snapshot, info, err := k8sops.ResolveKVServiceTenantDependencies(ctx, c, cr, db, tenant)
-		if err != nil {
-			return nil, false, "", fmt.Errorf("resolve database connection for tenant %q: %w", tenant, err)
-		}
-		if info == nil {
-			return pending("waiting for connection references for tenant " + tenant)
-		}
-		if i == 0 {
-			dependencies.Environment = snapshot.Environment
-		}
-		configs = append(configs, tenant+":"+snapshot.ConfigHash)
-		revisions = append(revisions, snapshot.AdminUserSecretRevision)
-		credentials = append(credentials, resources.KVServiceTenantCredential{Tenant: tenant, SecretRef: *info.AdminUserSecretRef})
+	configs := []string{splcommon.KVServiceSystemDatabase + ":" + dependencies.ConfigHash}
+	revisions := []string{dependencies.AdminUserSecretRevision}
+	for _, entry := range databases {
+		configs = append(configs, entry.tenant+":"+entry.dependencies.ConfigHash)
+		revisions = append(revisions, entry.dependencies.AdminUserSecretRevision)
+		credentials = append(credentials, resources.KVServiceTenantCredential{Tenant: entry.tenant, SecretRef: *entry.info.AdminUserSecretRef})
 	}
-	runtime := resources.NewKVServiceTenantRuntime(runtimeConfig.Name, keyring.Name, tenants[0], credentials)
+	runtime := resources.NewKVServiceTenantRuntime(membership, keyring.Name, splcommon.KVServiceSystemDatabase, credentials)
 	dependencies.Volumes = runtime.Volumes
 	dependencies.VolumeMounts = runtime.VolumeMounts
 	dependencies.Environment = append(dependencies.Environment, runtime.Environment...)
-
 	hash := func(values []string) string {
 		digest := sha256.Sum256([]byte(strings.Join(values, "\n")))
 		return hex.EncodeToString(digest[:])
 	}
 	mappingJSON, err := json.Marshal(mapping)
 	if err != nil {
-		return nil, false, "", fmt.Errorf("encode tenant membership for KVService %s/%s: %w", cr.Namespace, cr.Name, err)
+		return nil, fmt.Errorf("encode tenant membership for KVService %s/%s: %w", cr.Namespace, cr.Name, err)
 	}
-	// Membership and keyring revisions deliberately trigger pod rollouts even though
-	// the runtime can reread mounted files. Pending dependencies can defer reaching
-	// this point; neither file propagation nor a rollout is an immediate revocation barrier.
 	dependencies.ConfigHash = hash(append(configs, string(mappingJSON)))
 	dependencies.AdminUserSecretRevision = hash(revisions)
 	dependencies.TenantKeyringRevision = fmt.Sprintf("%s:%s", keyring.UID, keyring.ResourceVersion)
-	return dependencies, true, "", nil
+	return dependencies, nil
 }

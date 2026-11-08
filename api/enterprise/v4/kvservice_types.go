@@ -66,8 +66,25 @@ type KVServiceSpec struct {
 	Postgres KVServicePostgresSpec `json:"postgres"`
 }
 
+// KVServiceTenantStatus reports one selected namespace independently of service readiness.
+type KVServiceTenantStatus struct {
+	Name string `json:"name"`
+	// +kubebuilder:validation:Required
+	Namespace    string `json:"namespace"`
+	Ready        bool   `json:"ready"`
+	Reason       string `json:"reason"`
+	Message      string `json:"message,omitempty"`
+	DatabaseName string `json:"databaseName,omitempty"`
+}
+
 // KVServiceStatus defines the observed state of KVService
 type KVServiceStatus struct {
+	// Tenants reports namespace discovery and provisioning independently of pod readiness.
+	// +optional
+	// +listType=map
+	// +listMapKey=namespace
+	Tenants []KVServiceTenantStatus `json:"tenants,omitempty"`
+
 	// current phase of the kvservice instances
 	Phase Phase `json:"phase"`
 

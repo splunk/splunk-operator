@@ -28,6 +28,8 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -78,6 +80,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	logger.DebugContext(ctx, "reconciling KVService", "generation", cr.Generation, "replicas", cr.Spec.Replicas)
 	previousPhase := cr.Status.Phase
 	previousConditions := slices.Clone(cr.Status.Conditions)
+	previousTenants := slices.Clone(cr.Status.Tenants)
 	result.RequeueAfter = 5 * time.Second
 	cr.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("KVService"))
 	cr.Status.Phase = enterpriseApi.PhaseError
@@ -97,6 +100,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 			message = terminalMessage
 		}
 		setConditions(cr, false, message)
+		recordTenantConditions(ctx, publisher, cr, previousTenants)
 		if terminal {
 			reason, _ := splcommon.TerminalReason(err)
 			cr.Status.Phase = enterpriseApi.PhaseError
@@ -172,6 +176,43 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	if phase == enterpriseApi.PhaseReady {
 		publisher.Normal(ctx, splcommon.EventReasonReady, fmt.Sprintf("KVService %s is ready with %d replicas", cr.Name, cr.Status.ReadyReplicas))
 		result.RequeueAfter = 0
+		for _, tenant := range cr.Status.Tenants {
+			if !tenant.Ready && (tenant.Reason == "DatabasePending" || tenant.Reason == "CredentialsPending" || tenant.Reason == "AuthenticationPending") {
+				result.RequeueAfter = 5 * time.Second
+				break
+			}
+		}
 	}
 	return result, nil
+}
+
+func recordTenantConditions(ctx context.Context, publisher *k8sops.K8EventPublisher, cr *enterpriseApi.KVService, previous []enterpriseApi.KVServiceTenantStatus) {
+	if cr.Status.Tenants == nil {
+		return
+	}
+	old := make(map[string]enterpriseApi.KVServiceTenantStatus, len(previous))
+	for _, tenant := range previous {
+		old[tenant.Namespace] = tenant
+	}
+	ready := 0
+	for _, tenant := range cr.Status.Tenants {
+		if tenant.Ready {
+			ready++
+		}
+		if before, exists := old[tenant.Namespace]; exists && before == tenant {
+			continue
+		}
+		message := fmt.Sprintf("Tenant %q in namespace %q: %s", tenant.Name, tenant.Namespace, tenant.Message)
+		if tenant.Ready {
+			publisher.Normal(ctx, "TenantReady", message)
+		} else {
+			publisher.Warning(ctx, "TenantNotReady", message)
+		}
+	}
+	condition := metav1.Condition{Type: "TenantsReady", Status: metav1.ConditionTrue, Reason: "AllTenantsReady", Message: fmt.Sprintf("%d of %d tenants have ready database and authentication dependencies", ready, len(cr.Status.Tenants)), ObservedGeneration: cr.Generation}
+	if ready < len(cr.Status.Tenants) {
+		condition.Status = metav1.ConditionFalse
+		condition.Reason = "TenantsBlocked"
+	}
+	apimeta.SetStatusCondition(&cr.Status.Conditions, condition)
 }
