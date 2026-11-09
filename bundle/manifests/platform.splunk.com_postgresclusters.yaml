@@ -607,6 +607,13 @@ spec:
                         type: string
                     type: object
                 type: object
+              blueGreenCommitSequence:
+                description: |-
+                  BlueGreenCommitSequence is the highest committed endpoint sequence for
+                  this cluster. It survives cleanup and pruning of individual attempts.
+                format: int64
+                minimum: 0
+                type: integer
               conditions:
                 description: Conditions represent the latest available observations
                   of the PostgresCluster's state.
@@ -1083,6 +1090,64 @@ spec:
                               type: object
                               x-kubernetes-map-type: atomic
                           type: object
+                        canonicalRecovery:
+                          description: |-
+                            CanonicalRecovery binds a recreated canonical ConfigMap to an existing
+                            commit receipt. It never authorizes a first endpoint commit.
+                          properties:
+                            commitSequence:
+                              format: int64
+                              type: integer
+                            configMap:
+                              description: ObjectReference contains enough information
+                                to let you inspect or modify the referred object.
+                              properties:
+                                apiVersion:
+                                  description: API version of the referent.
+                                  type: string
+                                fieldPath:
+                                  description: |-
+                                    If referring to a piece of an object instead of an entire object, this string
+                                    should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                                    For example, if the object reference is to a container within a pod, this would take on a value like:
+                                    "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                                    the event) or if no container name is specified "spec.containers[2]" (container with
+                                    index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                                    referencing a part of an object.
+                                  type: string
+                                kind:
+                                  description: |-
+                                    Kind of the referent.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                                  type: string
+                                name:
+                                  description: |-
+                                    Name of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                namespace:
+                                  description: |-
+                                    Namespace of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                                  type: string
+                                resourceVersion:
+                                  description: |-
+                                    Specific resourceVersion to which this reference is made, if any.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                                  type: string
+                                uid:
+                                  description: |-
+                                    UID of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                                  type: string
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            endpointFingerprint:
+                              type: string
+                            recoveredAt:
+                              format: date-time
+                              type: string
+                          type: object
                         cleanup:
                           description: |-
                             Cleanup progresses independently of production completion because a
@@ -1450,10 +1515,25 @@ spec:
                           - postgresDatabaseUID
                           - databaseName
                           x-kubernetes-list-type: map
+                        endpointIntentRevision:
+                          description: |-
+                            EndpointIntentRevision is monotonic for this attempt, including after
+                            cancellation clears a pending preparation intent.
+                          format: int64
+                          minimum: 0
+                          type: integer
                         endpointPreparation:
                           description: EndpointPreparation records green-endpoint
                             validation before canonical commit.
                           properties:
+                            accessMetadata:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                AccessMetadata preserves only the canonical username and credential/CA
+                                Secret selectors. It never contains credential values.
+                              maxProperties: 3
+                              type: object
                             acknowledgements:
                               items:
                                 properties:
@@ -1462,6 +1542,12 @@ spec:
                                     type: string
                                   endpointFingerprint:
                                     type: string
+                                  postgresDatabaseGeneration:
+                                    description: PostgresDatabaseGeneration invalidates
+                                      a proof after a child spec change.
+                                    format: int64
+                                    minimum: 1
+                                    type: integer
                                   postgresDatabaseName:
                                     minLength: 1
                                     type: string
@@ -1482,9 +1568,21 @@ spec:
                               - postgresDatabaseUID
                               - databaseName
                               x-kubernetes-list-type: map
+                            endpointFingerprint:
+                              description: EndpointFingerprint binds the intent to
+                                the complete green routing payload.
+                              type: string
                             generation:
                               format: int64
                               type: integer
+                            routing:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                Routing is the prepared non-sensitive endpoint payload. It allows a
+                                previously committed canonical record to be repaired while green is down.
+                              maxProperties: 8
+                              type: object
                           type: object
                         endpointPublication:
                           description: EndpointPublication records database access
@@ -1507,6 +1605,12 @@ spec:
                                     description: EndpointFingerprint is the published
                                       endpoint value.
                                     type: string
+                                  postgresDatabaseGeneration:
+                                    description: PostgresDatabaseGeneration invalidates
+                                      a proof after a child spec change.
+                                    format: int64
+                                    minimum: 1
+                                    type: integer
                                   postgresDatabaseName:
                                     minLength: 1
                                     type: string
@@ -1524,6 +1628,10 @@ spec:
                               - postgresDatabaseUID
                               - databaseName
                               x-kubernetes-list-type: map
+                            endpointFingerprint:
+                              description: EndpointFingerprint is copied from the
+                                prepared green routing payload.
+                              type: string
                             generation:
                               format: int64
                               type: integer
@@ -1649,6 +1757,12 @@ spec:
                           required:
                           - ref
                           type: object
+                        historyCompacted:
+                          description: |-
+                            HistoryCompacted marks a cleaned attempt whose detailed cutover evidence
+                            has been replaced by the durable history summary. It is set only when
+                            the cluster status store compacts that attempt.
+                          type: boolean
                         rearmedAt:
                           description: |-
                             RearmedAt records that the controller observed allow=false after this
@@ -1670,30 +1784,303 @@ spec:
                               format: date-time
                               type: string
                           type: object
+                        sourceConfigurationFingerprint:
+                          description: |-
+                            SourceConfigurationFingerprint is the normalized controller and CNPG
+                            configuration baseline captured before publisher preparation. It contains
+                            no Secret material and is rechecked by later blue/green stages.
+                          type: string
+                        sourcePreparation:
+                          description: |-
+                            SourcePreparation is the write-once receipt for completed source-side
+                            replication preparation. Later stages use it rather than inferred phase
+                            conditions to avoid repeating source mutations.
+                          properties:
+                            completedAt:
+                              format: date-time
+                              type: string
+                          type: object
                         switchover:
                           description: Switchover records the latched timeout and
                             the durable handoff milestones.
                           properties:
+                            blueSessionsTerminatedAt:
+                              description: |-
+                                BlueSessionsTerminatedAt records the post-publication removal of remaining
+                                read-only sessions from the former production environment.
+                              format: date-time
+                              type: string
+                            candidateGuardsRemovalStartedAt:
+                              description: |-
+                                CandidateGuardsRemovalStartedAt authorizes idempotent guard removal behind
+                                the verified green fence, including recovery after a lost SQL response.
+                              format: date-time
+                              type: string
+                            candidateGuardsRemovedAt:
+                              description: CandidateGuardsRemovedAt records guard
+                                removal while green was fenced.
+                              format: date-time
+                              type: string
+                            controlIdentity:
+                              description: |-
+                                ControlIdentity references the attempt-owned operator credential. Its
+                                password is never included in status or application connection metadata.
+                              properties:
+                                preparedAt:
+                                  description: PreparedAt records verified least-privilege
+                                    control access in blue and green.
+                                  format: date-time
+                                  type: string
+                                roleName:
+                                  minLength: 1
+                                  type: string
+                                secretRef:
+                                  description: |-
+                                    SecretRef includes the UID of the owned credential, preventing adoption
+                                    of a replacement Secret with the same name.
+                                  properties:
+                                    apiVersion:
+                                      description: API version of the referent.
+                                      type: string
+                                    fieldPath:
+                                      description: |-
+                                        If referring to a piece of an object instead of an entire object, this string
+                                        should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                                        For example, if the object reference is to a container within a pod, this would take on a value like:
+                                        "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                                        the event) or if no container name is specified "spec.containers[2]" (container with
+                                        index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                                        referencing a part of an object.
+                                      type: string
+                                    kind:
+                                      description: |-
+                                        Kind of the referent.
+                                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                                      type: string
+                                    name:
+                                      description: |-
+                                        Name of the referent.
+                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                      type: string
+                                    namespace:
+                                      description: |-
+                                        Namespace of the referent.
+                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                                      type: string
+                                    resourceVersion:
+                                      description: |-
+                                        Specific resourceVersion to which this reference is made, if any.
+                                        More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                                      type: string
+                                    uid:
+                                      description: |-
+                                        UID of the referent.
+                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                                      type: string
+                                  type: object
+                                  x-kubernetes-map-type: atomic
+                              required:
+                              - roleName
+                              type: object
                             deadlineAt:
                               format: date-time
                               type: string
-                            endpointCommittedAt:
-                              description: EndpointCommittedAt records the irreversible
-                                canonical ConfigMap commit.
+                            drainCompletedAt:
+                              description: |-
+                                DrainCompletedAt records completion of the bounded blue transaction drain
+                                and termination of ordinary or unclassified sessions in both environments.
                               format: date-time
                               type: string
+                            endpointPublicationEventRef:
+                              description: |-
+                                EndpointPublicationEventRef identifies the deterministic publication Event
+                                created after Target Available. Retries adopt that same Event.
+                              properties:
+                                apiVersion:
+                                  description: API version of the referent.
+                                  type: string
+                                fieldPath:
+                                  description: |-
+                                    If referring to a piece of an object instead of an entire object, this string
+                                    should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                                    For example, if the object reference is to a container within a pod, this would take on a value like:
+                                    "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                                    the event) or if no container name is specified "spec.containers[2]" (container with
+                                    index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                                    referencing a part of an object.
+                                  type: string
+                                kind:
+                                  description: |-
+                                    Kind of the referent.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                                  type: string
+                                name:
+                                  description: |-
+                                    Name of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                namespace:
+                                  description: |-
+                                    Namespace of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                                  type: string
+                                resourceVersion:
+                                  description: |-
+                                    Specific resourceVersion to which this reference is made, if any.
+                                    More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                                  type: string
+                                uid:
+                                  description: |-
+                                    UID of the referent.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                                  type: string
+                              type: object
+                              x-kubernetes-map-type: atomic
                             failure:
+                              type: string
+                            fenceAppliedAt:
+                              description: |-
+                                FenceAppliedAt records when the attempt-scoped access fence was applied
+                                to both PostgreSQL environments.
+                              format: date-time
+                              type: string
+                            fenceVerifiedAt:
+                              description: |-
+                                FenceVerifiedAt records SQL and CNPG proof that application writes are
+                                blocked while the operator control and replication identities remain usable.
+                              format: date-time
                               type: string
                             finalBlueLSN:
                               description: |-
                                 FinalBlueLSN is the source WAL position captured after blue is fenced.
                                 Every subscription must apply through this value before endpoint commit.
                               type: string
+                            finalParityVerifiedAt:
+                              description: |-
+                                FinalParityVerifiedAt records final LSN, sequence, fingerprint and slot
+                                proof. These facts are verified again immediately before canonical commit.
+                              format: date-time
+                              type: string
+                            greenConfigurationFingerprint:
+                              description: |-
+                                GreenConfigurationFingerprint freezes the full defaulted candidate spec
+                                before control preparation or access overlays are applied.
+                              type: string
+                            greenCredentialFingerprints:
+                              description: |-
+                                GreenCredentialFingerprints also freezes candidate-specific credentials,
+                                including a generated green superuser Secret distinct from blue's.
+                              items:
+                                description: |-
+                                  BlueGreenCredentialFingerprintStatus records an opaque fingerprint for one
+                                  credential Secret whose contents are frozen for a blue/green attempt.
+                                properties:
+                                  capturedAt:
+                                    format: date-time
+                                    type: string
+                                  fingerprint:
+                                    description: |-
+                                      Fingerprint is an opaque, normalized digest. It must not contain Secret
+                                      data or credentials.
+                                    minLength: 1
+                                    type: string
+                                  secretName:
+                                    minLength: 1
+                                    type: string
+                                  secretUID:
+                                    minLength: 1
+                                    type: string
+                                  verifiedAt:
+                                    format: date-time
+                                    type: string
+                                required:
+                                - fingerprint
+                                - secretName
+                                - secretUID
+                                type: object
+                              type: array
+                              x-kubernetes-list-map-keys:
+                              - secretName
+                              - secretUID
+                              x-kubernetes-list-type: map
+                            greenFenceRemovedAt:
+                              description: |-
+                                GreenFenceRemovedAt records the verified opening of application access on
+                                green after database endpoint publication completes.
+                              format: date-time
+                              type: string
+                            greenOriginalHBA:
+                              description: |-
+                                GreenOriginalHBA records green's independent HBA baseline for opening it
+                                after the publication barrier.
+                              items:
+                                type: string
+                              type: array
+                            greenOriginalRoleLogins:
+                              description: GreenOriginalRoleLogins records green's
+                                independent managed-role baseline.
+                              items:
+                                description: |-
+                                  BlueGreenRoleLoginStatus is the attempt's frozen login state for one
+                                  PostgresDatabase-managed role.
+                                properties:
+                                  login:
+                                    type: boolean
+                                  roleName:
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - roleName
+                                type: object
+                              type: array
+                              x-kubernetes-list-map-keys:
+                              - roleName
+                              x-kubernetes-list-type: map
                             latchedTimeout:
                               description: |-
                                 LatchedTimeout is the effective timeout copied from the spec when fencing
                                 begins.
                               type: string
+                            originalHBA:
+                              description: |-
+                                OriginalHBA stores the source CNPG HBA rules before the operator adds its
+                                temporary switchover fence. A pointer preserves an intentionally empty list.
+                              items:
+                                type: string
+                              type: array
+                            originalRoleLogins:
+                              description: |-
+                                OriginalRoleLogins stores only login flags for managed application roles;
+                                role names and flags are restored after the endpoint publication barrier.
+                              items:
+                                description: |-
+                                  BlueGreenRoleLoginStatus is the attempt's frozen login state for one
+                                  PostgresDatabase-managed role.
+                                properties:
+                                  login:
+                                    type: boolean
+                                  roleName:
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - roleName
+                                type: object
+                              type: array
+                              x-kubernetes-list-map-keys:
+                              - roleName
+                              x-kubernetes-list-type: map
+                            retryRequestedAt:
+                              description: RetryRequestedAt is the explicit retry
+                                request consumed for this window.
+                              format: date-time
+                              type: string
+                            sequence:
+                              description: |-
+                                Sequence identifies a bounded interruption window within this attempt.
+                                A later window requires verified blue restoration and a new retry request.
+                              format: int64
+                              minimum: 1
+                              type: integer
                             sequenceSynchronization:
                               description: |-
                                 SequenceSynchronization records completion and verification of sequence
@@ -1708,6 +2095,12 @@ spec:
                                   format: date-time
                                   type: string
                               type: object
+                            sourceFenceRestoredAt:
+                              description: |-
+                                SourceFenceRestoredAt proves a failed pre-commit window restored blue's
+                                declared and effective login/HBA state before a later retry may start.
+                              format: date-time
+                              type: string
                             startedAt:
                               format: date-time
                               type: string

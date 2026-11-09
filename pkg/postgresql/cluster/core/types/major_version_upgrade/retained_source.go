@@ -31,5 +31,5 @@ func HasRetainedSourceFenceProof(status *platformv1alpha1.PostgresBlueGreenUpgra
 	w := status.Switchover
 	return w != nil && w.ControlIdentity != nil && w.ControlIdentity.RoleName == controlRole &&
 		w.ControlIdentity.PreparedAt != nil && w.FenceVerifiedAt != nil && w.DrainCompletedAt != nil &&
-		w.FinalBlueLSN != nil && *w.FinalBlueLSN != "" && w.EndpointCommittedAt != nil
+		w.FinalBlueLSN != nil && *w.FinalBlueLSN != "" && status.CommitReceipt.CommittedAt != nil
 }

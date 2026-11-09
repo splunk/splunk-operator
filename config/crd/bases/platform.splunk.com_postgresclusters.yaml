@@ -1889,11 +1889,6 @@ spec:
                                 and termination of ordinary or unclassified sessions in both environments.
                               format: date-time
                               type: string
-                            endpointCommittedAt:
-                              description: EndpointCommittedAt records the irreversible
-                                canonical ConfigMap commit.
-                              format: date-time
-                              type: string
                             endpointPublicationEventRef:
                               description: |-
                                 EndpointPublicationEventRef identifies the deterministic publication Event

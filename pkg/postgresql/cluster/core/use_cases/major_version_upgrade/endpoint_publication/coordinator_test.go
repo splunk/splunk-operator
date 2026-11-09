@@ -287,7 +287,7 @@ func TestCommitCanonicalMakesConfigMapTheCommitPoint(t *testing.T) {
 		t.Fatalf("canonical ConfigMap did not prove the green commit: %+v", canonical)
 	}
 	bg := currentBG(store)
-	if bg.CommitReceipt == nil || bg.CommitReceipt.Sequence != 1 || bg.Switchover == nil || bg.Switchover.EndpointCommittedAt == nil {
+	if bg.CommitReceipt == nil || bg.CommitReceipt.Sequence != 1 || bg.CommitReceipt.CommittedAt == nil {
 		t.Fatalf("commit receipt was not persisted: %+v", bg)
 	}
 	if store.parent.Status.ProvisionerRef == nil || store.parent.Status.ProvisionerRef.Name != "green" || store.parent.Status.ProvisionerRef.UID != "green-uid" {

@@ -87,7 +87,7 @@ func TestCommitReceiptRepairsFromCanonicalWithoutLiveGreenOrChildInventory(t *te
 			coordinator, store, key, proof := committedRecoveryFixture(t)
 			canonical := store.configMaps["cluster-config"].DeepCopy()
 			currentBG(store).CommitReceipt = nil
-			currentBG(store).Switchover.EndpointCommittedAt = nil
+			window := currentBG(store).Switchover.DeepCopy()
 			store.parent.Status.ProvisionerRef = currentBG(store).Blue.Ref.DeepCopy()
 			test.mutate(store)
 			coordinator.proof = fixedProof{proof: proof, failGreen: true, failBlue: true}
@@ -98,7 +98,7 @@ func TestCommitReceiptRepairsFromCanonicalWithoutLiveGreenOrChildInventory(t *te
 			assert.Equal(t, canonical, store.configMaps["cluster-config"], "receipt repair must not rewrite the external commit record")
 			assert.Equal(t, canonical.UID, currentBG(store).CommitReceipt.CanonicalConfigMap.UID)
 			assert.Equal(t, currentBG(store).Green.Ref, *store.parent.Status.ProvisionerRef)
-			assert.NotNil(t, currentBG(store).Switchover.EndpointCommittedAt)
+			assert.Equal(t, window, currentBG(store).Switchover, "coordinator must not write the runtime window")
 		})
 	}
 }
@@ -361,7 +361,6 @@ func TestObservedCommitSurvivesAccessSelectorDriftBeforeReceipt(t *testing.T) {
 			bg := currentBG(store)
 			receipt := bg.CommitReceipt.DeepCopy()
 			bg.CommitReceipt = nil
-			bg.Switchover.EndpointCommittedAt = nil
 			store.parent.Status.ProvisionerRef = bg.Blue.Ref.DeepCopy()
 			store.parent.Status.BlueGreenCommitSequence = receipt.Sequence - 1
 			delete(store.configMaps["cluster-config"].Data, key)

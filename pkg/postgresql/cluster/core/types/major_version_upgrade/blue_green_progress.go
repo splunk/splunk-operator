@@ -160,7 +160,7 @@ func validateExistingBlueGreenProgress(attemptID string, current, proposed *plat
 func validateNextSwitchoverWindow(attemptID string, current *platformv1alpha1.PostgresBlueGreenUpgradeStatus, next *platformv1alpha1.BlueGreenSwitchoverStatus) error {
 	previous := current.Switchover
 	if !isNextSwitchoverSequence(previous.Sequence, next.Sequence) || current.CommitReceipt != nil ||
-		previous.EndpointCommittedAt != nil || !isValidRetryTiming(previous, next) ||
+		!isValidRetryTiming(previous, next) ||
 		!sameCutoverAccessStatus(previous.BlueGreenCutoverAccessStatus, next.BlueGreenCutoverAccessStatus) {
 		return fmt.Errorf("blue/green progress requires verified blue restoration and a newer retry for another switchover window in attempt %q", attemptID)
 	}

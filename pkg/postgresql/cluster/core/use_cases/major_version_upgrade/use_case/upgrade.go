@@ -59,7 +59,7 @@ func (s blueGreenStrategy) Advance(ctx context.Context, intent mvutypes.Intent) 
 }
 
 func (blueGreenStrategy) RequiresPreUpgradeBackup(intent mvutypes.Intent) bool {
-	return !bluegreen.SourcePreparationComplete(intent)
+	return !mvutypes.CutoverStageForIntent(intent).OwnsRecovery() && !bluegreen.SourcePreparationComplete(intent)
 }
 
 type upgradeFlow interface {
@@ -107,6 +107,9 @@ func (h *MajorUpgradeUseCase) Prerequisites(ctx context.Context) error {
 }
 
 func blueGreenAttemptStarted(intent mvutypes.Intent) bool {
+	if mvutypes.CutoverStageForIntent(intent).OwnsRecovery() {
+		return true
+	}
 	for _, entry := range intent.State {
 		if !mvutypes.MatchesIntent(entry, intent) || entry.Phase == nil {
 			continue
@@ -130,6 +133,11 @@ func (h *MajorUpgradeUseCase) Schedule(ctx context.Context) (bool, error) {
 	h.intent = intent
 	h.active = false
 	if intent.RequiresBlueGreenRearm {
+		h.active = true
+		return true, nil
+	}
+
+	if mvutypes.CutoverStageForIntent(intent).OwnsRecovery() {
 		h.active = true
 		return true, nil
 	}
@@ -190,6 +198,11 @@ func (h *MajorUpgradeUseCase) Act(ctx context.Context) (reconciliationtypes.Repo
 
 	if err := h.validateIntent(); err != nil {
 		return h.finish(ctx, mvutypes.ReportFromError(err), nil, err)
+	}
+
+	// Establish a durable attempt identity before backups or source mutations.
+	if h.intent.Strategy == mvutypes.MajorUpgradeFlowBlueGreen && !hasPersistedAttempt(h.intent) {
+		return h.finish(ctx, reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Scheduled), Reason: mvutypes.ReasonUpgradeFlowPending, Message: "The blue/green attempt is scheduled durably; preparation starts on the next reconcile.", Retry: true, Sleep: new(1)}, nil, nil)
 	}
 
 	strategy := h.strategyFor(h.intent)
@@ -346,6 +359,10 @@ func phaseForIntent(entries []platformv1alpha1.PostgresMajorUpgradeStatus, inten
 			continue
 		}
 		phase := mvutypes.Status(*entry.Phase)
+		if intent.Strategy == mvutypes.MajorUpgradeFlowBlueGreen && mvutypes.CutoverStageOf(entry).OwnsRecovery() {
+			return mvutypes.Status(mvutypes.NormalizeCutoverProgress(mvutypes.Progress{Report: reconciliationtypes.Report{Phase: string(phase)}, BlueGreen: entry.BlueGreen}).Report.Phase)
+		}
+
 		switch {
 		// A terminal failure that the operator has asked to retry restarts from a
 		// clean Scheduled phase: the strategy flow has no Failed state to resume,
@@ -380,14 +397,24 @@ func (h *MajorUpgradeUseCase) finish(ctx context.Context, report reconciliationt
 }
 
 func (h *MajorUpgradeUseCase) finishProgress(ctx context.Context, progress mvutypes.Progress, cause error) (reconciliationtypes.Report, error) {
-	report := progress.Report
-	h.emitPhaseEvent(report)
 	if h.store != nil {
-		if err := h.store.SaveMajorUpgradeProgress(ctx, h.intent, progress); err != nil {
-			return report, err
+		saved, err := h.store.SaveMajorUpgradeProgress(ctx, h.intent, progress)
+		if err != nil {
+			return progress.Report, err
+		}
+		progress = saved
+	}
+	h.emitPhaseEvent(progress.Report)
+	return progress.Report, cause
+}
+
+func hasPersistedAttempt(intent mvutypes.Intent) bool {
+	for _, entry := range intent.State {
+		if mvutypes.MatchesIntent(entry, intent) {
+			return true
 		}
 	}
-	return report, cause
+	return false
 }
 
 func (h *MajorUpgradeUseCase) emitPhaseEvent(report reconciliationtypes.Report) {

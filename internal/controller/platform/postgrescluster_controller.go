@@ -156,7 +156,10 @@ func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedN
 
 		backupMethod, backupPluginName, providerConfigured := clustercore.EffectiveBackupProvider(mergedConfig)
 
-		stateStore := clusterk8s.NewClusterStateStore(r.Client, key)
+		stateStore, err := clusterk8s.NewClusterStateStore(r.Client, key)
+		if err != nil {
+			return nil, fmt.Errorf("construct major-upgrade state store: %w", err)
+		}
 		infoStore := majorupgradeadapter.NewMajorUpgradeStateStoreWithTarget(stateStore, targetVersion)
 		blueGreenPlan, blueGreenCandidatePlan := blueGreenUpgradePlans(mergedConfig, targetImage)
 		driver := majorupgradeadapter.NewPgUpgradeDriver(r.Client, key, targetVersion, targetImage).
