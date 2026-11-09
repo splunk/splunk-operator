@@ -107,8 +107,27 @@ func validateMajorUpgradeConfig(obj, oldObj *platformApi.PostgresCluster, specUn
 	var allErrs field.ErrorList
 
 	activeBlueGreenAttempt := hasActiveBlueGreenAttempt(oldObj)
-	if activeBlueGreenAttempt {
+	if hasBlueGreenConfigurationFreeze(oldObj) {
 		allErrs = append(allErrs, validateActiveBlueGreenClusterSpec(obj.Spec, oldObj.Spec)...)
+	}
+	if activeBlueGreenAttempt && oldObj.Spec.PostgresMajorUpgradeConfig != nil {
+		if !reflect.DeepEqual(obj.Spec.PostgresVersion, oldObj.Spec.PostgresVersion) {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec", "postgresVersion"),
+				"a new major upgrade cannot start until retained blueGreen resources are cleaned up",
+			))
+		}
+		if config == nil {
+			allErrs = append(allErrs, field.Forbidden(
+				configPath,
+				"major-upgrade configuration must remain until retained blueGreen resources are cleaned up",
+			))
+		} else if majorUpgradeStrategy(config) != majorUpgradeStrategy(oldObj.Spec.PostgresMajorUpgradeConfig) {
+			allErrs = append(allErrs, field.Forbidden(
+				configPath.Child("strategy"),
+				"strategy cannot change while blueGreen resources are retained",
+			))
+		}
 	}
 
 	if config == nil {
@@ -116,13 +135,6 @@ func validateMajorUpgradeConfig(obj, oldObj *platformApi.PostgresCluster, specUn
 	}
 
 	strategy := majorUpgradeStrategy(config)
-	if !activeBlueGreenAttempt && strategy == mvutypes.MajorUpgradeFlowBlueGreen && config.Allow != nil && *config.Allow {
-		allErrs = append(allErrs, field.Forbidden(
-			configPath.Child("allow"),
-			"blueGreen is declared by the API but its runtime flow is not implemented; leave allow false until that flow is released",
-		))
-	}
-
 	if config.BlueGreen == nil {
 		return allErrs
 	}
@@ -136,6 +148,18 @@ func validateMajorUpgradeConfig(obj, oldObj *platformApi.PostgresCluster, specUn
 		return allErrs
 	}
 
+	// Admission rejects an explicit post-commit cancellation. Canonical
+	// observation in the runtime remains authoritative for the admission race.
+	if config.BlueGreen.Cancel != nil && *config.BlueGreen.Cancel && oldObj != nil {
+		previous := oldObj.Spec.PostgresMajorUpgradeConfig
+		wasCancelled := previous != nil && previous.BlueGreen != nil && previous.BlueGreen.Cancel != nil && *previous.BlueGreen.Cancel
+		if !wasCancelled && len(oldObj.Status.PostgresMajorUpgradeStatus) > 0 {
+			bg := oldObj.Status.PostgresMajorUpgradeStatus[len(oldObj.Status.PostgresMajorUpgradeStatus)-1].BlueGreen
+			if bg != nil && bg.CommitReceipt != nil {
+				allErrs = append(allErrs, field.Forbidden(configPath.Child("blueGreen", "cancel"), "cancellation is unavailable after endpoint commit; recovery must fail forward"))
+			}
+		}
+	}
 	if config.BlueGreen.SwitchoverTimeout == nil {
 		return allErrs
 	}
@@ -153,10 +177,10 @@ func validateMajorUpgradeConfig(obj, oldObj *platformApi.PostgresCluster, specUn
 }
 
 // validateActiveBlueGreenClusterSpec freezes every non-gate cluster setting
-// while blue remains the authoritative writer. A changed version, topology,
-// backup policy, credential reference, or PostgreSQL configuration would make
-// the preflight baselines unreliable. The major-upgrade control object is
-// handled separately because its explicit gates remain user-controlled.
+// from source preparation through Completed or Cancelled. A changed version,
+// topology, backup policy, credential reference, or PostgreSQL configuration
+// would invalidate the attempt's captured baselines. The major-upgrade control
+// object is handled separately because its explicit gates remain user-controlled.
 func validateActiveBlueGreenClusterSpec(current, previous platformApi.PostgresClusterSpec) field.ErrorList {
 	current = mvutypes.FrozenBlueGreenClusterSpec(current)
 	previous = mvutypes.FrozenBlueGreenClusterSpec(previous)
@@ -175,6 +199,10 @@ func majorUpgradeStrategy(config *platformApi.PostgresMajorUpgradeConfig) string
 
 func hasActiveBlueGreenAttempt(cluster *platformApi.PostgresCluster) bool {
 	return cluster != nil && mvutypes.HasActiveBlueGreenAttempt(cluster.Status.PostgresMajorUpgradeStatus)
+}
+
+func hasBlueGreenConfigurationFreeze(cluster *platformApi.PostgresCluster) bool {
+	return cluster != nil && mvutypes.HasBlueGreenConfigurationFreeze(cluster.Status.PostgresMajorUpgradeStatus)
 }
 
 func validateCustomMetrics(ctx context.Context, obj *platformApi.PostgresCluster, reader client.Reader) field.ErrorList {

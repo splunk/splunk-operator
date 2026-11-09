@@ -434,6 +434,7 @@ var _ = Describe("PostgresCluster Controller", Label("postgres"), func() {
 		fakeRecorder = record.NewFakeRecorder(100)
 		reconciler = &PostgresClusterReconciler{
 			Client:           k8sClient,
+			APIReader:        k8sClient,
 			Scheme:           k8sClient.Scheme(),
 			Recorder:         fakeRecorder,
 			Metrics:          &pgprometheus.NoopRecorder{},

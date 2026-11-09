@@ -579,7 +579,7 @@ func TestPhaseWaitingForInstancesToBeActive(t *testing.T) {
 				WithObjects(cluster).
 				Build()
 			recorder := record.NewFakeRecorder(10)
-			rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: recorder}
+			rc := &ReconcileContext{Client: c, APIReader: c, Scheme: scheme, Recorder: recorder}
 			updateStatus := func(before *platformv1alpha1.PostgresClusterStatus, health componentHealth) error {
 				oldPhase := ""
 				if cluster.Status.Phase != nil {
@@ -669,7 +669,7 @@ func TestPhaseFailOverEmitsClusterDegraded(t *testing.T) {
 		WithObjects(cluster).
 		Build()
 	recorder := record.NewFakeRecorder(10)
-	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: recorder}
+	rc := &ReconcileContext{Client: c, APIReader: c, Scheme: scheme, Recorder: recorder}
 	updateStatus := func(before *platformv1alpha1.PostgresClusterStatus, health componentHealth) error {
 		oldPhase := ""
 		if cluster.Status.Phase != nil {
@@ -767,9 +767,10 @@ func TestPostgresClusterServiceInitialPhase(t *testing.T) {
 				Build()
 
 			result, err := PostgresClusterService(ctx, &ReconcileContext{
-				Client:   c,
-				Scheme:   scheme,
-				Recorder: record.NewFakeRecorder(1),
+				Client:    c,
+				APIReader: c,
+				Scheme:    scheme,
+				Recorder:  record.NewFakeRecorder(1),
 			}, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cluster)}, nil, nil, nil, nil)
 
 			require.NoError(t, err)
@@ -828,6 +829,7 @@ func TestPostgresClusterServiceTargetsCustomMetricsAtAuthoritativeEnvironment(t 
 	var target monitoring.Target
 	_, err := PostgresClusterService(ctx, &ReconcileContext{
 		Client:              c,
+		APIReader:           c,
 		Scheme:              scheme,
 		Recorder:            record.NewFakeRecorder(10),
 		ClusterCardResolver: identityadapter.NewIdentityResolver(),
@@ -867,9 +869,10 @@ func TestPostgresClusterServiceReturnsInitialPhaseConflict(t *testing.T) {
 		Build()
 
 	result, err := PostgresClusterService(ctx, &ReconcileContext{
-		Client:   c,
-		Scheme:   scheme,
-		Recorder: record.NewFakeRecorder(1),
+		Client:    c,
+		APIReader: c,
+		Scheme:    scheme,
+		Recorder:  record.NewFakeRecorder(1),
 	}, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cluster)}, nil, nil, nil, nil)
 
 	require.NoError(t, err)
@@ -906,6 +909,7 @@ func TestPostgresClusterServiceSkipsPendingPhaseDuringDeletion(t *testing.T) {
 
 	result, err := PostgresClusterService(ctx, &ReconcileContext{
 		Client:           c,
+		APIReader:        c,
 		Scheme:           scheme,
 		Recorder:         record.NewFakeRecorder(1),
 		EnvironmentNamer: testEnvironmentNamer,
@@ -1047,7 +1051,7 @@ func TestHandleFinalizerRetainStripsBarmanPlugin(t *testing.T) {
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, cnpg).Build()
-	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
+	rc := &ReconcileContext{Client: c, APIReader: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
 
 	require.NoError(t, handleFinalizer(t.Context(), rc, cluster, conventionalClusterCard(cluster), noopBackupBackend{}))
 
@@ -1099,7 +1103,7 @@ func TestHandleFinalizerDeletesConventionalPoolersOnce(t *testing.T) {
 			},
 		}).
 		Build()
-	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
+	rc := &ReconcileContext{Client: c, APIReader: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
 
 	card := testClusterCard(cluster, "primary-green", "")
 	card.Managed = append(card.Managed, testEnvironment(cluster, cluster.Name, "", identitytypes.EnvironmentRoleRetained))
@@ -1136,7 +1140,7 @@ func TestHandleFinalizerCleansScheduledBackupsForEveryManagedEnvironment(t *test
 	green := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, conventional, green).Build()
 	backend := &spyBackupBackend{}
-	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
+	rc := &ReconcileContext{Client: c, APIReader: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
 	card := testClusterCard(cluster, green.Name, green.UID)
 	card.Managed = append(card.Managed, testEnvironment(cluster, conventional.Name, conventional.UID, identitytypes.EnvironmentRoleRetained))
 
@@ -1193,7 +1197,7 @@ func TestHandleFinalizerLeavesUnvalidatedCNPGClusters(t *testing.T) {
 				}},
 			}}
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, green).Build()
-			rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
+			rc := &ReconcileContext{Client: c, APIReader: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
 
 			require.NoError(t, handleFinalizer(t.Context(), rc, cluster, testClusterCard(cluster, green.Name, "expected-uid"), noopBackupBackend{}))
 			stored := &cnpgv1.Cluster{}
@@ -1255,7 +1259,7 @@ func TestHandleFinalizerRetainsConventionalAndCurrentEnvironments(t *testing.T) 
 	conventional := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
 	current := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, conventional, current).Build()
-	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
+	rc := &ReconcileContext{Client: c, APIReader: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
 
 	card := testClusterCard(cluster, "primary-green", "")
 	card.Managed = append(card.Managed, testEnvironment(cluster, cluster.Name, "", identitytypes.EnvironmentRoleRetained))
@@ -1294,7 +1298,7 @@ func TestHandleFinalizerDeletesConventionalAndCurrentEnvironments(t *testing.T) 
 	conventional := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name, Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
 	current := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "primary-green", Namespace: cluster.Namespace, OwnerReferences: []metav1.OwnerReference{ownerRef}}}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, conventional, current).Build()
-	rc := &ReconcileContext{Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
+	rc := &ReconcileContext{Client: c, APIReader: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
 
 	card := testClusterCard(cluster, "primary-green", "")
 	card.Managed = append(card.Managed, testEnvironment(cluster, cluster.Name, "", identitytypes.EnvironmentRoleRetained))

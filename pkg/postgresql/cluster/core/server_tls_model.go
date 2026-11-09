@@ -117,7 +117,7 @@ func newServerTLSModel(manager tlsport.Manager, events eventEmitter, updateStatu
 	return &serverTLSModel{manager: manager, events: events, updateStatus: updateStatus, cluster: cluster, class: class, mergedConfig: mergedConfig, contracts: contracts}
 }
 
-func (p *serverTLSModel) Name() string { return "ServerTLS" }
+func (p *serverTLSModel) Name() string { return pgcconstants.ComponentServerTLS }
 func (p *serverTLSModel) Requires() []contractKey {
 	return []contractKey{contractAuthority, contractEnvironmentNamer}
 }

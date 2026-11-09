@@ -18,6 +18,8 @@ package core
 
 import (
 	"fmt"
+	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 
 	identitytypes "github.com/splunk/splunk-operator/pkg/postgresql/shared/types/identity"
 )
@@ -71,4 +73,20 @@ func finalizationPlan(policy string, card identitytypes.ClusterCard) ([]finaliza
 		})
 	}
 	return planned, nil
+}
+
+// Retain must not orphan live replication or discard the credentials needed to
+// restore a fenced source. Full teardown is a later lifecycle; keep ownership
+// intact until its durable completion evidence exists.
+func requireSafeRetainFinalization(cluster *platformv1alpha1.PostgresCluster) error {
+	for _, entry := range cluster.Status.PostgresMajorUpgradeStatus {
+		bg := entry.BlueGreen
+		if bg == nil || mvutypes.IsBlueGreenAttemptCleaned(entry) {
+			continue
+		}
+		if bg.Blue != nil || bg.Green != nil || bg.SourcePreparation != nil || bg.SourceConfigurationFingerprint != nil || len(bg.DatabaseReplication) > 0 || bg.Switchover != nil || bg.CommitReceipt != nil {
+			return fmt.Errorf("blueGreen attempt %q requires verified replication teardown and source restoration before Retain finalization; keep the parent and recovery credentials until cleanup completes", bg.AttemptID)
+		}
+	}
+	return nil
 }

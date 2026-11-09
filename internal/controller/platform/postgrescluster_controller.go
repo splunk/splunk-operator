@@ -71,9 +71,11 @@ const (
 // PostgresClusterReconciler reconciles PostgresCluster resources.
 type PostgresClusterReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
-	Metrics  ports.Recorder
+	// APIReader supplies uncached safety evidence for the cutover protocol.
+	APIReader client.Reader
+	Scheme    *runtime.Scheme
+	Recorder  record.EventRecorder
+	Metrics   ports.Recorder
 	// IdentityResolver is shared with the PostgresDatabase reconciler so both
 	// controllers resolve the same PostgresCluster identity contract.
 	IdentityResolver *identityadapter.IdentityResolver
@@ -97,7 +99,7 @@ type PostgresClusterReconciler struct {
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=publications/status,verbs=get
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=subscriptions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=subscriptions/status,verbs=get
-// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=core,resources=events,verbs=get;create;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
@@ -109,6 +111,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	ctx = logging.WithLogger(ctx, logger)
 	rc := &clustercore.ReconcileContext{
 		Client:                  r.Client,
+		APIReader:               r.APIReader,
 		Scheme:                  r.Scheme,
 		Recorder:                r.Recorder,
 		Metrics:                 r.Metrics,
@@ -149,22 +152,36 @@ func (r *PostgresClusterReconciler) useCaseRegistry(key types.NamespacedName, cl
 func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedName, cluster *platformv1alpha1.PostgresCluster, mergedConfig *clustercore.MergedConfig) usecases.Factory {
 	return func() (usecases.UseCase, error) {
 		targetImage, err := clustercore.EffectivePostgresImage(mergedConfig)
-		if err != nil {
+		if err != nil && !activeCutoverStage(cluster).OwnsRecovery() {
 			return nil, fmt.Errorf("resolve major-upgrade target image: %w", err)
 		}
-		targetVersion := *mergedConfig.Spec.PostgresVersion
-
+		targetVersion := ""
+		if mergedConfig != nil && mergedConfig.Spec != nil && mergedConfig.Spec.PostgresVersion != nil {
+			targetVersion = *mergedConfig.Spec.PostgresVersion
+		}
+		if targetVersion == "" && cluster != nil && len(cluster.Status.PostgresMajorUpgradeStatus) > 0 {
+			entry := cluster.Status.PostgresMajorUpgradeStatus[len(cluster.Status.PostgresMajorUpgradeStatus)-1]
+			if entry.BlueGreen != nil && entry.TargetPgVersion != nil {
+				// Recovery cannot depend on a class that disappeared after fencing.
+				targetVersion = *entry.TargetPgVersion
+			}
+		}
 		backupMethod, backupPluginName, providerConfigured := clustercore.EffectiveBackupProvider(mergedConfig)
-
-		stateStore, err := clusterk8s.NewClusterStateStore(r.Client, key)
+		reader := r.APIReader
+		stateStore, err := clusterk8s.NewClusterStateStoreWithReader(r.Client, reader, key)
 		if err != nil {
 			return nil, fmt.Errorf("construct major-upgrade state store: %w", err)
 		}
 		infoStore := majorupgradeadapter.NewMajorUpgradeStateStoreWithTarget(stateStore, targetVersion)
 		blueGreenPlan, blueGreenCandidatePlan := blueGreenUpgradePlans(mergedConfig, targetImage)
-		driver := majorupgradeadapter.NewPgUpgradeDriver(r.Client, key, targetVersion, targetImage).
-			WithImagePullSecrets(cnpgadapter.ImagePullSecrets(mergedConfig.Spec.Images.ImagePullSecrets))
-
+		driver := majorupgradeadapter.NewPgUpgradeDriver(r.Client, key, targetVersion, targetImage)
+		if mergedConfig != nil && mergedConfig.Spec != nil && mergedConfig.Spec.Images != nil {
+			driver.WithImagePullSecrets(cnpgadapter.ImagePullSecrets(mergedConfig.Spec.Images.ImagePullSecrets))
+		}
+		switchover, err := majorupgradeadapter.NewBlueGreenSwitchover(r.Client, reader, key, cluster, blueGreenCandidatePlan)
+		if err != nil {
+			return nil, fmt.Errorf("construct blue/green switchover: %w", err)
+		}
 		var notifier *majorupgradeadapter.UpgradeNotifier
 		if cluster != nil {
 			notifier = majorupgradeadapter.NewUpgradeNotifier(&recorderEventEmitter{r.Recorder}, cluster)
@@ -172,24 +189,30 @@ func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedN
 		if !providerConfigured {
 			return majorversionupgrade.NewMajorUpgradeUseCase(infoStore, nil, driver, notifier,
 				majorupgradeadapter.NewBlueGreenPreparer(r.Client, key, cluster, r.IdentityResolver, blueGreenPlan),
-				majorupgradeadapter.NewBlueGreenCandidatePreparer(r.Client, key, cluster, blueGreenCandidatePlan)), nil
+				majorupgradeadapter.NewBlueGreenCandidatePreparerWithReader(r.Client, reader, key, cluster, blueGreenCandidatePlan), switchover), nil
 		}
 		rollback := majorupgradeadapter.NewRollbackCapabilityAdapter(r.Client, r.Scheme, key, backupMethod, backupPluginName)
 		return majorversionupgrade.NewMajorUpgradeUseCase(infoStore, rollback, driver, notifier,
 			majorupgradeadapter.NewBlueGreenPreparer(r.Client, key, cluster, r.IdentityResolver, blueGreenPlan),
-			majorupgradeadapter.NewBlueGreenCandidatePreparer(r.Client, key, cluster, blueGreenCandidatePlan)), nil
+			majorupgradeadapter.NewBlueGreenCandidatePreparerWithReader(r.Client, reader, key, cluster, blueGreenCandidatePlan), switchover), nil
 	}
 }
 
+func activeCutoverStage(cluster *platformv1alpha1.PostgresCluster) majorversionupgradetypes.CutoverStage {
+	if cluster == nil || len(cluster.Status.PostgresMajorUpgradeStatus) == 0 {
+		return majorversionupgradetypes.CutoverNone
+	}
+	return majorversionupgradetypes.CutoverStageOf(cluster.Status.PostgresMajorUpgradeStatus[len(cluster.Status.PostgresMajorUpgradeStatus)-1])
+}
+
 func blueGreenUpgradePlans(mergedConfig *clustercore.MergedConfig, targetImage string) (majorupgradeadapter.BlueGreenPreflightPlan, majorupgradeadapter.BlueGreenCandidatePlan) {
-	preflight := majorupgradeadapter.BlueGreenPreflightPlan{
-		TargetConfiguration: mergedConfig.Spec.DeepCopy(),
-		TargetImage:         targetImage,
+	preflight := majorupgradeadapter.BlueGreenPreflightPlan{}
+	candidate := majorupgradeadapter.BlueGreenCandidatePlan{}
+	if mergedConfig == nil || mergedConfig.Spec == nil {
+		return preflight, candidate
 	}
-	candidate := majorupgradeadapter.BlueGreenCandidatePlan{
-		TargetConfiguration: mergedConfig.Spec.DeepCopy(),
-		TargetImage:         targetImage,
-	}
+	preflight.TargetConfiguration, preflight.TargetImage = mergedConfig.Spec.DeepCopy(), targetImage
+	candidate.TargetConfiguration, candidate.TargetImage = mergedConfig.Spec.DeepCopy(), targetImage
 	if mergedConfig.Spec.Instances != nil {
 		candidate.TargetInstances = int(*mergedConfig.Spec.Instances)
 	}
@@ -204,6 +227,7 @@ func blueGreenUpgradePlans(mergedConfig *clustercore.MergedConfig, targetImage s
 // external-secret watch that closes the observability gap for Secrets
 // referenced via spec.passwordConfig but not owned by the PostgresCluster.
 func (r *PostgresClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.APIReader = mgr.GetAPIReader()
 	if err := mgr.GetFieldIndexer().IndexField(
 		context.Background(),
 		&platformv1alpha1.PostgresCluster{},

@@ -70,7 +70,7 @@ func validateBlueGreenDatabaseMembershipFreeze(ctx context.Context, obj *platfor
 		}
 		return field.ErrorList{field.InternalError(field.NewPath("spec", "clusterRef"), err)}
 	}
-	if mvutypes.HasActiveBlueGreenAttempt(cluster.Status.PostgresMajorUpgradeStatus) {
+	if mvutypes.HasBlueGreenConfigurationFreeze(cluster.Status.PostgresMajorUpgradeStatus) {
 		return field.ErrorList{field.Forbidden(field.NewPath("spec"), "database "+operation+" is frozen while its cluster has an active blueGreen attempt")}
 	}
 	return nil
@@ -94,7 +94,7 @@ func validateBlueGreenDatabaseFreeze(ctx context.Context, obj, oldObj *platformA
 		}
 		return field.ErrorList{field.InternalError(field.NewPath("spec", "clusterRef"), err)}
 	}
-	if mvutypes.HasActiveBlueGreenAttempt(cluster.Status.PostgresMajorUpgradeStatus) {
+	if mvutypes.HasBlueGreenConfigurationFreeze(cluster.Status.PostgresMajorUpgradeStatus) {
 		return field.ErrorList{field.Forbidden(field.NewPath("spec"), "database configuration is frozen while its cluster has an active blueGreen attempt")}
 	}
 	return nil

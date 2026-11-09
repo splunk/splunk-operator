@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -29,6 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -111,6 +113,11 @@ func (a blockedRecoveryAccess) FenceBlue(ctx context.Context, _ *cnpgv1.Cluster,
 	return false, ctx.Err()
 }
 
+func (a blockedRecoveryAccess) RestoreBlue(ctx context.Context, _ *cnpgv1.Cluster, _ *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error) {
+	a.inspect(ctx)
+	return false, ctx.Err()
+}
+
 func TestCommittedRecoveryBoundsEachAttemptAndRetriesForward(t *testing.T) {
 	f := newCutoverFixture(t)
 	f.until(func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool { return bg.CommitReceipt != nil })
@@ -153,4 +160,123 @@ func TestCommittedRecoveryBoundsEachAttemptAndRetriesForward(t *testing.T) {
 	assert.NotContains(t, f.calls, "restore-blue")
 	assert.NotContains(t, f.calls, "restore-canonical-blue")
 	assert.Equal(t, 1, f.endpoints.commits)
+}
+
+type blockedRestorationEndpoints struct {
+	cutoverEndpoints
+	canonical bool
+	inspect   func(context.Context)
+}
+
+func (e blockedRestorationEndpoints) RestoreUncommittedCanonical(ctx context.Context, key types.NamespacedName, attempt string) error {
+	if e.canonical {
+		e.inspect(ctx)
+		return ctx.Err()
+	}
+	return e.cutoverEndpoints.RestoreUncommittedCanonical(ctx, key, attempt)
+}
+
+func (e blockedRestorationEndpoints) CancelPreparation(ctx context.Context, _ types.NamespacedName, _ string, _ int64) error {
+	e.inspect(ctx)
+	return ctx.Err()
+}
+
+func TestSourceRestorationBoundsEachAttemptAndRetries(t *testing.T) {
+	for _, operation := range []string{"canonical restoration", "preparation cancellation", "source access"} {
+		t.Run(operation, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				f := newCutoverFixture(t)
+				f.until(func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool {
+					return bg.Switchover.FenceVerifiedAt != nil
+				})
+				if operation == "preparation cancellation" {
+					f.mutate(func(_ *platformv1alpha1.PostgresCluster, bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) {
+						bg.EndpointPreparation = &platformv1alpha1.BlueGreenEndpointPreparationStatus{Generation: 1}
+					})
+				}
+				f.clock = f.status().Switchover.DeadlineAt.Add(time.Minute)
+				_, err := f.step() // Record expiry of the interruption window.
+				require.NoError(t, err)
+				before := f.status()
+				f.calls = nil
+				inspect := func(ctx context.Context) {
+					deadline, bounded := ctx.Deadline()
+					require.True(t, bounded, "every restoration operation must release its worker")
+					assert.Equal(t, cutoverRecoveryTimeout, time.Until(deadline))
+					require.NoError(t, ctx.Err(), "restoration needs a fresh budget after the interruption deadline")
+					<-ctx.Done()
+				}
+				if operation == "source access" {
+					f.runtime.access = blockedRecoveryAccess{cutoverAccess: f.access, inspect: inspect}
+				} else {
+					f.runtime.endpoints = blockedRestorationEndpoints{cutoverEndpoints: f.endpoints, canonical: operation == "canonical restoration", inspect: inspect}
+				}
+				started := time.Now()
+				outcome, err := f.step()
+				require.ErrorIs(t, err, context.DeadlineExceeded)
+				assert.NotErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+				assert.Equal(t, cutoverRecoveryTimeout, time.Since(started))
+				assert.NoError(t, t.Context().Err(), "only the restoration attempt should expire")
+				assert.Equal(t, string(mvutypes.SwitchingOver), outcome.Report.Phase)
+				assert.True(t, outcome.Report.Retry)
+				assert.Nil(t, outcome.BlueGreen.Switchover.SourceFenceRestoredAt)
+				assert.Nil(t, f.status().Switchover.SourceFenceRestoredAt)
+
+				f.runtime.access, f.runtime.endpoints = f.access, f.endpoints
+				f.until(func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool {
+					return bg.Switchover.SourceFenceRestoredAt != nil
+				})
+				restored := f.status()
+				assert.Equal(t, before.AttemptID, restored.AttemptID)
+				assert.Equal(t, before.Switchover.Sequence, restored.Switchover.Sequence)
+				assert.Equal(t, before.Switchover.TimedOutAt, restored.Switchover.TimedOutAt)
+				assert.Contains(t, f.calls, "restore-blue")
+				assert.Zero(t, f.endpoints.commits)
+				assert.NotContains(t, f.calls, "apply-fence")
+				assert.NotContains(t, f.calls, "open-green")
+				outcome, err = f.step()
+				require.NoError(t, err)
+				assert.Equal(t, string(mvutypes.Failed), outcome.Report.Phase)
+				assert.Equal(t, "SwitchoverTimedOut", outcome.Report.Reason)
+				assert.Equal(t, restored.Switchover.SourceFenceRestoredAt, outcome.BlueGreen.Switchover.SourceFenceRestoredAt)
+			})
+		})
+	}
+}
+
+func TestSourceRestorationHonorsCallerCancellation(t *testing.T) {
+	for _, cancellation := range []string{"caller cancellation", "earlier caller deadline"} {
+		t.Run(cancellation, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				f := newCutoverFixture(t)
+				f.until(func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool {
+					return bg.Switchover.FenceVerifiedAt != nil
+				})
+				f.clock = f.status().Switchover.DeadlineAt.Add(time.Minute)
+				_, err := f.step()
+				require.NoError(t, err)
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				if cancellation == "earlier caller deadline" {
+					var stop context.CancelFunc
+					ctx, stop = context.WithTimeout(ctx, 25*time.Millisecond)
+					defer stop()
+				}
+				f.runtime.access = blockedRecoveryAccess{cutoverAccess: f.access, inspect: func(operation context.Context) {
+					if cancellation == "caller cancellation" {
+						cancel()
+					} else {
+						deadline, _ := ctx.Deadline()
+						actual, _ := operation.Deadline()
+						assert.Equal(t, deadline, actual)
+					}
+					<-operation.Done()
+				}}
+				outcome, err := f.runtime.AdvanceSwitchover(ctx, mvutypes.Intent{AttemptID: "attempt"}, f.status())
+				require.ErrorIs(t, err, ctx.Err())
+				assert.True(t, outcome.Report.Retry)
+				assert.Nil(t, outcome.BlueGreen.Switchover.SourceFenceRestoredAt)
+			})
+		})
+	}
 }

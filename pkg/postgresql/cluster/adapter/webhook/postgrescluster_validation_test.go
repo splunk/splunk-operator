@@ -216,7 +216,7 @@ func TestValidatePostgresClusterMajorUpgradeConfig(t *testing.T) {
 			obj:  clusterWith("blueGreen", nil),
 		},
 		{
-			name: "blueGreen allow is rejected until runtime is implemented",
+			name: "blueGreen allows explicit runtime preparation",
 			obj: &platformApi.PostgresCluster{Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(),
 				Class: "dev",
 				PostgresMajorUpgradeConfig: &platformApi.PostgresMajorUpgradeConfig{
@@ -224,7 +224,6 @@ func TestValidatePostgresClusterMajorUpgradeConfig(t *testing.T) {
 					Strategy: new("blueGreen"),
 				},
 			}},
-			wantField: "spec.postgresMajorUpgradeConfig.allow",
 		},
 		{
 			name: "blueGreen allows lower timeout boundary",
@@ -1700,6 +1699,40 @@ func TestValidateAgainstClass(t *testing.T) {
 			}
 			for i, val := range tt.wantErrValues {
 				assert.Equal(t, val, errs[i].BadValue, "unexpected bad value at index %d", i)
+			}
+		})
+	}
+}
+
+func TestCancellationAdmissionUsesDurableCommitBoundary(t *testing.T) {
+	for _, test := range []struct {
+		name                                                    string
+		committed, alreadyCancelled, metadataOnly, wantRejected bool
+	}{
+		{name: "precommit cancellation"},
+		{name: "new cancellation after commit", committed: true, wantRejected: true},
+		{name: "already requested cancellation after commit", committed: true, alreadyCancelled: true},
+		{name: "metadata update after commit", committed: true, metadataOnly: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			old := &platformApi.PostgresCluster{Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "dev", PostgresMajorUpgradeConfig: &platformApi.PostgresMajorUpgradeConfig{Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen), BlueGreen: &platformApi.PostgresBlueGreenUpgradeConfig{Cancel: new(test.alreadyCancelled)}}}}
+			old.Status.PostgresMajorUpgradeStatus = []platformApi.PostgresMajorUpgradeStatus{{Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen), BlueGreen: &platformApi.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt", Blue: &platformApi.BlueGreenEnvironmentStatus{}}}}
+			if test.committed {
+				old.Status.PostgresMajorUpgradeStatus[0].BlueGreen.CommitReceipt = &platformApi.BlueGreenCommitReceiptStatus{Sequence: 1, CommittedAt: new(metav1.Now())}
+			}
+			obj := old.DeepCopy()
+			if test.metadataOnly {
+				obj.Labels = map[string]string{"test": "changed"}
+			} else {
+				obj.Spec.PostgresMajorUpgradeConfig.BlueGreen.Cancel = new(true)
+				obj.Spec.PostgresMajorUpgradeConfig.Allow = new(false)
+			}
+			errs := webhook.ValidatePostgresClusterUpdate(t.Context(), obj, old, nil)
+			if test.wantRejected {
+				require.Len(t, errs, 1)
+				assert.Equal(t, "spec.postgresMajorUpgradeConfig.blueGreen.cancel", errs[0].Field)
+			} else {
+				assert.Empty(t, errs)
 			}
 		})
 	}

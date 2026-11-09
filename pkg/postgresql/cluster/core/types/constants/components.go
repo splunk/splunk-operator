@@ -24,4 +24,5 @@ const (
 	ComponentConfigMap     = "configMap"
 	ComponentSecret        = "secret"
 	ComponentCustomMetrics = "custom_metrics"
+	ComponentServerTLS     = "ServerTLS"
 )

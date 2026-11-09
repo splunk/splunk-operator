@@ -269,7 +269,6 @@ type PostgresClusterResources struct {
 }
 
 // +kubebuilder:validation:XValidation:rule="self.strategy == 'blueGreen' || !has(self.blueGreen)",message="blueGreen may be configured only when strategy is blueGreen"
-// +kubebuilder:validation:XValidation:rule="self.strategy != 'blueGreen' || !has(self.allow) || !self.allow",message="blueGreen allow must remain false until its runtime flow is released"
 type PostgresMajorUpgradeConfig struct {
 	// Allow permits the operator to execute a PostgreSQL major-version
 	// upgrade when spec.postgresVersion crosses a major-version boundary.

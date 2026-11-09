@@ -53,6 +53,7 @@ type managedRole struct {
 // rather than reaching into context — keeping ports explicit and testable.
 type ReconcileContext struct {
 	Client                  client.Client
+	APIReader               client.Reader
 	Scheme                  *runtime.Scheme
 	Recorder                record.EventRecorder
 	Metrics                 ports.Recorder

@@ -52,6 +52,7 @@ type Reconciler struct {
 	// runtime
 	order     []string
 	scheduled map[string]UseCase
+	deferred  bool
 
 	// misc
 	spec *platformv1alpha1.PostgresClusterSpec
@@ -105,6 +106,7 @@ func (r *Reconciler) get(name string) (UseCase, error) {
 
 func (r *Reconciler) Schedule(ctx context.Context) error {
 	r.scheduled = make(map[string]UseCase, len(r.factory))
+	r.deferred = false
 
 	for _, name := range r.order {
 		useCase, err := r.get(name)
@@ -118,6 +120,7 @@ func (r *Reconciler) Schedule(ctx context.Context) error {
 		// failures must escape so controller-runtime can requeue the resource.
 		if err := useCase.Prerequisites(ctx); err != nil {
 			if errors.Is(err, ErrPrerequisiteNotReady) {
+				r.deferred = true
 				continue
 			}
 			return err
@@ -133,6 +136,11 @@ func (r *Reconciler) Schedule(ctx context.Context) error {
 	}
 	return nil
 }
+
+// HasDeferredPrerequisites reports expected waits that ordinary component
+// reconciliation may satisfy. The caller must schedule another pass because
+// status-only convergence does not necessarily produce a controller event.
+func (r *Reconciler) HasDeferredPrerequisites() bool { return r != nil && r.deferred }
 
 func (r *Reconciler) BlocksComponents() map[string]struct{} {
 	blocked := map[string]struct{}{}

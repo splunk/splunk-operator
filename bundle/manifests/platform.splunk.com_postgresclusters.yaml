@@ -437,9 +437,6 @@ spec:
                 x-kubernetes-validations:
                 - message: blueGreen may be configured only when strategy is blueGreen
                   rule: self.strategy == 'blueGreen' || !has(self.blueGreen)
-                - message: blueGreen allow must remain false until its runtime flow
-                    is released
-                  rule: self.strategy != 'blueGreen' || !has(self.allow) || !self.allow
               postgresVersion:
                 description: |-
                   PostgresVersion is the PostgreSQL version (major or major.minor).

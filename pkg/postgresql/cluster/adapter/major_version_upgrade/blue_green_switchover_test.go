@@ -25,21 +25,54 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
-
+	clustercore "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
-
+	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
+	majorupgrade "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases/major_version_upgrade/use_case"
 	bluegreen "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases/major_version_upgrade/use_case/blue_green"
+	clusterk8s "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/k8s"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-
+	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
+
+func TestClassDeletionCannotBlockRealCutoverSourceRestoration(t *testing.T) {
+	f := newCutoverFixture(t)
+	f.until(func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool {
+		return bg.Switchover.FenceVerifiedAt != nil
+	})
+	f.clock = f.status().Switchover.DeadlineAt.Add(time.Second)
+	parent := new(platformv1alpha1.PostgresCluster)
+	require.NoError(t, f.runtime.reader.Get(t.Context(), f.runtime.key, parent))
+	parent.Spec.Class = "deleted-class"
+	require.NoError(t, f.runtime.client.Update(t.Context(), parent))
+	rc := &clustercore.ReconcileContext{Client: f.runtime.client, APIReader: f.runtime.reader, Scheme: f.runtime.client.Scheme(), Recorder: record.NewFakeRecorder(10), UseCaseRegistryProvider: func(key types.NamespacedName, p *platformv1alpha1.PostgresCluster, config *clustercore.MergedConfig) map[string]usecases.Factory {
+		assert.Nil(t, config)
+		return map[string]usecases.Factory{mvutypes.UseCaseName: func() (usecases.UseCase, error) {
+			stateStore, err := clusterk8s.NewClusterStateStoreWithReader(f.runtime.client, f.runtime.reader, key)
+			if err != nil {
+				return nil, err
+			}
+			store := NewMajorUpgradeStateStoreWithTarget(stateStore, "18")
+			return majorupgrade.NewMajorUpgradeUseCase(store, nil, nil, NewUpgradeNotifier(cutoverTestEvents{}, p), nil, nil, f.runtime), nil
+		}}
+	}}
+	for range 2 {
+		_, err := clustercore.PostgresClusterService(t.Context(), rc, ctrl.Request{NamespacedName: f.runtime.key}, nil, nil, nil, nil)
+		require.NoError(t, err)
+	}
+	assert.NotNil(t, f.status().Switchover.SourceFenceRestoredAt)
+	assert.Contains(t, f.calls, "restore-blue")
+	assert.Zero(t, f.endpoints.commits)
+}
 
 type cutoverTestEvents struct{}
 
@@ -558,8 +591,8 @@ func TestAvailableGreenEventFinalizationDoesNotRepeatFrozenDatabaseBarrier(t *te
 	f.until(func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool {
 		return bg.Switchover.TargetAvailableAt != nil
 	})
-	// Database declarations may change after Target Available releases the
-	// schema freeze, even if the Event's status receipt has not yet persisted.
+	// After Target Available, Event finalization must not repeat the frozen
+	// database publication barrier. Configuration stays frozen until completion.
 	f.endpoints.published = false
 	f.calls = nil
 	outcome, err := f.step()
@@ -608,7 +641,7 @@ func (f *cutoverFixture) retryRestoredWindow() {
 	f.clock = f.clock.Add(time.Second)
 	retryAt := metav1.NewTime(f.clock)
 	intent := mvutypes.Intent{Strategy: mvutypes.MajorUpgradeFlowBlueGreen, SourcePgVersion: "17", TargetPgVersion: "18", AttemptID: "attempt", Generation: parent.Generation, RetryRequestedAt: &retryAt, State: parent.Status.PostgresMajorUpgradeStatus}
-	outcome, err := bluegreen.New(mvutypes.Scheduled, nil, nil).Advance(f.t.Context(), intent)
+	outcome, err := bluegreen.New(mvutypes.Scheduled, nil, nil, nil).Advance(f.t.Context(), intent)
 	require.NoError(f.t, err)
 	store := NewMajorUpgradeStateStore(newTestClusterStateStore(f.t, f.runtime.client, f.runtime.key))
 	require.NoError(f.t, progressError(store.SaveMajorUpgradeProgress(f.t.Context(), intent, mvutypes.Progress{BlueGreen: outcome.BlueGreen, Report: outcome.Report})))

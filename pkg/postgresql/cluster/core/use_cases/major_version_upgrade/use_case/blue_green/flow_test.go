@@ -33,7 +33,7 @@ func (pendingPreparer) Prepare(context.Context, mvutypes.Intent) (*platformv1alp
 }
 
 func TestAdvanceKeepsPreflightWhileSourcePreparationIsPending(t *testing.T) {
-	outcome, err := New(mvutypes.Preflight, pendingPreparer{}, nil).Advance(t.Context(), mvutypes.Intent{AttemptID: "attempt-1"})
+	outcome, err := New(mvutypes.Preflight, pendingPreparer{}, nil, nil).Advance(t.Context(), mvutypes.Intent{AttemptID: "attempt-1"})
 	require.NoError(t, err)
 	assert.Equal(t, string(mvutypes.Preflight), outcome.Report.Phase)
 	assert.Equal(t, mvutypes.ReasonUpgradeFlowPending, outcome.Report.Reason)
@@ -49,7 +49,7 @@ func (transientPreparer) Prepare(context.Context, mvutypes.Intent) (*platformv1a
 }
 
 func TestAdvanceKeepsPreflightForTransientPreparationError(t *testing.T) {
-	outcome, err := New(mvutypes.Preflight, transientPreparer{}, nil).Advance(t.Context(), mvutypes.Intent{AttemptID: "attempt-1"})
+	outcome, err := New(mvutypes.Preflight, transientPreparer{}, nil, nil).Advance(t.Context(), mvutypes.Intent{AttemptID: "attempt-1"})
 	require.EqualError(t, err, "temporary Kubernetes API error")
 	assert.Equal(t, string(mvutypes.Preflight), outcome.Report.Phase)
 	assert.Equal(t, mvutypes.ReasonUnknownMajorUpgradeError, outcome.Report.Reason)
@@ -85,7 +85,7 @@ func TestAdvanceDoesNotRepeatCompletedSourcePreparation(t *testing.T) {
 	}
 
 	candidate := &countingCandidate{}
-	outcome, err := New(mvutypes.Preflight, preparer, candidate).Advance(t.Context(), intent)
+	outcome, err := New(mvutypes.Preflight, preparer, candidate, nil).Advance(t.Context(), intent)
 	require.NoError(t, err)
 	assert.Equal(t, mvutypes.ReasonUpgradeFlowPending, outcome.Report.Reason)
 	assert.Equal(t, string(mvutypes.Upgrading), outcome.Report.Phase)
@@ -109,7 +109,7 @@ func TestAdvanceKeepsUpgradingForTransientCandidateError(t *testing.T) {
 		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{Phase: &phase, Strategy: &strategy, SourcePgVersion: &sourceVersion, TargetPgVersion: &targetVersion,
 			BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1", SourcePreparation: &platformv1alpha1.BlueGreenSourcePreparationStatus{CompletedAt: &completedAt}}}},
 	}
-	outcome, err := New(mvutypes.Upgrading, &countingPreparer{}, transientCandidate{}).Advance(t.Context(), intent)
+	outcome, err := New(mvutypes.Upgrading, &countingPreparer{}, transientCandidate{}, nil).Advance(t.Context(), intent)
 	require.EqualError(t, err, "temporary Kubernetes API error")
 	assert.Equal(t, string(mvutypes.Upgrading), outcome.Report.Phase)
 	assert.True(t, outcome.Report.Retry)
@@ -162,7 +162,7 @@ func TestAdvanceCertifiesOnlyCandidateWithCompleteReplicationProof(t *testing.T)
 		Phase: &phase, Strategy: &strategy, SourcePgVersion: ptr("17"), TargetPgVersion: ptr("18"), BlueGreen: status,
 	}}}
 
-	outcome, err := New(mvutypes.Upgrading, &countingPreparer{}, candidateWithStatus{status: status}).Advance(t.Context(), intent)
+	outcome, err := New(mvutypes.Upgrading, &countingPreparer{}, candidateWithStatus{status: status}, nil).Advance(t.Context(), intent)
 	require.NoError(t, err)
 	assert.Equal(t, string(mvutypes.ReadyForSwitchover), outcome.Report.Phase)
 	assert.Equal(t, mvutypes.ReasonCandidateReady, outcome.Report.Reason)
@@ -366,7 +366,7 @@ func TestExplicitRetryResumesRestoredAttemptWithoutCandidateReplay(t *testing.T)
 		}},
 	}
 	candidate, source := &countingCandidate{}, &countingPreparer{}
-	outcome, err := New(mvutypes.Scheduled, source, candidate).Advance(t.Context(), intent)
+	outcome, err := New(mvutypes.Scheduled, source, candidate, nil).Advance(t.Context(), intent)
 	require.NoError(t, err)
 	assert.Equal(t, string(mvutypes.SwitchingOver), outcome.Report.Phase)
 	assert.Equal(t, int64(2), outcome.BlueGreen.Switchover.Sequence)
@@ -374,7 +374,7 @@ func TestExplicitRetryResumesRestoredAttemptWithoutCandidateReplay(t *testing.T)
 	assert.Zero(t, candidate.calls)
 	assert.Zero(t, source.calls)
 	intent.RetryRequestedAt = nil
-	outcome, err = New(mvutypes.Scheduled, source, candidate).Advance(t.Context(), intent)
+	outcome, err = New(mvutypes.Scheduled, source, candidate, nil).Advance(t.Context(), intent)
 	require.NoError(t, err)
 	assert.Equal(t, string(mvutypes.Failed), outcome.Report.Phase)
 	assert.False(t, outcome.Report.Retry)
@@ -426,31 +426,31 @@ func (p resultPreparer) Prepare(context.Context, mvutypes.Intent) (*platformv1al
 
 func TestAdvanceValidatesPhaseAndPreparer(t *testing.T) {
 	intent := mvutypes.Intent{AttemptID: "attempt-1"}
-	_, err := New(mvutypes.Preflight, nil, nil).Advance(t.Context(), mvutypes.Intent{})
+	_, err := New(mvutypes.Preflight, nil, nil, nil).Advance(t.Context(), mvutypes.Intent{})
 	require.ErrorIs(t, err, mvutypes.ErrInvalidUpgradeIntent)
 	for _, phase := range []mvutypes.Status{mvutypes.Scheduled, mvutypes.PreUpgradeBackup} {
-		outcome, err := New(phase, nil, nil).Advance(t.Context(), intent)
+		outcome, err := New(phase, nil, nil, nil).Advance(t.Context(), intent)
 		require.NoError(t, err)
 		assert.Equal(t, string(mvutypes.Preflight), outcome.Report.Phase)
 		assert.True(t, outcome.Report.Retry)
 	}
-	_, err = New(mvutypes.Completed, nil, nil).Advance(t.Context(), intent)
+	_, err = New(mvutypes.Completed, nil, nil, nil).Advance(t.Context(), intent)
 	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
-	_, err = New(mvutypes.Preflight, nil, nil).Advance(t.Context(), intent)
+	_, err = New(mvutypes.Preflight, nil, nil, nil).Advance(t.Context(), intent)
 	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
 }
 
 func TestAdvancePreservesStatusOnSuccessAndInvariantFailure(t *testing.T) {
 	status := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1"}
 	intent := mvutypes.Intent{AttemptID: "attempt-1"}
-	outcome, err := New(mvutypes.Preflight, resultPreparer{status: status}, nil).Advance(t.Context(), intent)
+	outcome, err := New(mvutypes.Preflight, resultPreparer{status: status}, nil, nil).Advance(t.Context(), intent)
 	require.NoError(t, err)
 	assert.Same(t, status, outcome.BlueGreen)
 	assert.Equal(t, mvutypes.ReasonPreflightCheckPassed, outcome.Report.Reason)
 	assert.True(t, outcome.Report.Retry)
 
 	invariant := fmt.Errorf("%w: unmanaged publication", mvutypes.ErrUpgradeFlowFailed)
-	outcome, err = New(mvutypes.Preflight, resultPreparer{status: status, err: invariant}, nil).Advance(t.Context(), intent)
+	outcome, err = New(mvutypes.Preflight, resultPreparer{status: status, err: invariant}, nil, nil).Advance(t.Context(), intent)
 	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
 	assert.Same(t, status, outcome.BlueGreen)
 	assert.Equal(t, string(mvutypes.Failed), outcome.Report.Phase)

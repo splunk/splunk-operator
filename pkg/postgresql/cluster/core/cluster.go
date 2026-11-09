@@ -51,23 +51,41 @@ import (
 type CustomMetricsFactory func(provisioner string, target monitoring.Target) (*mon.Model, error)
 
 func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.Request, newRoleSweeper ports.NewRoleSweeperFunc, backupBackend BackupBackend, customMetricsFactory CustomMetricsFactory, recoveryBackend RecoveryBackend) (ctrl.Result, error) {
-	c := rc.Client
-	logger := logging.FromContext(ctx).With("func", "PostgresClusterService")
-	logger.DebugContext(ctx, "reconciling PostgresCluster")
-
-	var postgresSecretName string
-
-	// 1. Fetch the PostgresCluster instance, stop if not found.
-	postgresCluster := &platformv1alpha1.PostgresCluster{}
-	if err := c.Get(ctx, req.NamespacedName, postgresCluster); err != nil {
+	if rc == nil || rc.Client == nil || rc.APIReader == nil {
+		return ctrl.Result{}, fmt.Errorf("PostgresCluster reconciliation requires a client and uncached API reader")
+	}
+	parent := new(platformv1alpha1.PostgresCluster)
+	// A cached parent may predate a consumed switchover gate and select ordinary
+	// reconciliation, where class or credential failures can prevent recovery.
+	// Read current ownership first; refreshCutoverParent only observes runtime
+	// writes after the recovery path has already been selected.
+	if err := rc.APIReader.Get(ctx, req.NamespacedName, parent); err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.InfoContext(ctx, "PostgresCluster deleted, skipping reconciliation")
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, fmt.Errorf("failed to fetch PostgresCluster: %w", err)
+		return ctrl.Result{}, fmt.Errorf("reading current PostgresCluster: %w", err)
 	}
-	logger = logger.With("postgresCluster", postgresCluster.Name)
-	ctx = logging.WithLogger(ctx, logger)
+	ctx = logging.WithLogger(ctx, logging.FromContext(ctx).With("func", "PostgresClusterService", "postgresCluster", parent.Name))
+	// Mode ownership comes from durable protocol state, not component blocking.
+	stage := cutoverStage(parent)
+	if parent.DeletionTimestamp == nil && stage.OwnsRecovery() {
+		class := new(platformv1alpha1.PostgresClusterClass)
+		configErr := rc.APIReader.Get(ctx, client.ObjectKey{Name: parent.Spec.Class}, class)
+		var merged *MergedConfig
+		if configErr == nil {
+			merged = GetMergedConfig(class, parent)
+		} else {
+			logging.FromContext(ctx).WarnContext(ctx, "class unavailable during mandatory cutover recovery", "error", configErr)
+		}
+		return reconcileCutoverHandoff(ctx, rc, parent, stage, class, merged, configErr, newRoleSweeper, customMetricsFactory)
+	}
+	return reconcileOrdinaryCluster(ctx, rc, parent, newRoleSweeper, backupBackend, customMetricsFactory, recoveryBackend)
+}
+
+func reconcileOrdinaryCluster(ctx context.Context, rc *ReconcileContext, postgresCluster *platformv1alpha1.PostgresCluster, newRoleSweeper ports.NewRoleSweeperFunc, backupBackend BackupBackend, customMetricsFactory CustomMetricsFactory, recoveryBackend RecoveryBackend) (ctrl.Result, error) {
+	c := rc.Client
+	logger := logging.FromContext(ctx)
+	var postgresSecretName string
 	authority, err := rc.resolveClusterCard(postgresCluster)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("resolving authoritative CNPG environment: %w", err)
@@ -96,26 +114,11 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		rc.emitClusterPhaseTransition(postgresCluster, oldPhase, currentPhase(), health.Reason, health.Message)
 		return nil
 	}
-	updatePhaseStatus := func(phase reconcileClusterPhases) error {
-		oldPhase := currentPhase()
-		readinessDuration, completedReadinessCycle, err := setPhaseStatus(ctx, c, postgresCluster, phase)
-		if err != nil {
-			return err
-		}
-		if completedReadinessCycle && rc.Metrics != nil {
-			rc.Metrics.ObserveProvisioningDuration(
-				ports.ControllerCluster,
-				readinessDuration,
-			)
-		}
-		rc.emitClusterPhaseTransition(postgresCluster, oldPhase, currentPhase(), "", "")
-		return nil
-	}
 	initializePendingPhase := func() (bool, error) {
 		if postgresCluster.Status.Phase != nil {
 			return false, nil
 		}
-		return true, updatePhaseStatus(pendingClusterPhase)
+		return true, advanceClusterPhase(ctx, rc, postgresCluster, pendingClusterPhase)
 	}
 
 	// Finalizer handling must come before any other processing.
@@ -245,55 +248,57 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		return ctrl.Result{}, fmt.Errorf("invalid component wiring: %w", err)
 	}
 
-	useCaseReconciler := newUseCaseReconciler(rc, req.NamespacedName, postgresCluster, mergedConfig)
+	useCaseReconciler := newUseCaseReconciler(rc, client.ObjectKeyFromObject(postgresCluster), postgresCluster, mergedConfig)
 	if useCaseReconciler != nil {
-		// Prerequisites are checked inside Schedule: a use case whose prereqs
-		// are unmet is silently deferred — it does not block components and
-		// does not Act this pass.
 		if err := useCaseReconciler.Schedule(ctx); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
-	blocked := blockedComponents(useCaseReconciler)
+	result, err := reconcileOrdinaryWork(ctx, rc, postgresCluster, useCaseReconciler, components)
+	if err == nil && useCaseReconciler.HasDeferredPrerequisites() {
+		result = soonerRequeue(result, ctrl.Result{RequeueAfter: retryDelay})
+	}
+	return result, err
+}
+
+func reconcileOrdinaryWork(ctx context.Context, rc *ReconcileContext, parent *platformv1alpha1.PostgresCluster, reconciler *usecases.Reconciler, components []component) (ctrl.Result, error) {
+	blocked := blockedComponents(reconciler)
 	if len(blocked) > 0 {
-		if err := startReadinessCycle(ctx, c, postgresCluster); err != nil {
+		if err := startReadinessCycle(ctx, rc.Client, parent); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
-
-	result, err := runComponents(ctx, logger, components, blocked)
-	if err != nil {
+	result, err := runComponents(ctx, logging.FromContext(ctx), components, blocked)
+	if err != nil || result != (ctrl.Result{}) {
 		return result, err
 	}
-	if result != (ctrl.Result{}) {
-		return result, nil
+	report, err := reconcileUseCases(ctx, reconciler)
+	if report != nil || err != nil {
+		return resultFromUseCaseReport(report), err
 	}
-
-	useCaseReport, useCaseErr := reconcileUseCases(ctx, useCaseReconciler)
-	if useCaseReport != nil || useCaseErr != nil {
-		if useCaseErr != nil {
-			logger.ErrorContext(ctx, "use case reconciliation failed",
-				"error", useCaseErr,
-				"name", useCaseReport.Name,
-				"reason", useCaseReport.Reason,
-				"phase", useCaseReport.Phase)
-		} else {
-			logger.InfoContext(ctx, "use case reconciled",
-				"name", useCaseReport.Name,
-				"reason", useCaseReport.Reason,
-				"phase", useCaseReport.Phase)
-		}
-		return resultFromUseCaseReport(useCaseReport), useCaseErr
-	}
-
-	logger.DebugContext(ctx, "reconciliation complete")
-	if err := updatePhaseStatus(readyClusterPhase); err != nil {
+	if err := advanceClusterPhase(ctx, rc, parent, readyClusterPhase); err != nil {
 		if apierrors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
 		}
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
+}
+
+func advanceClusterPhase(ctx context.Context, rc *ReconcileContext, parent *platformv1alpha1.PostgresCluster, phase reconcileClusterPhases) error {
+	oldPhase := ""
+	if parent.Status.Phase != nil {
+		oldPhase = *parent.Status.Phase
+	}
+	duration, completed, err := setPhaseStatus(ctx, rc.Client, parent, phase)
+	if err != nil {
+		return err
+	}
+	if completed && rc.Metrics != nil {
+		rc.Metrics.ObserveProvisioningDuration(ports.ControllerCluster, duration)
+	}
+	rc.emitClusterPhaseTransition(parent, oldPhase, string(phase), "", "")
+	return nil
 }
 
 func newUseCaseReconciler(rc *ReconcileContext, key types.NamespacedName, cluster *platformv1alpha1.PostgresCluster, mergedConfig *MergedConfig) *usecases.Reconciler {
@@ -658,6 +663,11 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *platfor
 	policy := ""
 	if cluster.Spec.ClusterDeletionPolicy != nil {
 		policy = *cluster.Spec.ClusterDeletionPolicy
+	}
+	if policy == clusterDeletionPolicyRetain {
+		if err := requireSafeRetainFinalization(cluster); err != nil {
+			return err
+		}
 	}
 	planned, err := finalizationPlan(policy, authority)
 	if err != nil {

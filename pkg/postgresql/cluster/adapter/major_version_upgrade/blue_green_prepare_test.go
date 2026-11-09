@@ -139,7 +139,7 @@ func TestBlueGreenPreparerReconcilesSourceArtifactsIdempotently(t *testing.T) {
 	preparer := NewBlueGreenPreparer(client, types.NamespacedName{Name: parent.Name, Namespace: namespace}, parent, identityadapter.NewIdentityResolver(), BlueGreenPreflightPlan{TargetConfiguration: &platformv1alpha1.PostgresClusterSpec{Storage: &targetStorage}})
 	preparer.preflight = successfulSourcePreflight{}
 	intent := mvutypes.Intent{Strategy: mvutypes.MajorUpgradeFlowBlueGreen, AttemptID: "attempt-1", SourcePgVersion: "17.1", TargetPgVersion: "18"}
-	entry, err := bluegreen.New(mvutypes.PreUpgradeBackup, preparer, nil).Advance(t.Context(), intent)
+	entry, err := bluegreen.New(mvutypes.PreUpgradeBackup, preparer, nil, nil).Advance(t.Context(), intent)
 	require.NoError(t, err)
 	assert.Equal(t, string(mvutypes.Preflight), entry.Report.Phase)
 	intent.State = stateWithProgress(intent, mvutypes.Progress{Report: entry.Report})

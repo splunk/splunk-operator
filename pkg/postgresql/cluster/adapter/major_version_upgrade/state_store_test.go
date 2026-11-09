@@ -61,7 +61,7 @@ func TestInitialBlueGreenAttemptPersistsThroughRealUseCaseSafetyReread(t *testin
 	require.True(t, enabled)
 	require.NotEmpty(t, initial.AttemptID)
 	backup := &completedInitialBackup{}
-	useCase := majorupgrade.NewMajorUpgradeUseCase(store, backup, nil, NewUpgradeNotifier(cutoverTestEvents{}, parent), nil, nil)
+	useCase := majorupgrade.NewMajorUpgradeUseCase(store, backup, nil, NewUpgradeNotifier(cutoverTestEvents{}, parent), nil, nil, nil)
 	require.NoError(t, useCase.Prerequisites(t.Context()))
 	scheduled, err := useCase.Schedule(t.Context())
 	require.NoError(t, err)

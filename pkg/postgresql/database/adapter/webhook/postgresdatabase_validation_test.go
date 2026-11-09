@@ -578,6 +578,35 @@ func TestValidatePostgresDatabaseDeleteFreezesActiveBlueGreenDefinition(t *testi
 	assert.Equal(t, "spec", errs[0].Field)
 }
 
+func TestDatabaseDefinitionsRemainFrozenUntilUpgradeTerminalBoundary(t *testing.T) {
+	for _, phase := range []string{"SwitchingOver", "PostUpgradeBackup", "Recoverable", "Failed", "Completed", "Cancelled"} {
+		t.Run(phase, func(t *testing.T) {
+			obj := &platformApi.PostgresDatabase{
+				Name: "orders-db", Namespace: "default",
+				Spec: platformApi.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: "orders"}, Databases: []platformApi.DatabaseDefinition{{Name: "orders"}}},
+			}
+			updated := obj.DeepCopy()
+			updated.Spec.Databases[0].Extensions = []string{"pg_trgm"}
+			cluster := &platformApi.PostgresCluster{
+				Name: "orders", Namespace: "default",
+				Status: platformApi.PostgresClusterStatus{PostgresMajorUpgradeStatus: []platformApi.PostgresMajorUpgradeStatus{{Phase: new(phase), BlueGreen: &platformApi.PostgresBlueGreenUpgradeStatus{
+					AttemptID: "attempt", Blue: &platformApi.BlueGreenEnvironmentStatus{},
+					Switchover: &platformApi.BlueGreenSwitchoverStatus{TargetAvailableAt: new(metav1.Now())},
+					Cleanup:    &platformApi.BlueGreenCleanupStatus{State: platformApi.BlueGreenCleanupStateRetained},
+				}}}},
+			}
+			scheme := runtime.NewScheme()
+			require.NoError(t, platformApi.AddToScheme(scheme))
+			reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build()
+			wantFrozen := phase != "Completed" && phase != "Cancelled"
+			assert.Equal(t, wantFrozen, len(webhook.ValidatePostgresDatabaseCreate(t.Context(), obj, reader)) > 0, "creation")
+			assert.Equal(t, wantFrozen, len(webhook.ValidatePostgresDatabaseUpdate(t.Context(), updated, obj, reader)) > 0, "configuration changes")
+			assert.Equal(t, wantFrozen, len(webhook.ValidatePostgresDatabaseDelete(t.Context(), obj, reader)) > 0, "deletion")
+			assert.Empty(t, webhook.ValidatePostgresDatabaseUpdate(t.Context(), obj, obj, reader), "status and metadata remain writable")
+		})
+	}
+}
+
 func TestValidatePostgresDatabaseDeleteAllowsCleanupWhenFeatureGateIsDisabled(t *testing.T) {
 	config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.PostgresController): false})
 	t.Cleanup(func() {

@@ -37,8 +37,8 @@ import (
 
 const candidateCredentialCheckMessage = "Checking candidate credential identities."
 
-// Recovery continues after the availability target expires, but each attempt
-// must release its worker even if an established SQL connection stalls.
+// Source restoration and committed recovery outlive the interruption window,
+// but each attempt must release its worker even if an established SQL connection stalls.
 const cutoverRecoveryTimeout = 30 * time.Second
 
 type cutoverEndpoints interface {
@@ -481,6 +481,9 @@ func (s *BlueGreenSwitchover) precommitError(ctx context.Context, intent mvutype
 }
 
 func (s *BlueGreenSwitchover) restoreSource(ctx context.Context, intent mvutypes.Intent, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bluegreen.Outcome, error) {
+	ctx, cancel := context.WithTimeout(ctx, cutoverRecoveryTimeout)
+	defer cancel()
+
 	if err := s.endpoints.RestoreUncommittedCanonical(ctx, s.key, intent.AttemptID); err != nil {
 		return s.pending(status, "Restoring the uncommitted blue endpoint record."), err
 	}

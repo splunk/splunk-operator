@@ -290,12 +290,23 @@ func TestScheduleDefersUseCaseWhenPrerequisitesFail(t *testing.T) {
 	if len(reconciler.BlocksComponents()) != 0 {
 		t.Fatalf("BlocksComponents() = %v, want empty: deferred use case must not block components", reconciler.BlocksComponents())
 	}
+	if !reconciler.HasDeferredPrerequisites() {
+		t.Fatal("expected prerequisite deferral must retain a retry obligation")
+	}
 	report, err := reconciler.Reconcile(t.Context())
 	if err != nil || report != nil {
 		t.Fatalf("Reconcile() = (%#v, %v), want (nil, nil): deferred use case must not act", report, err)
 	}
 	if deferred.acted {
 		t.Fatalf("Act() was called for a use case whose prerequisites were not met")
+	}
+	deferred.prerequisiteErr = nil
+	deferred.scheduled = true
+	if err := reconciler.Schedule(t.Context()); err != nil {
+		t.Fatalf("Schedule() error = %v after prerequisites converge", err)
+	}
+	if reconciler.HasDeferredPrerequisites() {
+		t.Fatal("successful scheduling must clear the prior deferral")
 	}
 }
 
@@ -307,6 +318,9 @@ func TestSchedulePropagatesUnexpectedPrerequisiteError(t *testing.T) {
 
 	if err := reconciler.Schedule(t.Context()); !errors.Is(err, prereqErr) {
 		t.Fatalf("Schedule() error = %v, want %v", err, prereqErr)
+	}
+	if reconciler.HasDeferredPrerequisites() {
+		t.Fatal("unexpected prerequisite errors must remain on the error channel")
 	}
 }
 

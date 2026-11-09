@@ -20,6 +20,8 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"log/slog"
+	"slices"
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -107,6 +109,60 @@ func TestServerTLSModelUsesAuthoritativeEnvironmentName(t *testing.T) {
 	assert.Contains(t, manager.request.DNSNames, "orders-green-pooler-rw.payments.svc.cluster.local")
 	assert.NotContains(t, manager.request.DNSNames, "orders-pooler-rw.payments.svc.cluster.local")
 	assert.True(t, plan.ValidatesPoolerLeaf(&x509.Certificate{DNSNames: certManagerPoolerSANs(cluster, config, "orders-green")}))
+}
+
+type environmentCertificateManager struct {
+	requests map[string]tlsport.Request
+	calls    int
+}
+
+func (m *environmentCertificateManager) ExistingCertificateDNSNames(_ context.Context, identity tlsport.Identity) ([]string, error) {
+	return slices.Clone(m.requests[identity.CertificateName].DNSNames), nil
+}
+
+func (m *environmentCertificateManager) Reconcile(_ context.Context, request tlsport.Request) error {
+	m.calls++
+	m.requests[request.Identity.CertificateName] = request
+	return nil
+}
+
+func (*environmentCertificateManager) Finalize(context.Context, tlsport.FinalizeRequest) error {
+	return nil
+}
+
+func TestBlueGreenCutoverPreservesIndependentSourceAndCandidateCertificateSANs(t *testing.T) {
+	cluster := &platformv1alpha1.PostgresCluster{Name: "orders", Namespace: "payments", UID: "parent-uid"}
+	mode := platformv1alpha1.PostgresCertificateModeCertManager
+	class := &platformv1alpha1.PostgresClusterClass{Spec: platformv1alpha1.PostgresClusterClassSpec{
+		TLS: &platformv1alpha1.PostgresClusterClassTLS{Certificates: &platformv1alpha1.PostgresCertificateConfig{
+			Mode: &mode, IssuerRef: &platformv1alpha1.CertificateIssuerReference{Name: "platform-ca"},
+		}},
+	}}
+	cfg := &MergedConfig{Spec: &platformv1alpha1.PostgresClusterSpec{}}
+	manager := &environmentCertificateManager{requests: map[string]tlsport.Request{}}
+	blueIdentity := serverTLSIdentity(cluster)
+	_, err := ReconcileServerTLSForEnvironment(t.Context(), manager, cluster, class, cfg, blueIdentity, cluster.Name)
+	require.NoError(t, err)
+	greenIdentity := blueIdentity
+	greenIdentity.CertificateName, greenIdentity.ServerTLSSecret, greenIdentity.ServerCASecret = "orders-green-server-tls", "orders-green-server-tls", "orders-green-server-ca"
+	_, err = ReconcileServerTLSForEnvironment(t.Context(), manager, cluster, class, cfg, greenIdentity, "orders-green")
+	require.NoError(t, err)
+	blueBefore := slices.Clone(manager.requests[blueIdentity.CertificateName].DNSNames)
+	greenBefore := slices.Clone(manager.requests[greenIdentity.CertificateName].DNSNames)
+	assert.Contains(t, blueBefore, "orders-rw.payments.svc.cluster.local")
+	assert.NotContains(t, blueBefore, "orders-green-rw.payments.svc.cluster.local")
+	assert.Contains(t, greenBefore, "orders-green-rw.payments.svc.cluster.local")
+	assert.NotContains(t, greenBefore, "orders-rw.payments.svc.cluster.local")
+	// Canonical commit changes ordinary authority to green while blue still
+	// supplies the logical stream and must accept verified operator sessions.
+	contracts := &reconcileContracts{Authority: identitytypes.ClusterCard{Authoritative: identitytypes.Environment{Identity: identitytypes.ObjectIdentity{Name: "orders-green"}}}, EnvironmentNamer: testEnvironmentNamer}
+	ordinary := newServerTLSModel(manager, noopEventEmitter{}, nil, cluster, class, cfg, contracts)
+	assert.Equal(t, pgcconstants.ComponentServerTLS, ordinary.Name())
+	_, err = runComponents(t.Context(), slog.Default(), []component{ordinary}, map[string]struct{}{pgcconstants.ComponentServerTLS: {}})
+	require.NoError(t, err)
+	assert.Equal(t, 2, manager.calls, "the ordinary writer must not reissue blue's certificate with green SANs")
+	assert.Equal(t, blueBefore, manager.requests[blueIdentity.CertificateName].DNSNames)
+	assert.Equal(t, greenBefore, manager.requests[greenIdentity.CertificateName].DNSNames)
 }
 
 func TestCompleteServerTLSNamesRetainsOnlyGeneratedPoolerNames(t *testing.T) {

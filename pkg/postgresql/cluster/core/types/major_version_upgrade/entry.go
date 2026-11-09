@@ -89,6 +89,34 @@ func HasActiveBlueGreenAttempt(entries []platformv1alpha1.PostgresMajorUpgradeSt
 	return false
 }
 
+// IsBlueGreenConfigurationFrozen reports whether the attempt still owns a
+// workflow phase whose captured configuration must remain unchanged. The
+// broad freeze ends at Completed or Cancelled; retained cleanup artifacts do
+// not keep user configuration frozen after production has reached a safe
+// terminal boundary.
+func IsBlueGreenConfigurationFrozen(entry platformv1alpha1.PostgresMajorUpgradeStatus) bool {
+	if !IsBlueGreenAttemptActive(entry) {
+		return false
+	}
+	if entry.Phase == nil {
+		return true
+	}
+	return *entry.Phase != string(Completed) && *entry.Phase != string(Cancelled)
+}
+
+// HasBlueGreenConfigurationFreeze reports whether any retained attempt still
+// owns an active schema/configuration freeze. This is intentionally narrower
+// than HasActiveBlueGreenAttempt, which also protects attempt identity and
+// retained resource ownership through explicit cleanup.
+func HasBlueGreenConfigurationFreeze(entries []platformv1alpha1.PostgresMajorUpgradeStatus) bool {
+	for i := len(entries) - 1; i >= 0; i-- {
+		if IsBlueGreenConfigurationFrozen(entries[i]) {
+			return true
+		}
+	}
+	return false
+}
+
 func RetryRequestedAfterTerminalFailure(retryRequestedAt *metav1.Time, entry platformv1alpha1.PostgresMajorUpgradeStatus) bool {
 	if retryRequestedAt == nil {
 		return false

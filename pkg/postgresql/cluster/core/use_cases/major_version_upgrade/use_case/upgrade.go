@@ -41,9 +41,10 @@ type upgradeStrategy interface {
 type pgUpgradeStrategy struct{ flow upgradeFlow }
 
 type blueGreenStrategy struct {
-	phase     mvutypes.Status
-	preparer  bluegreen.Preparer
-	candidate bluegreen.CandidatePreparer
+	phase      mvutypes.Status
+	preparer   bluegreen.Preparer
+	candidate  bluegreen.CandidatePreparer
+	switchover bluegreen.Switchover
 }
 
 func (s pgUpgradeStrategy) Advance(ctx context.Context, _ mvutypes.Intent) (mvutypes.Progress, error) {
@@ -54,7 +55,7 @@ func (s pgUpgradeStrategy) Advance(ctx context.Context, _ mvutypes.Intent) (mvut
 func (pgUpgradeStrategy) RequiresPreUpgradeBackup(mvutypes.Intent) bool { return true }
 
 func (s blueGreenStrategy) Advance(ctx context.Context, intent mvutypes.Intent) (mvutypes.Progress, error) {
-	outcome, err := bluegreen.New(s.phase, s.preparer, s.candidate).Advance(ctx, intent)
+	outcome, err := bluegreen.New(s.phase, s.preparer, s.candidate, s.switchover).Advance(ctx, intent)
 	return mvutypes.Progress{Report: outcome.Report, BlueGreen: outcome.BlueGreen}, err
 }
 
@@ -67,20 +68,22 @@ type upgradeFlow interface {
 }
 
 type MajorUpgradeUseCase struct {
-	store              majorUpgradeInfoStore
-	rollback           backupProvider
-	pgUpgrade          pgupgradeflow.PgUpgrade
-	blueGreen          bluegreen.Preparer
-	blueGreenCandidate bluegreen.CandidatePreparer
-	notifier           pgupgradeflow.Notifier
+	store               majorUpgradeInfoStore
+	rollback            backupProvider
+	pgUpgrade           pgupgradeflow.PgUpgrade
+	blueGreen           bluegreen.Preparer
+	blueGreenCandidate  bluegreen.CandidatePreparer
+	blueGreenSwitchover bluegreen.Switchover
+	notifier            pgupgradeflow.Notifier
 
 	intent mvutypes.Intent
 	active bool
 }
 
 // NewMajorUpgradeUseCase wires both strategies through one constructor.
-func NewMajorUpgradeUseCase(store majorUpgradeInfoStore, rollback backupProvider, pgUpgrade pgupgradeflow.PgUpgrade, notifier pgupgradeflow.Notifier, preparer bluegreen.Preparer, candidate bluegreen.CandidatePreparer) *MajorUpgradeUseCase {
-	return &MajorUpgradeUseCase{store: store, rollback: rollback, pgUpgrade: pgUpgrade, notifier: notifier, blueGreen: preparer, blueGreenCandidate: candidate}
+func NewMajorUpgradeUseCase(store majorUpgradeInfoStore, rollback backupProvider, pgUpgrade pgupgradeflow.PgUpgrade, notifier pgupgradeflow.Notifier, preparer bluegreen.Preparer, candidate bluegreen.CandidatePreparer, switchover bluegreen.Switchover) *MajorUpgradeUseCase {
+	return &MajorUpgradeUseCase{store: store, rollback: rollback, pgUpgrade: pgUpgrade, notifier: notifier,
+		blueGreen: preparer, blueGreenCandidate: candidate, blueGreenSwitchover: switchover}
 }
 
 func (h *MajorUpgradeUseCase) Prerequisites(ctx context.Context) error {
@@ -166,15 +169,24 @@ func (h *MajorUpgradeUseCase) BlocksComponents() []string {
 	if h == nil || !h.active || h.intent.RequiresBlueGreenRearm {
 		return nil
 	}
-	return []string{
+	blocked := []string{
 		pgcconstants.ComponentProvisioner,
-		pgcconstants.ComponentManagedRoles,
 		pgcconstants.ComponentPooler,
 		pgcconstants.ComponentBackup,
 		pgcconstants.ComponentConfigMap,
-		// Shares the blocked provisioner contract and mutates the same CNPG Cluster.
+		pgcconstants.ComponentManagedRoles,
 		pgcconstants.ComponentCustomMetrics,
 	}
+	if h.intent.Strategy == mvutypes.MajorUpgradeFlowBlueGreen {
+		// Blue still needs its verified leaf after canonical commit. The
+		// candidate owns a separate certificate, and cert-manager continues
+		// renewing both existing Certificate resources independently.
+		blocked = append(blocked, pgcconstants.ComponentServerTLS)
+		if mvutypes.CutoverStageForIntent(h.intent) == mvutypes.CutoverRestored {
+			blocked = append(blocked, pgcconstants.ComponentSecret, pgcconstants.ComponentObjectStore)
+		}
+	}
+	return blocked
 }
 
 func (h *MajorUpgradeUseCase) Act(ctx context.Context) (reconciliationtypes.Report, error) {
@@ -346,7 +358,7 @@ func (h *MajorUpgradeUseCase) strategyFor(intent mvutypes.Intent) upgradeStrateg
 	case mvutypes.MajorUpgradeFlowPgUpgrade:
 		return pgUpgradeStrategy{flow: pgupgradeflow.NewPgUpgradeFlow(h.pgUpgrade, phaseForIntent(intent.State, intent))}
 	case mvutypes.MajorUpgradeFlowBlueGreen:
-		return blueGreenStrategy{phase: phaseForIntent(intent.State, intent), preparer: h.blueGreen, candidate: h.blueGreenCandidate}
+		return blueGreenStrategy{phase: phaseForIntent(intent.State, intent), preparer: h.blueGreen, candidate: h.blueGreenCandidate, switchover: h.blueGreenSwitchover}
 	default:
 		return nil
 	}

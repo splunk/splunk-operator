@@ -75,17 +75,13 @@ The operator never constructs a public image or chooses an implicit PgBouncer im
 Minor upgrades change the pinned reference within the same major mapping and are
 documented in [Minor Version Upgrades](minor-version-upgrade.md).
 
-### Blue/green strategy availability
+### Blue/green strategy
 
-The `blueGreen` value is reserved in the `postgresMajorUpgradeConfig.strategy`
-API so manifests and durable status can use the upcoming contract. Its runtime
-workflow is not available yet: it does not create a candidate environment,
-replicate data, or switch endpoints.
-
-You may declare future intent with `strategy: blueGreen` and `allow: false`.
-Do not set `allow: true`; admission rejects it until the blue/green workflow is
-released. The procedure in this document applies to the shipped in-place
-`pgUpgrade` strategy.
+Select `strategy: blueGreen` to prepare a separate target-major environment with
+logical replication and an explicitly gated endpoint handoff. See
+[Blue/green major upgrades](blue-green-upgrade.md) for its controls, commit
+boundary, recovery behavior, and current completion boundary. The remaining
+procedure in this document describes the default in-place `pgUpgrade` strategy.
 
 ### Safety model
 

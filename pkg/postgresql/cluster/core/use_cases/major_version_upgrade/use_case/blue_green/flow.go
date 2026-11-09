@@ -64,12 +64,8 @@ type Flow struct {
 	switchover Switchover
 }
 
-func New(phase mvutypes.Status, preparer Preparer, candidate CandidatePreparer, switchover ...Switchover) Flow {
-	flow := Flow{phase: phase, preparer: preparer, candidate: candidate}
-	if len(switchover) > 0 {
-		flow.switchover = switchover[0]
-	}
-	return flow
+func New(phase mvutypes.Status, preparer Preparer, candidate CandidatePreparer, switchover Switchover) Flow {
+	return Flow{phase: phase, preparer: preparer, candidate: candidate, switchover: switchover}
 }
 
 // Advance records entry into Preflight before performing external preparation.
