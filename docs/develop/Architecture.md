@@ -36,3 +36,52 @@ nav_order: 3
 ## Package Architecture
 
 Domain logic under `pkg/splunk/` is organized by concern with a strict layered import direction. See [`pkg/splunk/README.md`](https://github.com/splunk/splunk-operator/blob/develop/pkg/splunk/README.md) for the full package layout, import rules, and guidance on where to put new code.
+
+## KVService reconciliation
+
+For installation, configuration and recovery procedures, see the
+[KVService operating guide](../operate/KVService.md). Implementation details are
+split between `internal/controller/enterprise/kvservice_controller.go` and the
+owning packages under `pkg/splunk/`:
+
+- `reconcile/kvservice` coordinates discovery, retained database provisioning,
+  keyring publication and serving resources. Namespace metadata is the discovery
+  input; generated runtime membership is an output. The shared address parser
+  supplies the same backend identity to client configuration and Secret routing.
+- `resources` constructs workloads and database requests; `k8sops` reads and
+  applies Kubernetes dependencies. `CommonWorkloadSpec` supplies the reusable
+  workload API fields without Enterprise storage, cluster or license references.
+- Startup depends on `kvservicesystem`. Per-tenant dependency failures are recorded
+  separately and excluded from eligible membership, so healthy tenants continue.
+  Tenant status describes prerequisites, not runtime schema completion. Readiness
+  events are emitted on transitions rather than on each retry.
+
+### Dependency revisions
+
+Tenant membership and keyring revisions deliberately change the pod template.
+Password and keyring revisions use Secret identity, key name, UID and
+resourceVersion, not credential values or hashes of those values. Consequently,
+metadata or unrelated-key updates can also roll pods. Selected non-secret
+connection ConfigMap fields use content hashes. An unchanged dependency snapshot
+leaves the template unchanged.
+
+The controller also routes changes to user-provided ConfigMaps referenced by
+direct or projected volumes. Their content revisions participate in rollout,
+subject to the shared ConfigMap restart opt-out annotation. Namespace peer
+CREATE/DELETE events requeue singleton checks; status-only peer updates do not.
+Configuration resolution errors prevent applying an incomplete Deployment.
+
+### Probe and certificate construction
+
+Runtime probe construction supplies defaults for omitted or zero timings. The
+CRD defaults timeout, period and failure threshold for omitted probe objects;
+the controller supplies the initial-delay fallback so the separate delay fields
+remain effective. Probe paths and success threshold are fixed.
+
+Certificate configuration uses the shared certificate workflow. A nonempty
+`spec.certs` selects HTTPS. The first `role: server` entry is selected, or the first
+entry if no server role exists. The controller passes the scheme explicitly to
+`kvstore-server` and uses it for both probes. Certificate mounts must have distinct
+paths, and each role may select only one distinct Secret; role-free mounts use
+`/mnt/tls/<secret-name>/`. See [certificate operations](../operate/Certificates.md)
+for the shared mounting, issuance and rotation contract.
