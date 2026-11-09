@@ -56,6 +56,11 @@ owning packages under `pkg/splunk/`:
   Tenant status describes prerequisites, not runtime schema completion. Readiness
   events are emitted on transitions rather than on each retry.
 
+Tenant evaluation returns an explicit status and retry decision. Discovery and keyring
+publication return tenant-local failures as data; operation errors remain errors.
+Tenant readiness is Unknown when a pass cannot evaluate tenants, and transition
+events are emitted only after the status update succeeds.
+
 ### Dependency revisions
 
 Tenant membership and keyring revisions deliberately change the pod template.

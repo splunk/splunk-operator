@@ -71,7 +71,8 @@ func TestServiceDatabaseStartsWithoutTenantsAndIsolatesTenantFailures(t *testing
 			case "duplicate tenant":
 				require.NoError(t, c.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns-c", Labels: map[string]string{common.LabelKVService: "enabled", common.LabelTenant: "alpha"}, Annotations: map[string]string{common.AnnotationKVServiceAddr: "splunk-kvs2-kvservice-service.shared:8066"}}}))
 			}
-			dependencies, ready, message, err := ensureTenantPostgresReady(ctx, c, cr)
+			postgres, err := ensureTenantPostgresReady(ctx, c, cr)
+			dependencies, ready, message := postgres.dependencies, postgres.ready, postgres.message
 			require.NoError(t, err)
 			require.True(t, ready)
 			require.Empty(t, message)
@@ -154,12 +155,83 @@ func TestTenantAuthenticationReadFailureIsLoggedAndIsolated(t *testing.T) {
 		}
 		return c.Get(ctx, key, obj, opts...)
 	}})
-	_, ready, _, err := ensureTenantPostgresReady(ctx, guarded, cr)
+	postgres, err := ensureTenantPostgresReady(ctx, guarded, cr)
+	ready := postgres.ready
 	require.NoError(t, err)
 	require.True(t, ready)
-	require.Equal(t, "AuthenticationPending", cr.Status.Tenants[0].Reason)
+	require.EqualValues(t, "AuthenticationPending", cr.Status.Tenants[0].Reason)
 	require.True(t, cr.Status.Tenants[1].Ready)
 	for _, detail := range []string{failure.Error(), "tenant=alpha", "namespace=ns-a", "secret=splunk-ns-a-secret"} {
 		require.Contains(t, logs.String(), detail)
 	}
+}
+
+func TestTenantStatusIsUnknownWhenEvaluationCannotRun(t *testing.T) {
+	for _, failure := range []string{"reservation", "list"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+			cr, _, c := postgresReadinessFixture(t)
+			ctx := t.Context()
+			previous := []enterpriseApi.KVServiceTenantStatus{{Name: "alpha", Namespace: "ns-a", Ready: true, Reason: enterpriseApi.KVServiceTenantReady}}
+			cr.Status.Tenants = previous
+			require.NoError(t, c.Status().Update(ctx, cr))
+			guarded := c
+			if failure == "reservation" {
+				ring := &corev1.Secret{}
+				require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: cr.Namespace, Name: common.KVServiceTenantVerificationKeysName}, ring))
+				ring.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(&enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "previous", UID: "previous"}}, enterpriseApi.GroupVersion.WithKind("KVService"))}
+				require.NoError(t, c.Update(ctx, ring))
+			} else {
+				guarded = interceptor.NewClient(c, interceptor.Funcs{List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+					if _, services := list.(*enterpriseApi.KVServiceList); services {
+						return errors.New("list unavailable")
+					}
+					return c.List(ctx, list, opts...)
+				}})
+			}
+			recorder := events.NewFakeRecorder(20)
+			_, err := Apply(ctx, guarded, client.ObjectKeyFromObject(cr), recorder)
+			require.Equal(t, failure == "list", err != nil)
+			require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(cr), cr))
+			require.Equal(t, previous, cr.Status.Tenants)
+			condition := meta.FindStatusCondition(cr.Status.Conditions, "TenantsReady")
+			require.Equal(t, metav1.ConditionUnknown, condition.Status)
+			require.Equal(t, "TenantEvaluationPending", condition.Reason)
+			require.Empty(t, drainKVServiceEvents(recorder))
+		})
+	}
+}
+
+func TestTenantTransitionEventsWaitForSuccessfulStatusWrite(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	cr, _, c := postgresReadinessFixture(t)
+	ctx := t.Context()
+	require.NoError(t, c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: "ns-a", Name: "splunk-ns-a-secret"}}))
+	writeErr := errors.New("status unavailable")
+	guarded := interceptor.NewClient(c, interceptor.Funcs{SubResourceUpdate: func(ctx context.Context, c client.Client, subresource string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+		if _, service := obj.(*enterpriseApi.KVService); service && subresource == "status" {
+			return writeErr
+		}
+		return c.SubResource(subresource).Update(ctx, obj, opts...)
+	}})
+	recorder := events.NewFakeRecorder(30)
+	_, err := Apply(ctx, guarded, client.ObjectKeyFromObject(cr), recorder)
+	require.ErrorIs(t, err, writeErr)
+	require.Empty(t, drainKVServiceEvents(recorder))
+	_, err = Apply(ctx, c, client.ObjectKeyFromObject(cr), recorder)
+	require.NoError(t, err)
+	emitted := drainKVServiceEvents(recorder)
+	require.Equal(t, 1, countKVServiceEvents(emitted, "Warning "+string(common.EventReasonTenantNotReady)+" "))
+	require.Equal(t, 1, countKVServiceEvents(emitted, "Normal "+string(common.EventReasonTenantReady)+" "))
+	_, err = Apply(ctx, c, client.ObjectKeyFromObject(cr), recorder)
+	require.NoError(t, err)
+	require.Empty(t, drainKVServiceEvents(recorder))
+}
+
+func TestNoTenantsConditionDoesNotBlockService(t *testing.T) {
+	cr := &enterpriseApi.KVService{}
+	setTenantCondition(cr, true)
+	condition := meta.FindStatusCondition(cr.Status.Conditions, "TenantsReady")
+	require.Equal(t, metav1.ConditionTrue, condition.Status)
+	require.Equal(t, "NoTenants", condition.Reason)
 }

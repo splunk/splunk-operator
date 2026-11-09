@@ -62,7 +62,8 @@ func pendingPostgresFixture(t *testing.T) (*enterpriseApi.KVService, client.With
 func postgresReadinessFixture(t *testing.T) (*enterpriseApi.KVService, *platformApi.PostgresDatabase, client.WithWatch) {
 	t.Helper()
 	cr, c := pendingPostgresFixture(t)
-	_, ready, message, err := ensureTenantPostgresReady(t.Context(), c, cr)
+	postgres, err := ensureTenantPostgresReady(t.Context(), c, cr)
+	ready, message := postgres.ready, postgres.message
 	require.NoError(t, err)
 	require.False(t, ready)
 	require.Contains(t, message, "service database kvservicesystem")
@@ -104,7 +105,8 @@ func TestEnsureKVServicePostgresReadiness(t *testing.T) {
 			database.Status = status
 			require.NoError(t, c.Status().Update(t.Context(), database))
 			before := database.DeepCopy()
-			dependencies, ready, message, err := ensureTenantPostgresReady(t.Context(), c, cr)
+			postgres, err := ensureTenantPostgresReady(t.Context(), c, cr)
+			dependencies, ready, message := postgres.dependencies, postgres.ready, postgres.message
 			if tt.wantError != "" {
 				require.ErrorContains(t, err, tt.wantError)
 				require.ErrorIs(t, err, reconcile.TerminalError(nil))
@@ -143,7 +145,8 @@ func TestEnsureKVServicePostgresDatabaseConsumption(t *testing.T) {
 				require.NoError(t, c.Update(t.Context(), database))
 			}
 			before := database.DeepCopy()
-			dependencies, ready, message, err := ensureTenantPostgresReady(t.Context(), c, cr)
+			postgres, err := ensureTenantPostgresReady(t.Context(), c, cr)
+			dependencies, ready, message := postgres.dependencies, postgres.ready, postgres.message
 			stored := &platformApi.PostgresDatabase{}
 			require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(database), stored))
 			switch operation {
@@ -181,7 +184,8 @@ func TestEnsureKVServicePostgresGuardsAndClientErrors(t *testing.T) {
 	t.Run("disabled feature gate", func(t *testing.T) {
 		cr, c := pendingPostgresFixture(t)
 		featuregatetesting.SetFeatureGateDuringTest(t, config.DefaultMutableFeatureGate, config.PostgresController, false)
-		_, ready, _, err := ensureTenantPostgresReady(t.Context(), c, cr)
+		postgres, err := ensureTenantPostgresReady(t.Context(), c, cr)
+		ready := postgres.ready
 		require.ErrorContains(t, err, "feature gate")
 		assert.ErrorIs(t, err, reconcile.TerminalError(nil))
 		assert.False(t, ready)
@@ -195,7 +199,8 @@ func TestEnsureKVServicePostgresGuardsAndClientErrors(t *testing.T) {
 			}
 			return c.Get(ctx, key, obj, opts...)
 		}})
-		dependencies, ready, _, err := ensureTenantPostgresReady(t.Context(), failing, cr)
+		nextPostgres, err := ensureTenantPostgresReady(t.Context(), failing, cr)
+		dependencies, ready := nextPostgres.dependencies, nextPostgres.ready
 		require.ErrorIs(t, err, failure)
 		require.ErrorContains(t, err, "prepare service database "+cr.Namespace+"/"+splcommon.KVServiceSystemDatabaseResource)
 		assert.NotErrorIs(t, err, reconcile.TerminalError(nil))

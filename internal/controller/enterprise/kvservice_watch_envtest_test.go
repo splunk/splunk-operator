@@ -263,7 +263,7 @@ func (f *kvserviceWatchFixture) waitTenantBlocked(ctx context.Context) {
 		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(f.cr), current)).To(Succeed())
 		g.Expect(current.Status.Phase).To(Equal(enterpriseApi.PhaseReady))
 		g.Expect(current.Status.Tenants).To(HaveLen(1))
-		g.Expect(current.Status.Tenants[0].Reason).To(BeElementOf("InvalidTenantName", "AuthenticationInvalid"))
+		g.Expect(current.Status.Tenants[0].Reason).To(BeElementOf(enterpriseApi.KVServiceTenantInvalidName, enterpriseApi.KVServiceTenantAuthenticationInvalid))
 		g.Expect(splcommon.IsStalled(current.Status.Conditions)).To(BeFalse())
 	}, 10*time.Second, 50*time.Millisecond).Should(Succeed())
 	f.waitIdleReady(ctx)
@@ -285,7 +285,7 @@ func (f *kvserviceWatchFixture) waitRecovered(ctx context.Context) {
 		g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(f.cr), current)).To(Succeed())
 		g.Expect(current.Status.Tenants).To(HaveLen(1))
 		g.Expect(current.Status.Tenants[0].Name).To(Equal(f.tenant))
-		g.Expect(current.Status.Tenants[0].Reason).NotTo(BeElementOf("InvalidTenantName", "AuthenticationInvalid"))
+		g.Expect(current.Status.Tenants[0].Reason).NotTo(BeElementOf(enterpriseApi.KVServiceTenantInvalidName, enterpriseApi.KVServiceTenantAuthenticationInvalid))
 		g.Expect(splcommon.IsStalled(current.Status.Conditions)).To(BeFalse())
 	}, 10*time.Second, 50*time.Millisecond).Should(Succeed())
 }

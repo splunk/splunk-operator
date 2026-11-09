@@ -4326,6 +4326,8 @@ spec:
                     ready:
                       type: boolean
                     reason:
+                      description: KVServiceTenantReason identifies a tenant's last
+                        evaluated provisioning outcome.
                       type: string
                   required:
                   - namespace

@@ -201,6 +201,8 @@ kubectl -n default wait --for=condition=Ready kvservice/kvs2 --timeout=5m
 |---|---|
 | `phase: Pending` | Service database or its connection credentials are not ready; inspect its PostgresDatabase. |
 | `Ready=True` | The serving workload is ready; this does not require every tenant to be ready. |
+| `TenantsReady=Unknown` | Tenant evaluation could not run; tenant entries retain last-known observations. Inspect the service condition and retry after the underlying failure. |
+| `TenantsReady=True`, reason `NoTenants` | No tenant namespaces select this service; zero-tenant startup is supported. |
 | `status.tenants` / `TenantsReady=False` | Inspect the affected namespace's reason/message and database or authentication prerequisites. This status does not acknowledge runtime schema completion. |
 | `phase: Error`, `Stalled=True` | Correct a terminal configuration problem, such as a disabled PostgresController gate or duplicate hosting-namespace KVServices. |
 

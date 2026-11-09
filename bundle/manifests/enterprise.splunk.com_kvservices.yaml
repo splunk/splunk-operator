@@ -1,9 +1,11 @@
----
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  labels:
+    name: splunk-operator
   name: kvservices.enterprise.splunk.com
 spec:
   group: enterprise.splunk.com
@@ -1333,6 +1335,32 @@ spec:
                 description: |-
                   PodAnnotations is a map of annotations applied to Splunk instance pods.
                   These annotations override operator-provided pod annotations when keys overlap.
+                type: object
+              postgres:
+                description: Postgres configures the required PostgresCluster connection
+                  for KVService.
+                properties:
+                  clusterRef:
+                    description: |-
+                      ClusterRef references the PostgresCluster in this namespace used to provision
+                      databases for tenant namespaces that select this KVService.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                    x-kubernetes-validations:
+                    - message: clusterRef.name must not be empty
+                      rule: has(self.name) && self.name != ''
+                required:
+                - clusterRef
                 type: object
               readinessInitialDelaySeconds:
                 description: |-
@@ -4179,6 +4207,8 @@ spec:
                   - name
                   type: object
                 type: array
+            required:
+            - postgres
             type: object
           status:
             description: KVServiceStatus defines the observed state of KVService
@@ -4298,6 +4328,8 @@ spec:
                     ready:
                       type: boolean
                     reason:
+                      description: KVServiceTenantReason identifies a tenant's last
+                        evaluated provisioning outcome.
                       type: string
                   required:
                   - namespace
@@ -4307,6 +4339,8 @@ spec:
                 - namespace
                 x-kubernetes-list-type: map
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true
@@ -4316,3 +4350,9 @@ spec:
         specReplicasPath: .spec.replicas
         statusReplicasPath: .status.replicas
       status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

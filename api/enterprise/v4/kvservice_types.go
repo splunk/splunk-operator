@@ -66,15 +66,29 @@ type KVServiceSpec struct {
 	Postgres KVServicePostgresSpec `json:"postgres"`
 }
 
+// KVServiceTenantReason identifies a tenant's last evaluated provisioning outcome.
+type KVServiceTenantReason string
+
+const (
+	KVServiceTenantReady                 KVServiceTenantReason = "Ready"
+	KVServiceTenantDatabasePending       KVServiceTenantReason = "DatabasePending"
+	KVServiceTenantDatabaseConflict      KVServiceTenantReason = "DatabaseConflict"
+	KVServiceTenantCredentialsPending    KVServiceTenantReason = "CredentialsPending"
+	KVServiceTenantAuthenticationPending KVServiceTenantReason = "AuthenticationPending"
+	KVServiceTenantAuthenticationInvalid KVServiceTenantReason = "AuthenticationInvalid"
+	KVServiceTenantInvalidName           KVServiceTenantReason = "InvalidTenantName"
+	KVServiceTenantDuplicate             KVServiceTenantReason = "DuplicateTenant"
+)
+
 // KVServiceTenantStatus reports one selected namespace independently of service readiness.
 type KVServiceTenantStatus struct {
 	Name string `json:"name"`
 	// +kubebuilder:validation:Required
-	Namespace    string `json:"namespace"`
-	Ready        bool   `json:"ready"`
-	Reason       string `json:"reason"`
-	Message      string `json:"message,omitempty"`
-	DatabaseName string `json:"databaseName,omitempty"`
+	Namespace    string                `json:"namespace"`
+	Ready        bool                  `json:"ready"`
+	Reason       KVServiceTenantReason `json:"reason"`
+	Message      string                `json:"message,omitempty"`
+	DatabaseName string                `json:"databaseName,omitempty"`
 }
 
 // KVServiceStatus defines the observed state of KVService

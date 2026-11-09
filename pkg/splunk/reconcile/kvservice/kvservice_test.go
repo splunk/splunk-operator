@@ -239,7 +239,8 @@ func TestEnsurePostgresReadyWaitsForCurrentNonDeletingDatabase(t *testing.T) {
 				require.NoError(t, c.Update(t.Context(), database))
 				require.NoError(t, c.Delete(t.Context(), database))
 			}
-			dependencies, ready, message, err := ensureTenantPostgresReady(t.Context(), c, cr)
+			postgres, err := ensureTenantPostgresReady(t.Context(), c, cr)
+			dependencies, ready, message := postgres.dependencies, postgres.ready, postgres.message
 			require.NoError(t, err)
 			assert.False(t, ready)
 			assert.Nil(t, dependencies)

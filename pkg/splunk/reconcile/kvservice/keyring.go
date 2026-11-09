@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -74,55 +73,38 @@ func (keys tenantKeys) values() []string {
 	return []string{keys.current}
 }
 
-// validateTenantKeyEntries checks per-tenant keyring structure, including entries
-// retained while a source Secret is unavailable. Key values may be shared across
-// tenants; each tenant keeps its own current/previous rotation state.
-func validateTenantKeyEntries(data map[string][]byte) error {
-	for _, tenant := range slices.Sorted(maps.Keys(data)) {
-		keys, err := parseTenantKeys(data[tenant])
-		if err != nil || keys.current == "" {
-			if err == nil {
-				err = fmt.Errorf("no current verification key for tenant %q", tenant)
-			}
-			return tenantTerminal(
-				fmt.Sprintf("Tenant %q has an invalid keyring entry. Correct its generated verification-key Secret entry to contain a current key and at most one previous key.", tenant),
-				fmt.Errorf("validate verification-key entry for tenant %q: %w", tenant, err))
-		}
+// validateTenantKeyEntry checks an entry retained while its source is unavailable.
+func validateTenantKeyEntry(tenant string, raw []byte) error {
+	keys, err := parseTenantKeys(raw)
+	if err == nil && keys.current != "" {
+		return nil
 	}
-	return nil
-}
-
-// tenantKeyErrors retains independent failures without classifying the service as blocked.
-// Unwrap preserves the existing diagnostic and error-classification contracts.
-type tenantKeyErrors map[string]error
-
-func (e tenantKeyErrors) Unwrap() []error {
-	result := make([]error, 0, len(e))
-	for _, tenant := range slices.Sorted(maps.Keys(e)) {
-		result = append(result, e[tenant])
+	if err == nil {
+		err = fmt.Errorf("no current verification key for tenant %q", tenant)
 	}
-	return result
+	return tenantTerminal(
+		fmt.Sprintf("Tenant %q has an invalid keyring entry. Correct its generated verification-key Secret entry to contain a current key and at most one previous key.", tenant),
+		fmt.Errorf("validate verification-key entry for tenant %q: %w", tenant, err))
 }
-func (e tenantKeyErrors) Error() string { return errors.Join(e.Unwrap()...).Error() }
 
 // reconcileKVServiceTenantKeys computes one publication from all source snapshots.
 // Missing/unreadable sources retain their last entry; removals always disappear.
 // Malformed retained entries are revoked independently.
-func reconcileKVServiceTenantKeys(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService, mapping map[string]string) (*corev1.Secret, error) {
+func reconcileKVServiceTenantKeys(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService, mapping map[string]string) (*corev1.Secret, map[string]error, error) {
 	keyring := &corev1.Secret{}
 	err := c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: splcommon.KVServiceTenantVerificationKeysName}, keyring)
 	create := apierrors.IsNotFound(err)
 	if err != nil && !create {
-		return nil, fmt.Errorf("get tenant verification-key Secret %s/%s: %w", cr.Namespace, splcommon.KVServiceTenantVerificationKeysName, err)
+		return nil, nil, fmt.Errorf("get tenant verification-key Secret %s/%s: %w", cr.Namespace, splcommon.KVServiceTenantVerificationKeysName, err)
 	}
 	if create {
 		keyring = resources.NewKVServiceTenantKeyring(cr)
 	} else if err := validateTenantKeyringOwner(cr, keyring); err != nil {
-		return nil, fmt.Errorf("validate tenant keyring ownership: %w", err)
+		return nil, nil, fmt.Errorf("validate tenant keyring ownership: %w", err)
 	}
 
 	desired := make(map[string][]byte, len(mapping))
-	failures := make(tenantKeyErrors)
+	failures := make(map[string]error)
 	for _, tenant := range slices.Sorted(maps.Keys(mapping)) {
 		raw, exists := keyring.Data[tenant]
 		if exists {
@@ -136,6 +118,7 @@ func reconcileKVServiceTenantKeys(ctx context.Context, c splcommon.ControllerCli
 		}
 		keys, err := parseTenantKeys(raw)
 		if err != nil {
+			delete(desired, tenant)
 			failures[tenant] = tenantTerminal(
 				fmt.Sprintf("Tenant %q has an invalid keyring entry in Secret %s/%s. Set the entry to a JSON array with the current key and at most one previous key.", tenant, cr.Namespace, keyring.Name),
 				fmt.Errorf("parse verification-key entry for tenant %q: %w", tenant, err))
@@ -165,16 +148,11 @@ func reconcileKVServiceTenantKeys(ctx context.Context, c splcommon.ControllerCli
 	// Validate retained entries individually so one malformed entry cannot undo
 	// healthy tenants' rotations or removals.
 	for tenant, raw := range desired {
-		if err := validateTenantKeyEntries(map[string][]byte{tenant: raw}); err != nil {
+		if err := validateTenantKeyEntry(tenant, raw); err != nil {
 			failures[tenant] = tenantTerminal(fmt.Sprintf("Tenant %q has an invalid keyring entry in Secret %s/%s. Correct it to contain a current key and at most one previous key.", tenant, cr.Namespace, keyring.Name), err)
 			delete(desired, tenant)
 		}
 	}
-	var collected error
-	if len(failures) > 0 {
-		collected = failures
-	}
-
 	if create || !maps.EqualFunc(keyring.Data, desired, bytes.Equal) {
 		keyring.Data = desired
 		if create {
@@ -183,19 +161,12 @@ func reconcileKVServiceTenantKeys(ctx context.Context, c splcommon.ControllerCli
 			err = c.Update(ctx, keyring)
 		}
 		if apierrors.IsAlreadyExists(err) {
-			return nil, &tenantReservationError{"waiting for namespace keyring reservation"}
+			return nil, failures, &tenantReservationError{"waiting for namespace keyring reservation"}
 		}
 		if err != nil {
-			// Publication has not succeeded. Source validation errors must not turn a
-			// write failure into a terminal result and prevent another safety attempt.
-			if collected != nil {
-				return nil, fmt.Errorf("publish tenant keyring (%v): %w", collected, err)
-			}
-			return nil, fmt.Errorf("publish tenant keyring: %w", err)
+			// Source policy failures must not change classification of a failed write.
+			return nil, failures, fmt.Errorf("publish tenant keyring: %w", err)
 		}
 	}
-	if collected != nil {
-		return keyring, fmt.Errorf("reconcile tenant keyring entries: %w", collected)
-	}
-	return keyring, nil
+	return keyring, failures, nil
 }

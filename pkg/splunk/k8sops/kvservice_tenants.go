@@ -31,29 +31,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// TenantDiscoveryError reports namespace-local policy failures alongside valid membership.
-// Kubernetes read failures are returned separately and preserve the last good publication.
-type TenantDiscoveryError struct {
+// TenantDiscovery includes valid membership and namespace-local policy failures.
+// Only Kubernetes read failures are returned as errors.
+type TenantDiscovery struct {
+	Members map[string]string
 	Blocked []enterpriseApi.KVServiceTenantStatus
-}
-
-func (e *TenantDiscoveryError) Error() string {
-	messages := make([]string, 0, len(e.Blocked))
-	for _, tenant := range e.Blocked {
-		messages = append(messages, tenant.Message)
-	}
-	return strings.Join(messages, "; ")
 }
 
 // DiscoverKVServiceTenants excludes every participant in a duplicate assignment;
 // an invalid namespace never suppresses discovery of unrelated healthy tenants.
-func DiscoverKVServiceTenants(ctx context.Context, c client.Reader, cr *enterpriseApi.KVService) (map[string]string, error) {
+func DiscoverKVServiceTenants(ctx context.Context, c client.Reader, cr *enterpriseApi.KVService) (TenantDiscovery, error) {
 	var namespaces corev1.NamespaceList
 	if err := c.List(ctx, &namespaces, client.MatchingLabels{splcommon.LabelKVService: splcommon.LabelKVServiceEnabled}); err != nil {
-		return nil, fmt.Errorf("discover KVService tenant namespaces: %w", err)
+		return TenantDiscovery{}, fmt.Errorf("discover KVService tenant namespaces: %w", err)
 	}
 	groups := make(map[string][]string)
-	blocked := &TenantDiscoveryError{}
+	result := TenantDiscovery{Members: make(map[string]string)}
 	for i := range namespaces.Items {
 		namespace := &namespaces.Items[i]
 		if namespace.DeletionTimestamp != nil {
@@ -68,12 +61,16 @@ func DiscoverKVServiceTenants(ctx context.Context, c client.Reader, cr *enterpri
 			continue
 		}
 		if err := splutil.ValidateKVServiceTenantName(tenant); err != nil {
-			blocked.Blocked = append(blocked.Blocked, enterpriseApi.KVServiceTenantStatus{Name: tenant, Namespace: namespace.Name, Reason: "InvalidTenantName", Message: fmt.Sprintf("Set namespace %q label %s to a unique supported tenant name: %v", namespace.Name, splcommon.LabelTenant, err)})
+			result.Blocked = append(result.Blocked, enterpriseApi.KVServiceTenantStatus{
+				Name: tenant, Namespace: namespace.Name,
+				Reason:  enterpriseApi.KVServiceTenantInvalidName,
+				Message: fmt.Sprintf("Set namespace %q label %s to a unique supported tenant name: %v", namespace.Name, splcommon.LabelTenant, err),
+			})
 			continue
 		}
 		groups[tenant] = append(groups[tenant], namespace.Name)
 	}
-	mapping := make(map[string]string)
+	mapping := result.Members
 	for _, tenant := range slices.Sorted(maps.Keys(groups)) {
 		names := groups[tenant]
 		slices.Sort(names)
@@ -82,14 +79,15 @@ func DiscoverKVServiceTenants(ctx context.Context, c client.Reader, cr *enterpri
 			continue
 		}
 		for _, namespace := range names {
-			blocked.Blocked = append(blocked.Blocked, enterpriseApi.KVServiceTenantStatus{Name: tenant, Namespace: namespace, Reason: "DuplicateTenant", Message: fmt.Sprintf("Tenant %q is selected by namespaces %q. Assign a unique %s label to each namespace selecting this backend.", tenant, names, splcommon.LabelTenant)})
+			result.Blocked = append(result.Blocked, enterpriseApi.KVServiceTenantStatus{
+				Name: tenant, Namespace: namespace,
+				Reason:  enterpriseApi.KVServiceTenantDuplicate,
+				Message: fmt.Sprintf("Tenant %q is selected by namespaces %q. Assign a unique %s label to each namespace selecting this backend.", tenant, names, splcommon.LabelTenant),
+			})
 		}
 	}
-	slices.SortFunc(blocked.Blocked, func(a, b enterpriseApi.KVServiceTenantStatus) int { return strings.Compare(a.Namespace, b.Namespace) })
-	if len(blocked.Blocked) > 0 {
-		return mapping, blocked
-	}
-	return mapping, nil
+	slices.SortFunc(result.Blocked, func(a, b enterpriseApi.KVServiceTenantStatus) int { return strings.Compare(a.Namespace, b.Namespace) })
+	return result, nil
 }
 
 // ApplyKVServiceTenantConfig publishes discovered membership for the existing

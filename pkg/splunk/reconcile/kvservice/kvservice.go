@@ -85,6 +85,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	cr.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("KVService"))
 	cr.Status.Phase = enterpriseApi.PhaseError
 	var statusMessage string
+	var tenantsEvaluated bool
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
@@ -100,7 +101,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 			message = terminalMessage
 		}
 		setConditions(cr, false, message)
-		recordTenantConditions(ctx, publisher, cr, previousTenants)
+		setTenantCondition(cr, tenantsEvaluated)
 		if terminal {
 			reason, _ := splcommon.TerminalReason(err)
 			cr.Status.Phase = enterpriseApi.PhaseError
@@ -109,15 +110,23 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 		} else {
 			cr.Status.Conditions = splcommon.ClearStalledCondition(cr.Status.Conditions, cr.Generation)
 		}
-		k8sops.EmitStalledTransitionEvents(ctx, publisher, cr.Name, previousConditions, cr.Status.Conditions)
 		statusErr := k8sops.UpdateKVServiceStatus(ctx, c, cr)
 		if statusErr != nil && !(apierrors.IsNotFound(statusErr) && cr.DeletionTimestamp != nil) {
 			if terminal {
 				// Retry a failed status write even when the spec error itself is terminal.
-				logger.ErrorContext(ctx, "could not persist terminal KVService condition", "error", err)
+				logger.ErrorContext(ctx, "could not persist terminal KVService condition", "error", statusErr)
 				err = fmt.Errorf("update KVService status: %w", statusErr)
 			} else {
 				err = errors.Join(err, fmt.Errorf("update KVService status: %w", statusErr))
+			}
+		}
+		if statusErr == nil {
+			if tenantsEvaluated {
+				recordTenantEvents(ctx, publisher, cr, previousTenants)
+			}
+			k8sops.EmitStalledTransitionEvents(ctx, publisher, cr.Name, previousConditions, cr.Status.Conditions)
+			if previousPhase != enterpriseApi.PhaseReady && cr.Status.Phase == enterpriseApi.PhaseReady {
+				publisher.Normal(ctx, splcommon.EventReasonReady, fmt.Sprintf("KVService %s is ready with %d replicas", cr.Name, cr.Status.ReadyReplicas))
 			}
 		}
 		if statusErr == nil && previousPhase != cr.Status.Phase {
@@ -143,12 +152,13 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 		publisher.Warning(ctx, splcommon.EventReasonValidateSpecFailed, "KVService spec validation failed")
 		return result, fmt.Errorf("validate KVService spec: %w", err)
 	}
-	postgresDependencies, postgresReady, postgresMessage, postgresErr := ensureTenantPostgresReady(ctx, c, cr)
-	statusMessage = postgresMessage
+	postgres, postgresErr := ensureTenantPostgresReady(ctx, c, cr)
+	statusMessage = postgres.message
+	tenantsEvaluated = postgres.tenantsEvaluated
 	if postgresErr != nil {
 		return result, fmt.Errorf("prepare KVService PostgreSQL dependency: %w", postgresErr)
 	}
-	if !postgresReady {
+	if !postgres.ready {
 		return result, nil
 	}
 	cr.Status.Replicas = cr.Spec.Replicas
@@ -161,7 +171,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	if certErr != nil {
 		return result, certErr
 	}
-	deployment, err := k8sops.GetKVServiceDeploymentWithPostgresDependencies(ctx, c, cr, postgresDependencies, extraEnv)
+	deployment, err := k8sops.GetKVServiceDeploymentWithPostgresDependencies(ctx, c, cr, postgres.dependencies, extraEnv)
 	if err != nil {
 		return result, fmt.Errorf("configure KVService Deployment: %w", err)
 	}
@@ -174,21 +184,15 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	cr.Status.ReadyReplicas = deployment.Status.ReadyReplicas
 	cr.Status.Phase = phase
 	if phase == enterpriseApi.PhaseReady {
-		if previousPhase != enterpriseApi.PhaseReady {
-			publisher.Normal(ctx, splcommon.EventReasonReady, fmt.Sprintf("KVService %s is ready with %d replicas", cr.Name, cr.Status.ReadyReplicas))
-		}
 		result.RequeueAfter = 0
-		for _, tenant := range cr.Status.Tenants {
-			if !tenant.Ready && (tenant.Reason == "DatabasePending" || tenant.Reason == "CredentialsPending" || tenant.Reason == "AuthenticationPending") {
-				result.RequeueAfter = 5 * time.Second
-				break
-			}
+		if postgres.retryTenants {
+			result.RequeueAfter = 5 * time.Second
 		}
 	}
 	return result, nil
 }
 
-func recordTenantConditions(ctx context.Context, publisher *k8sops.K8EventPublisher, cr *enterpriseApi.KVService, previous []enterpriseApi.KVServiceTenantStatus) {
+func recordTenantEvents(ctx context.Context, publisher *k8sops.K8EventPublisher, cr *enterpriseApi.KVService, previous []enterpriseApi.KVServiceTenantStatus) {
 	if cr.Status.Tenants == nil {
 		return
 	}
@@ -196,11 +200,7 @@ func recordTenantConditions(ctx context.Context, publisher *k8sops.K8EventPublis
 	for _, tenant := range previous {
 		old[tenant.Namespace] = tenant
 	}
-	ready := 0
 	for _, tenant := range cr.Status.Tenants {
-		if tenant.Ready {
-			ready++
-		}
 		if before, exists := old[tenant.Namespace]; exists && before == tenant {
 			continue
 		}
@@ -211,10 +211,33 @@ func recordTenantConditions(ctx context.Context, publisher *k8sops.K8EventPublis
 			publisher.Warning(ctx, splcommon.EventReasonTenantNotReady, message)
 		}
 	}
-	condition := metav1.Condition{Type: "TenantsReady", Status: metav1.ConditionTrue, Reason: "AllTenantsReady", Message: fmt.Sprintf("%d of %d tenants have ready database and authentication dependencies", ready, len(cr.Status.Tenants)), ObservedGeneration: cr.Generation}
-	if ready < len(cr.Status.Tenants) {
-		condition.Status = metav1.ConditionFalse
-		condition.Reason = "TenantsBlocked"
+}
+
+// Preserve last-known tenant details on early returns without claiming they were
+// evaluated in this reconciliation. Namespace changes do not bump CR generation.
+func setTenantCondition(cr *enterpriseApi.KVService, evaluated bool) {
+	condition := metav1.Condition{
+		Type: "TenantsReady", Status: metav1.ConditionUnknown,
+		Reason: "TenantEvaluationPending", Message: "Tenant prerequisites were not evaluated in this reconciliation; tenant entries are last-known observations",
+		ObservedGeneration: cr.Generation,
+	}
+	if evaluated {
+		ready := 0
+		for _, tenant := range cr.Status.Tenants {
+			if tenant.Ready {
+				ready++
+			}
+		}
+		condition.Status = metav1.ConditionTrue
+		condition.Reason = "AllTenantsReady"
+		condition.Message = fmt.Sprintf("%d of %d tenants have ready database and authentication dependencies", ready, len(cr.Status.Tenants))
+		if len(cr.Status.Tenants) == 0 {
+			condition.Reason = "NoTenants"
+			condition.Message = "No tenant namespaces select this KVService"
+		} else if ready < len(cr.Status.Tenants) {
+			condition.Status = metav1.ConditionFalse
+			condition.Reason = "TenantsBlocked"
+		}
 	}
 	apimeta.SetStatusCondition(&cr.Status.Conditions, condition)
 }

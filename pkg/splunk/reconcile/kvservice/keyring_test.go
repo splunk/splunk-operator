@@ -96,8 +96,9 @@ func TestTenantKeyringPublishesRotationAndRevocationOnceWithUnreadableSource(t *
 		t.Run(fmt.Sprintf("missing=%t", missing), func(t *testing.T) {
 			ctx, cr, c := tenantFixture(t)
 			mapping := map[string]string{"alpha": "ns-a", "bravo": "ns-b"}
-			ring, err := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
+			ring, failures, err := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
 			require.NoError(t, err)
+			require.Empty(t, failures)
 			retained := append([]byte(nil), ring.Data["bravo"]...)
 			ring.Data["removed"] = []byte(`["removed-key"]`)
 			require.NoError(t, c.Update(ctx, ring))
@@ -121,10 +122,8 @@ func TestTenantKeyringPublishesRotationAndRevocationOnceWithUnreadableSource(t *
 					return c.Update(ctx, obj, opts...)
 				},
 			})
-			updated, err := reconcileKVServiceTenantKeys(ctx, guarded, cr, mapping)
-			require.ErrorIs(t, err, readErr)
-			var failures tenantKeyErrors
-			require.ErrorAs(t, err, &failures)
+			updated, failures, err := reconcileKVServiceTenantKeys(ctx, guarded, cr, mapping)
+			require.NoError(t, err)
 			require.ErrorIs(t, failures["bravo"], readErr)
 			require.Equal(t, 1, writes)
 			require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(ring), ring))
@@ -134,8 +133,9 @@ func TestTenantKeyringPublishesRotationAndRevocationOnceWithUnreadableSource(t *
 			var keys []string
 			require.NoError(t, json.Unmarshal(ring.Data["alpha"], &keys))
 			require.Equal(t, []string{"alpha-new", "alpha-key"}, keys)
-			_, err = reconcileKVServiceTenantKeys(ctx, guarded, cr, mapping)
-			require.ErrorIs(t, err, readErr)
+			_, failures, err = reconcileKVServiceTenantKeys(ctx, guarded, cr, mapping)
+			require.NoError(t, err)
+			require.ErrorIs(t, failures["bravo"], readErr)
 			require.Equal(t, 1, writes, "an unchanged reconcile must not publish again")
 		})
 	}
@@ -154,21 +154,21 @@ func TestTenantKeyringAggregatesSourceFailures(t *testing.T) {
 		}
 		return c.Get(ctx, key, obj, opts...)
 	}})
-	_, err := reconcileKVServiceTenantKeys(ctx, guarded, cr, map[string]string{"alpha": "ns-a", "bravo": "ns-b"})
-	require.ErrorIs(t, err, missing)
-	require.ErrorIs(t, err, unavailable)
-	require.ErrorContains(t, err, `tenant "alpha"`)
-	require.ErrorContains(t, err, `tenant "bravo"`)
-	var failures tenantKeyErrors
-	require.ErrorAs(t, err, &failures)
+	_, failures, err := reconcileKVServiceTenantKeys(ctx, guarded, cr, map[string]string{"alpha": "ns-a", "bravo": "ns-b"})
+	require.NoError(t, err)
+	require.ErrorIs(t, failures["alpha"], missing)
+	require.ErrorIs(t, failures["bravo"], unavailable)
+	require.ErrorContains(t, failures["alpha"], `tenant "alpha"`)
+	require.ErrorContains(t, failures["bravo"], `tenant "bravo"`)
 	require.Len(t, failures, 2)
 }
 
 func TestTenantKeyringAllowsSharedRetainedKeyAndRevokesRemovedTenant(t *testing.T) {
 	ctx, cr, c := tenantFixture(t)
 	mapping := map[string]string{"alpha": "ns-a", "bravo": "ns-b"}
-	ring, err := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
+	ring, failures, err := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
 	require.NoError(t, err)
+	require.Empty(t, failures)
 	original := append([]byte(nil), ring.Data["bravo"]...)
 	ring.Data["removed"] = []byte(`["removed-key"]`)
 	require.NoError(t, c.Update(ctx, ring))
@@ -181,10 +181,9 @@ func TestTenantKeyringAllowsSharedRetainedKeyAndRevokesRemovedTenant(t *testing.
 		writes++
 		return c.Update(ctx, obj, opts...)
 	}})
-	_, err = reconcileKVServiceTenantKeys(ctx, guarded, cr, mapping)
-	require.True(t, apierrors.IsNotFound(err))
-	var failures tenantKeyErrors
-	require.ErrorAs(t, err, &failures)
+	_, failures, err = reconcileKVServiceTenantKeys(ctx, guarded, cr, mapping)
+	require.NoError(t, err)
+	require.True(t, apierrors.IsNotFound(failures["bravo"]))
 	require.Len(t, failures, 1, "a shared key must not introduce an additional validation failure")
 	_, terminal := splcommon.TerminalMessage(err)
 	require.False(t, terminal)
@@ -193,22 +192,25 @@ func TestTenantKeyringAllowsSharedRetainedKeyAndRevokesRemovedTenant(t *testing.
 	require.Equal(t, []byte(`["bravo-key","alpha-key"]`), ring.Data["alpha"])
 	require.Equal(t, original, ring.Data["bravo"])
 	require.NotContains(t, ring.Data, "removed")
-	require.NotContains(t, err.Error(), "bravo-key")
+	require.NotContains(t, failures["bravo"].Error(), "bravo-key")
 }
 
 func TestTenantKeyringInvalidRotationDoesNotBlockHealthyTenant(t *testing.T) {
 	ctx, cr, c := tenantFixture(t)
 	mapping := map[string]string{"alpha": "ns-a", "bravo": "ns-b"}
-	_, err := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
+	_, failures, err := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
 	require.NoError(t, err)
+	require.Empty(t, failures)
 	changeTenantSource(t, ctx, c, "ns-a", "alpha-new")
-	ring, err := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
+	ring, failures, err := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
 	require.NoError(t, err)
+	require.Empty(t, failures)
 	retained := append([]byte(nil), ring.Data["alpha"]...)
 	changeTenantSource(t, ctx, c, "ns-a", "alpha-third")
 	changeTenantSource(t, ctx, c, "ns-b", "bravo-new")
-	ring, err = reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
-	require.ErrorContains(t, err, "unretired")
+	ring, failures, err = reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
+	require.NoError(t, err)
+	require.ErrorContains(t, failures["alpha"], "unretired")
 	require.Equal(t, retained, ring.Data["alpha"])
 	var keys []string
 	require.NoError(t, json.Unmarshal(ring.Data["bravo"], &keys))
@@ -218,8 +220,9 @@ func TestTenantKeyringInvalidRotationDoesNotBlockHealthyTenant(t *testing.T) {
 func TestTenantKeyringWriteFailureRemainsRetryableWithInvalidSource(t *testing.T) {
 	ctx, cr, c := tenantFixture(t)
 	mapping := map[string]string{"alpha": "ns-a", "bravo": "ns-b"}
-	ring, err := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
+	ring, failures, err := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
 	require.NoError(t, err)
+	require.Empty(t, failures)
 	before := ring.DeepCopy()
 	changeTenantSource(t, ctx, c, "ns-a", "")
 	changeTenantSource(t, ctx, c, "ns-b", "bravo-new")
@@ -227,14 +230,15 @@ func TestTenantKeyringWriteFailureRemainsRetryableWithInvalidSource(t *testing.T
 	guarded := interceptor.NewClient(c, interceptor.Funcs{Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
 		return writeErr
 	}})
-	_, err = reconcileKVServiceTenantKeys(ctx, guarded, cr, mapping)
+	_, failures, err = reconcileKVServiceTenantKeys(ctx, guarded, cr, mapping)
 	require.ErrorIs(t, err, writeErr)
 	_, terminal := splcommon.TerminalMessage(err)
 	require.False(t, terminal)
 	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(ring), ring))
 	require.Equal(t, before.Data, ring.Data)
-	ring, err = reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
-	message, terminal := splcommon.TerminalMessage(err)
+	ring, failures, err = reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
+	require.NoError(t, err)
+	message, terminal := splcommon.TerminalMessage(failures["alpha"])
 	require.True(t, terminal)
 	require.Contains(t, message, "ns-a/splunk-ns-a-secret")
 	require.Equal(t, []byte(`["bravo-new","bravo-key"]`), ring.Data["bravo"])
@@ -245,20 +249,23 @@ func TestTenantKeyringAllowsSharedCurrentAndPreviousKeys(t *testing.T) {
 	mapping := map[string]string{"alpha": "ns-a", "bravo": "ns-b"}
 	changeTenantSource(t, ctx, c, "ns-a", "shared-old")
 	changeTenantSource(t, ctx, c, "ns-b", "shared-old")
-	ring, err := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
+	ring, failures, err := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
 	require.NoError(t, err)
+	require.Empty(t, failures)
 	require.Len(t, ring.Data, 2, "shared key values must not merge tenant entries")
 	for _, tenant := range []string{"alpha", "bravo"} {
 		require.Equal(t, []byte(`["shared-old"]`), ring.Data[tenant])
 	}
 	changeTenantSource(t, ctx, c, "ns-a", "shared-new")
-	ring, err = reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
+	ring, failures, err = reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
 	require.NoError(t, err)
+	require.Empty(t, failures)
 	require.Equal(t, []byte(`["shared-new","shared-old"]`), ring.Data["alpha"])
 	require.Equal(t, []byte(`["shared-old"]`), ring.Data["bravo"], "one tenant's previous key may be another tenant's current key")
 	changeTenantSource(t, ctx, c, "ns-b", "shared-new")
-	ring, err = reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
+	ring, failures, err = reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
 	require.NoError(t, err)
+	require.Empty(t, failures)
 	for _, tenant := range []string{"alpha", "bravo"} {
 		require.Equal(t, []byte(`["shared-new","shared-old"]`), ring.Data[tenant])
 	}
@@ -266,13 +273,15 @@ func TestTenantKeyringAllowsSharedCurrentAndPreviousKeys(t *testing.T) {
 	changeTenantSource(t, ctx, c, "ns-a", "alpha-third")
 	ring.Data["alpha"] = []byte(`["shared-new"]`)
 	require.NoError(t, c.Update(ctx, ring))
-	ring, err = reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
+	ring, failures, err = reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
 	require.NoError(t, err)
+	require.Empty(t, failures)
 	require.Equal(t, []byte(`["alpha-third","shared-new"]`), ring.Data["alpha"])
 	require.Equal(t, []byte(`["shared-new","shared-old"]`), ring.Data["bravo"], "retiring alpha's previous key must not retire bravo's key")
 	// Removing a tenant removes its entry even if its key is still used by another tenant.
-	ring, err = reconcileKVServiceTenantKeys(ctx, c, cr, map[string]string{"bravo": "ns-b"})
+	ring, failures, err = reconcileKVServiceTenantKeys(ctx, c, cr, map[string]string{"bravo": "ns-b"})
 	require.NoError(t, err)
+	require.Empty(t, failures)
 	require.NotContains(t, ring.Data, "alpha")
 	require.Equal(t, []byte(`["shared-new","shared-old"]`), ring.Data["bravo"])
 }
@@ -280,15 +289,17 @@ func TestTenantKeyringAllowsSharedCurrentAndPreviousKeys(t *testing.T) {
 func TestTenantKeyringDiagnosticsDoNotExposeKeyMaterial(t *testing.T) {
 	ctx, cr, c := tenantFixture(t)
 	mapping := map[string]string{"alpha": "ns-a", "bravo": "ns-b"}
-	ring, err := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
+	ring, failures, err := reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
 	require.NoError(t, err)
+	require.Empty(t, failures)
 	ring.Data["alpha"] = []byte(`{"private":"do-not-echo-this-key"`)
 	require.NoError(t, c.Update(ctx, ring))
-	_, err = reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
+	_, failures, err = reconcileKVServiceTenantKeys(ctx, c, cr, mapping)
 	var syntax *json.SyntaxError
-	require.ErrorAs(t, err, &syntax)
-	message, terminal := splcommon.TerminalMessage(err)
+	require.NoError(t, err)
+	require.ErrorAs(t, failures["alpha"], &syntax)
+	message, terminal := splcommon.TerminalMessage(failures["alpha"])
 	require.True(t, terminal)
 	require.Contains(t, message, cr.Namespace+"/"+ring.Name)
-	require.NotContains(t, err.Error(), "do-not-echo-this-key")
+	require.NotContains(t, failures["alpha"].Error(), "do-not-echo-this-key")
 }
