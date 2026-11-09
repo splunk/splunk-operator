@@ -283,12 +283,6 @@ func (c *Coordinator) recordCommitReceipt(ctx context.Context, key types.Namespa
 		CanonicalConfigMap: &corev1.ObjectReference{APIVersion: "v1", Kind: "ConfigMap", Namespace: parent.Namespace, Name: latest.Name, UID: latest.UID, ResourceVersion: latest.ResourceVersion},
 		Target:             bg.Green.Ref.DeepCopy(),
 	}
-	if bg.Switchover == nil {
-		bg.Switchover = &platformv1alpha1.BlueGreenSwitchoverStatus{}
-	}
-	if bg.Switchover.EndpointCommittedAt == nil {
-		bg.Switchover.EndpointCommittedAt = now.DeepCopy()
-	}
 	parent.Status.ProvisionerRef = bg.Green.Ref.DeepCopy()
 	parent.Status.BlueGreenCommitSequence = sequence
 	return c.store.WriteParentStatus(ctx, parent)

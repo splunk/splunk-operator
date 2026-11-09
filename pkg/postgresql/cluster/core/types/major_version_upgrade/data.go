@@ -18,6 +18,7 @@ package majorversionupgradetypes
 
 import (
 	"fmt"
+	"time"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
@@ -32,6 +33,14 @@ type Intent struct {
 	// shipped pgUpgrade strategy, whose existing version/strategy identity is
 	// retained for backward compatibility.
 	AttemptID string
+	// Generation is the current PostgresCluster generation used to consume a
+	// user gate. The switchover port latches it with its durable receipt.
+	Generation int64
+	// SwitchoverAuthorized reflects the current explicit blue/green gate.
+	// Once consumed, the durable receipt keeps the attempt moving if the user
+	// later clears the gate.
+	SwitchoverAuthorized bool
+	SwitchoverTimeout    time.Duration
 	// RequiresBlueGreenRearm identifies the one-step, controller-owned action
 	// that records a false allow gate after a cleaned blue/green attempt. It is
 	// an execution directive only: Schedule may discover it but must not

@@ -126,14 +126,20 @@ func validateCandidateDirectServices(ctx context.Context, reader client.Reader, 
 	if candidate.DirectService.Name != green.Status.WriteService {
 		return fmt.Errorf("candidate endpoints: direct Service does not match green write Service")
 	}
+	if green.Status.WriteService != green.GetServiceReadWriteName() {
+		return fmt.Errorf("candidate endpoints: write Service does not match the CNPG primary Service")
+	}
 	if _, err := readCandidateService(ctx, reader, green.Namespace, green.Status.WriteService, candidate.DirectService, directServiceExpectation(green.Name, "rw")); err != nil {
 		return fmt.Errorf("candidate direct Service: %w", err)
 	}
-	if _, err := readCandidateService(ctx, reader, green.Namespace, green.Name+"-r", nil, directServiceExpectation(green.Name, "r")); err != nil {
+	if _, err := readCandidateService(ctx, reader, green.Namespace, green.GetServiceReadName(), nil, directServiceExpectation(green.Name, "r")); err != nil {
 		return fmt.Errorf("candidate read Service: %w", err)
 	}
 	if green.Status.ReadyInstances >= MinInstancesForReadOnly {
-		if _, err := readCandidateService(ctx, reader, green.Namespace, green.Status.ReadService, nil, directServiceExpectation(green.Name, "ro")); err != nil {
+		if green.Status.ReadService != green.GetServiceReadName() {
+			return fmt.Errorf("candidate endpoints: read Service does not match the CNPG read Service")
+		}
+		if _, err := readCandidateService(ctx, reader, green.Namespace, green.GetServiceReadOnlyName(), nil, directServiceExpectation(green.Name, "ro")); err != nil {
 			return fmt.Errorf("candidate read-only Service: %w", err)
 		}
 	}

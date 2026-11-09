@@ -69,7 +69,7 @@ func candidateTestCluster(instances int) *cnpgv1.Cluster {
 		ObjectMeta: metav1.ObjectMeta{Name: "green", Namespace: "ns", UID: "green-uid"},
 		Status: cnpgv1.ClusterStatus{
 			Phase: cnpgv1.PhaseHealthy, ReadyInstances: instances,
-			WriteService: "green-rw", ReadService: "green-ro",
+			WriteService: "green-rw", ReadService: "green-r",
 		},
 	}
 }
@@ -181,7 +181,7 @@ func TestResolveCandidateConnectionDataRequiresReadOnlyServiceAtTwoInstances(t *
 	reader := candidateTestReader(t, candidateTestObjects("green-rw", "green-r", "green-ro")...)
 	data, err := ResolveCandidateConnectionData(t.Context(), reader, green, refs, CandidatePoolerExpectation{})
 	require.NoError(t, err)
-	assert.Equal(t, "green-ro.ns.svc.cluster.local", data[pgconninfo.KeyClusterROEndpoint])
+	assert.Equal(t, "green-r.ns.svc.cluster.local", data[pgconninfo.KeyClusterROEndpoint], "cutover preserves the existing Status.ReadService routing contract")
 
 	refs.PoolerService = &corev1.ObjectReference{Name: "green-pooler-rw", UID: "pooler-uid"}
 	_, err = ResolveCandidateConnectionData(t.Context(), reader, green, refs, CandidatePoolerExpectation{})
@@ -264,7 +264,51 @@ func TestResolveCandidateConnectionDataRejectsIncompleteProofAndReaderErrors(t *
 	noReadService := candidateTestCluster(2)
 	noReadService.Status.ReadService = ""
 	_, err = ResolveCandidateConnectionData(ctx, reader, noReadService, refs, CandidatePoolerExpectation{})
-	require.ErrorContains(t, err, "Service name is required")
+	require.ErrorContains(t, err, "read Service does not match the CNPG read Service")
+}
+
+func TestResolveCandidateConnectionDataMatchesCNPGServiceContracts(t *testing.T) {
+	green := candidateTestCluster(3)
+	green.Spec.ImageName = "postgres:18"
+	// CNPG v1.30.1 pkg/specs/services.go builds -rw with instanceRole=primary,
+	// -r with podRole=instance, and -ro with instanceRole=replica. Its status
+	// updater independently records ReadService=-r, not the replica-only name.
+	objects := candidateTestObjects("green-rw", "green-r", "green-ro")
+	data, err := ResolveCandidateConnectionData(t.Context(), candidateTestReader(t, objects...), green, candidateTestRefs(""), CandidatePoolerExpectation{})
+	require.NoError(t, err, "CNPG Status.ReadService names -r while -ro independently targets replicas")
+	assert.Equal(t, "green-rw.ns.svc.cluster.local", data[pgconninfo.KeyClusterRWEndpoint])
+	assert.Equal(t, "green-r.ns.svc.cluster.local", data[pgconninfo.KeyClusterREndpoint])
+	assert.Equal(t, "green-r.ns.svc.cluster.local", data[pgconninfo.KeyClusterROEndpoint], "existing publication bytes remain unchanged")
+
+	for _, serviceName := range []string{"green-rw", "green-r", "green-ro"} {
+		t.Run("reject wrong backend for "+serviceName, func(t *testing.T) {
+			misdirected := make([]client.Object, 0, len(objects))
+			for _, object := range objects {
+				copy := object.DeepCopyObject().(client.Object)
+				if service, ok := copy.(*corev1.Service); ok && service.Name == serviceName {
+					service.Spec.Selector = map[string]string{"cnpg.io/cluster": "green"}
+				}
+				misdirected = append(misdirected, copy)
+			}
+			_, err := ResolveCandidateConnectionData(t.Context(), candidateTestReader(t, misdirected...), green, candidateTestRefs(""), CandidatePoolerExpectation{})
+			require.ErrorContains(t, err, "does not target expected backend")
+		})
+		t.Run("reject missing Service for "+serviceName, func(t *testing.T) {
+			missing := make([]client.Object, 0, len(objects))
+			for _, object := range objects {
+				if object.GetName() != serviceName {
+					missing = append(missing, object)
+				}
+			}
+			_, err := ResolveCandidateConnectionData(t.Context(), candidateTestReader(t, missing...), green, candidateTestRefs(""), CandidatePoolerExpectation{})
+			require.ErrorContains(t, err, "reading Service")
+		})
+	}
+
+	wrongStatus := green.DeepCopy()
+	wrongStatus.Status.ReadService = green.GetServiceReadOnlyName()
+	_, err = ResolveCandidateConnectionData(t.Context(), candidateTestReader(t, objects...), wrongStatus, candidateTestRefs(""), CandidatePoolerExpectation{})
+	require.ErrorContains(t, err, "read Service does not match the CNPG read Service")
 }
 
 type failingDeploymentReader struct{ client.Reader }

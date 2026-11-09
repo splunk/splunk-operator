@@ -732,6 +732,34 @@ type PostgresBlueGreenUpgradeStatus struct {
 	// +optional
 	Gates *BlueGreenGateStatus `json:"gates,omitempty"`
 
+	// BlueGreenEndpointProtocolStatus is owned by the endpoint coordinator.
+	BlueGreenEndpointProtocolStatus `json:",inline"`
+
+	// Switchover records the latched timeout and the durable handoff milestones.
+	// +optional
+	Switchover *BlueGreenSwitchoverStatus `json:"switchover,omitempty"`
+
+	// Recoverability records the verified target-major backup and WAL archive
+	// baseline required before source cleanup.
+	// +optional
+	Recoverability *BlueGreenRecoverabilityStatus `json:"recoverability,omitempty"`
+
+	// Cleanup progresses independently of production completion because a
+	// retained environment is not a lossless rollback target.
+	// +optional
+	Cleanup *BlueGreenCleanupStatus `json:"cleanup,omitempty"`
+
+	// Conditions describe whether a stage gate can be consumed. They do not
+	// replace the user's desired gate values.
+	// +listType=map
+	// +listMapKey=type
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// BlueGreenEndpointProtocolStatus groups coordinator-owned status without changing
+// the serialized field names. Runtime progress preserves this group as a unit.
+type BlueGreenEndpointProtocolStatus struct {
 	// EndpointPreparation records green-endpoint validation before canonical commit.
 	// +optional
 	EndpointPreparation *BlueGreenEndpointPreparationStatus `json:"endpointPreparation,omitempty"`
@@ -755,27 +783,6 @@ type PostgresBlueGreenUpgradeStatus struct {
 	// commit receipt. It never authorizes a first endpoint commit.
 	// +optional
 	CanonicalRecovery *BlueGreenCanonicalRecoveryStatus `json:"canonicalRecovery,omitempty"`
-
-	// Switchover records the latched timeout and the durable handoff milestones.
-	// +optional
-	Switchover *BlueGreenSwitchoverStatus `json:"switchover,omitempty"`
-
-	// Recoverability records the verified target-major backup and WAL archive
-	// baseline required before source cleanup.
-	// +optional
-	Recoverability *BlueGreenRecoverabilityStatus `json:"recoverability,omitempty"`
-
-	// Cleanup progresses independently of production completion because a
-	// retained environment is not a lossless rollback target.
-	// +optional
-	Cleanup *BlueGreenCleanupStatus `json:"cleanup,omitempty"`
-
-	// Conditions describe whether a stage gate can be consumed. They do not
-	// replace the user's desired gate values.
-	// +listType=map
-	// +listMapKey=type
-	// +optional
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // BlueGreenEnvironmentStatus identifies one CNPG environment managed during a
@@ -1206,10 +1213,6 @@ type BlueGreenSwitchoverWindow struct {
 
 	// +optional
 	DeadlineAt *metav1.Time `json:"deadlineAt,omitempty"`
-
-	// EndpointCommittedAt records the irreversible canonical ConfigMap commit.
-	// +optional
-	EndpointCommittedAt *metav1.Time `json:"endpointCommittedAt,omitempty"`
 
 	// TargetAvailableAt records verified target read/write availability after
 	// the target fence has been removed.

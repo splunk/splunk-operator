@@ -55,8 +55,8 @@ func TestValidateBlueGreenProgressKeepsSwitchoverCommitBoundaryMonotonic(t *test
 			GreenOriginalHBA: &hba, GreenOriginalRoleLogins: []platformv1alpha1.BlueGreenRoleLoginStatus{{RoleName: "orders_rw", Login: true}},
 			CandidateGuardsRemovedAt: &verified, FinalParityVerifiedAt: &verified,
 			EndpointPublicationEventRef: &corev1.ObjectReference{Name: "published", UID: "event-uid"},
-			EndpointCommittedAt:         &committed, FinalBlueLSN: &finalLSN,
-			SequenceSynchronization: &platformv1alpha1.BlueGreenSequenceSynchronizationStatus{CompletedAt: &committed, VerifiedAt: &verified},
+			FinalBlueLSN:                &finalLSN,
+			SequenceSynchronization:     &platformv1alpha1.BlueGreenSequenceSynchronizationStatus{CompletedAt: &committed, VerifiedAt: &verified},
 		},
 	}
 	intent := Intent{Strategy: MajorUpgradeFlowBlueGreen, SourcePgVersion: "17", TargetPgVersion: "18", AttemptID: "attempt-1", State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
@@ -68,6 +68,8 @@ func TestValidateBlueGreenProgressKeepsSwitchoverCommitBoundaryMonotonic(t *test
 		mutate func(*platformv1alpha1.PostgresBlueGreenUpgradeStatus)
 	}{
 		{"remove start", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) { bg.Switchover.StartedAt = nil }},
+		{"remove commit receipt", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) { bg.CommitReceipt = nil }},
+		{"rewrite commit time", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) { bg.CommitReceipt.CommittedAt = &deadline }},
 		{"remove consumed gate", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) { bg.Gates.Switchover = nil }},
 		{"remove control identity", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) { bg.Switchover.ControlIdentity = nil }},
 		{"remove parity proof", func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) { bg.Switchover.FinalParityVerifiedAt = nil }},
@@ -173,9 +175,6 @@ func TestSwitchoverWindowCanAdvanceOnlyAfterRestorationAndNewRetry(t *testing.T)
 	assert.Error(t, validateExistingBlueGreenProgress("attempt", unrestored, valid))
 	committed := current.DeepCopy()
 	committed.CommitReceipt = &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 1}
-	assert.Error(t, validateExistingBlueGreenProgress("attempt", committed, valid))
-	committed = current.DeepCopy()
-	committed.Switchover.EndpointCommittedAt = &restored
 	assert.Error(t, validateExistingBlueGreenProgress("attempt", committed, valid))
 	consumedRetry := current.DeepCopy()
 	consumedRetry.Switchover.RetryRequestedAt = &retryAt

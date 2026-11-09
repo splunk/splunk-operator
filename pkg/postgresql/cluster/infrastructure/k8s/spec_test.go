@@ -44,7 +44,7 @@ func TestClusterSpecificationGetSpecificationWithAnnotationsReturnsCopies(t *tes
 		},
 	})
 
-	spec, annotations, err := NewClusterStateStore(k8sClient, key).GetSpecificationWithAnnotations(ctx)
+	spec, annotations, err := newTestClusterStateStore(t, k8sClient, key).GetSpecificationWithAnnotations(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, spec.PostgresVersion)
 	assert.Equal(t, "18", *spec.PostgresVersion)
@@ -71,7 +71,7 @@ func TestClusterSpecificationSetAnnotationsPersistsAnnotations(t *testing.T) {
 		},
 	})
 
-	err := NewClusterStateStore(k8sClient, key).SetAnnotations(ctx, map[string]string{
+	err := newTestClusterStateStore(t, k8sClient, key).SetAnnotations(ctx, map[string]string{
 		"platform.splunk.com/major-upgrade-retry-at": "2026-06-24T10:00:00Z",
 	})
 	require.NoError(t, err)

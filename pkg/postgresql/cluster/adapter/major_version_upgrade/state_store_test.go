@@ -24,15 +24,137 @@ import (
 	"testing"
 	"time"
 
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
+	majorupgrade "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases/major_version_upgrade/use_case"
+	clusterk8s "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/k8s"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func initialAttemptStoreFixture(t *testing.T) (client.Client, *platformv1alpha1.PostgresCluster, *majorUpgradeInfoStoreAdapter) {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	parent := &platformv1alpha1.PostgresCluster{Name: "orders", Namespace: "default", UID: "parent-uid", Generation: 1,
+		Spec:   platformv1alpha1.PostgresClusterSpec{PostgresVersion: new("18"), PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: new(true), Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen)}},
+		Status: platformv1alpha1.PostgresClusterStatus{Phase: new("Ready"), ObservedGeneration: new(int64(1)), Conditions: []metav1.Condition{{Type: "Ready", Status: metav1.ConditionTrue, Reason: "Ready"}}}}
+	blue := &cnpgv1.Cluster{Name: parent.Name, Namespace: parent.Namespace, UID: "blue-uid", Spec: cnpgv1.ClusterSpec{Instances: 1}, Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, Instances: 1, ReadyInstances: 1, CurrentPrimary: "orders-1", PGDataImageInfo: &cnpgv1.ImageInfo{MajorVersion: 17}, InstancesStatus: map[cnpgv1.PodStatus][]string{cnpgv1.PodHealthy: {"orders-1"}}}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(parent, blue).WithObjects(parent, blue).Build()
+	return c, parent, NewMajorUpgradeStateStore(newTestClusterStateStore(t, c, client.ObjectKeyFromObject(parent)))
+}
+
+func TestInitialBlueGreenAttemptPersistsThroughRealUseCaseSafetyReread(t *testing.T) {
+	c, parent, store := initialAttemptStoreFixture(t)
+	initial, enabled, err := store.ReadMajorUpgradeIntent(t.Context())
+	require.NoError(t, err)
+	require.True(t, enabled)
+	require.NotEmpty(t, initial.AttemptID)
+	backup := &completedInitialBackup{}
+	useCase := majorupgrade.NewMajorUpgradeUseCase(store, backup, nil, NewUpgradeNotifier(cutoverTestEvents{}, parent), nil, nil)
+	require.NoError(t, useCase.Prerequisites(t.Context()))
+	scheduled, err := useCase.Schedule(t.Context())
+	require.NoError(t, err)
+	require.True(t, scheduled)
+	report, err := useCase.Act(t.Context())
+	require.NoError(t, err, "the final safety reread must retain the initial construction identity")
+	assert.Equal(t, string(mvutypes.Scheduled), report.Phase)
+	assert.Zero(t, backup.calls, "backup creation follows durable scheduling")
+	assert.True(t, report.Retry)
+	fresh := new(platformv1alpha1.PostgresCluster)
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(parent), fresh))
+	require.Len(t, fresh.Status.PostgresMajorUpgradeStatus, 1, "the first status write must reach the actual Kubernetes status store")
+	assert.NotEqual(t, initial.AttemptID, fresh.Status.PostgresMajorUpgradeStatus[0].BlueGreen.AttemptID)
+	assert.Equal(t, string(mvutypes.Scheduled), *fresh.Status.PostgresMajorUpgradeStatus[0].Phase)
+	assert.Equal(t, "17", *fresh.Status.PostgresMajorUpgradeStatus[0].SourcePgVersion)
+	assert.Equal(t, "18", *fresh.Status.PostgresMajorUpgradeStatus[0].TargetPgVersion)
+	// A new reconcile constructs a new adapter and adopts the durable identity.
+	nextStore := NewMajorUpgradeStateStore(newTestClusterStateStore(t, c, client.ObjectKeyFromObject(parent)))
+	next, enabled, err := nextStore.ReadMajorUpgradeIntent(t.Context())
+	require.NoError(t, err)
+	require.True(t, enabled)
+	assert.Equal(t, fresh.Status.PostgresMajorUpgradeStatus[0].BlueGreen.AttemptID, next.AttemptID)
+	report, err = useCase.Act(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, string(mvutypes.Preflight), report.Phase)
+	assert.Equal(t, 1, backup.calls)
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(parent), fresh))
+	require.Len(t, fresh.Status.PostgresMajorUpgradeStatus, 1)
+	assert.Equal(t, next.AttemptID, fresh.Status.PostgresMajorUpgradeStatus[0].BlueGreen.AttemptID)
+
+}
+
+func TestInitialBlueGreenAttemptCannotOverrideConcurrentStatusOrRecreateRemoval(t *testing.T) {
+	c, parent, store := initialAttemptStoreFixture(t)
+	initial, _, err := store.ReadMajorUpgradeIntent(t.Context())
+	require.NoError(t, err)
+	fresh := new(platformv1alpha1.PostgresCluster)
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(parent), fresh))
+	fresh.Status.PostgresMajorUpgradeStatus = []platformv1alpha1.PostgresMajorUpgradeStatus{{SourcePgVersion: new("17"), TargetPgVersion: new("18"), Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen), Phase: new(string(mvutypes.Preflight)), BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "concurrent-attempt"}}}
+	require.NoError(t, c.Status().Update(t.Context(), fresh))
+	current, _, err := store.ReadMajorUpgradeIntent(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "concurrent-attempt", current.AttemptID, "persisted ownership must override an unpersisted construction ID")
+	progress := mvutypes.Progress{Report: reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight)}}
+	require.ErrorContains(t, progressError(store.SaveMajorUpgradeProgress(t.Context(), initial, progress)), "history changed")
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(parent), fresh))
+	assert.Equal(t, "concurrent-attempt", fresh.Status.PostgresMajorUpgradeStatus[0].BlueGreen.AttemptID)
+	superseding := fresh.Status.PostgresMajorUpgradeStatus[0].DeepCopy()
+	superseding.BlueGreen.AttemptID = "superseding-attempt"
+	fresh.Status.PostgresMajorUpgradeStatus = append(fresh.Status.PostgresMajorUpgradeStatus, *superseding)
+	require.NoError(t, c.Status().Update(t.Context(), fresh))
+	require.ErrorContains(t, progressError(store.SaveMajorUpgradeProgress(t.Context(), current, progress)), "superseded attempt")
+	current, _, err = store.ReadMajorUpgradeIntent(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "superseding-attempt", current.AttemptID)
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(parent), fresh))
+	fresh.Status.PostgresMajorUpgradeStatus = nil
+	require.NoError(t, c.Status().Update(t.Context(), fresh))
+	newIntent, _, err := store.ReadMajorUpgradeIntent(t.Context())
+	require.NoError(t, err)
+	assert.NotEqual(t, initial.AttemptID, newIntent.AttemptID)
+	assert.NotEqual(t, current.AttemptID, newIntent.AttemptID)
+	require.ErrorContains(t, progressError(store.SaveMajorUpgradeProgress(t.Context(), current, progress)), "removed attempt")
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(parent), fresh))
+	assert.Empty(t, fresh.Status.PostgresMajorUpgradeStatus)
+}
+
+func TestInitialBlueGreenAttemptAfterCleanedRearmCreatesOneNewDurableIdentity(t *testing.T) {
+	c, parent, store := initialAttemptStoreFixture(t)
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(parent), parent))
+	parent.Status.PostgresMajorUpgradeStatus = []platformv1alpha1.PostgresMajorUpgradeStatus{{SourcePgVersion: new("17"), TargetPgVersion: new("18"), Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen), Phase: new(string(mvutypes.Cancelled)), BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "cleaned-attempt", Blue: &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: corev1.ObjectReference{Name: parent.Name, UID: "blue-uid"}}, Cleanup: &platformv1alpha1.BlueGreenCleanupStatus{State: platformv1alpha1.BlueGreenCleanupStateCleaned}, RearmedAt: new(metav1.Now())}}}
+	require.NoError(t, c.Status().Update(t.Context(), parent))
+	first, enabled, err := store.ReadMajorUpgradeIntent(t.Context())
+	require.NoError(t, err)
+	require.True(t, enabled)
+	assert.NotEqual(t, "cleaned-attempt", first.AttemptID)
+	again, _, err := store.ReadMajorUpgradeIntent(t.Context())
+	require.NoError(t, err)
+	assert.NotEqual(t, first.AttemptID, again.AttemptID)
+	require.NoError(t, progressError(store.SaveMajorUpgradeProgress(t.Context(), first, mvutypes.Progress{Report: reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight)}})))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(parent), parent))
+	require.Len(t, parent.Status.PostgresMajorUpgradeStatus, 2)
+	assert.Equal(t, "cleaned-attempt", parent.Status.PostgresMajorUpgradeStatus[0].BlueGreen.AttemptID)
+	assert.Equal(t, first.AttemptID, parent.Status.PostgresMajorUpgradeStatus[1].BlueGreen.AttemptID)
+
+}
+
+type completedInitialBackup struct{ calls int }
+
+func (backup *completedInitialBackup) CreateBackup(_ context.Context, intent mvutypes.Intent, name func(mvutypes.Intent) string) (*mvutypes.BackupInfo, error) {
+	backup.calls++
+	return &mvutypes.BackupInfo{BackupName: name(intent)}, nil
+}
 
 func TestMajorUpgradeInputFromClusterRequiresAllow(t *testing.T) {
 	cluster := &platformv1alpha1.PostgresCluster{
@@ -147,6 +269,32 @@ func TestMajorUpgradeStateStoreComposesSpecificationStatusAndAnnotations(t *test
 	assert.Equal(t, retryAt, input.RetryRequestedAt.UTC().Format(time.RFC3339))
 	require.Len(t, input.State, 1)
 	assert.Equal(t, target, *input.State[0].TargetPgVersion)
+}
+
+func TestMajorUpgradeStateStoreReadsSwitchoverGateAndGeneration(t *testing.T) {
+	reader := NewMajorUpgradeStateStore(fakeStateStore{
+		spec: &platformv1alpha1.PostgresClusterSpec{
+			PostgresVersion: ptr.To("18"),
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
+				Allow: ptr.To(true), Strategy: ptr.To(mvutypes.MajorUpgradeFlowBlueGreen),
+				BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeConfig{
+					Switchover: ptr.To(true), SwitchoverTimeout: &metav1.Duration{Duration: 2 * time.Minute},
+				},
+			},
+		},
+		entries: []platformv1alpha1.PostgresMajorUpgradeStatus{{
+			Strategy: ptr.To(mvutypes.MajorUpgradeFlowBlueGreen), SourcePgVersion: ptr.To("17"), TargetPgVersion: ptr.To("18"),
+			BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1", Blue: &platformv1alpha1.BlueGreenEnvironmentStatus{}},
+		}},
+		sourcePgVersion: "17",
+	})
+
+	intent, enabled, err := reader.ReadMajorUpgradeIntent(t.Context())
+	require.NoError(t, err)
+	require.True(t, enabled)
+	assert.Equal(t, int64(1), intent.Generation)
+	assert.True(t, intent.SwitchoverAuthorized)
+	assert.Equal(t, 2*time.Minute, intent.SwitchoverTimeout)
 }
 
 func TestMajorUpgradeInputFromClusterSkipsWhenSourceMajorMatchesTargetMajor(t *testing.T) {
@@ -708,6 +856,62 @@ func TestStateWithProgressReplacesBlueGreenStatusAtomically(t *testing.T) {
 	assert.Equal(t, "candidate is ready", next[0].BlueGreen.Conditions[0].Message)
 }
 
+func TestSaveMajorUpgradeProgressPreservesIndependentCoordinatorCommit(t *testing.T) {
+	now := metav1.Now()
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	entry := platformv1alpha1.PostgresMajorUpgradeStatus{
+		SourcePgVersion: new("17"), TargetPgVersion: new("18"), Strategy: &strategy,
+		Phase: new(string(mvutypes.SwitchingOver)),
+		BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+			AttemptID: "attempt", Switchover: &platformv1alpha1.BlueGreenSwitchoverStatus{StartedAt: &now},
+		},
+	}
+	intent := mvutypes.Intent{Strategy: strategy, SourcePgVersion: "17", TargetPgVersion: "18", AttemptID: "attempt", State: []platformv1alpha1.PostgresMajorUpgradeStatus{entry}}
+	current := entry.DeepCopy()
+	current.BlueGreen.EndpointIntentRevision = 4
+	current.BlueGreen.EndpointPreparation = &platformv1alpha1.BlueGreenEndpointPreparationStatus{Generation: 4}
+	current.BlueGreen.EndpointPublication = &platformv1alpha1.BlueGreenEndpointPublicationStatus{Generation: 4}
+	current.BlueGreen.CommitReceipt = &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 1, CommittedAt: &now}
+	store := &recordingStateStore{fakeStateStore: fakeStateStore{entries: []platformv1alpha1.PostgresMajorUpgradeStatus{*current}}}
+	proposed := entry.BlueGreen.DeepCopy()
+	proposed.Switchover.FenceVerifiedAt = &now
+	effective, err := NewMajorUpgradeStateStore(store).SaveMajorUpgradeProgress(t.Context(), intent, mvutypes.Progress{
+		Report: reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Failed)}, BlueGreen: proposed,
+	})
+	require.NoError(t, err)
+	require.Len(t, store.saved, 1)
+	saved := store.saved[0]
+	assert.Equal(t, current.BlueGreen.CommitReceipt, saved.BlueGreen.CommitReceipt)
+	assert.Equal(t, current.BlueGreen.EndpointPreparation, saved.BlueGreen.EndpointPreparation)
+	assert.Equal(t, current.BlueGreen.EndpointPublication, saved.BlueGreen.EndpointPublication)
+	assert.Equal(t, int64(4), saved.BlueGreen.EndpointIntentRevision)
+	assert.Equal(t, &now, saved.BlueGreen.CommitReceipt.CommittedAt)
+	assert.Equal(t, proposed.Switchover, saved.BlueGreen.Switchover, "merging coordinator evidence must preserve the runtime-owned window")
+	assert.Equal(t, &now, saved.BlueGreen.Switchover.FenceVerifiedAt)
+	assert.Equal(t, string(mvutypes.SwitchingOver), *saved.Phase)
+	assert.Equal(t, *saved.Phase, effective.Report.Phase)
+	assert.Nil(t, current.BlueGreen.Switchover.FenceVerifiedAt, "merging runtime progress must not mutate the coordinator snapshot")
+	assert.Nil(t, proposed.CommitReceipt, "merging durable state must not mutate the adapter outcome")
+}
+
+func TestSaveMajorUpgradeProgressDoesNotRecreateCancelledPreparation(t *testing.T) {
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	entry := platformv1alpha1.PostgresMajorUpgradeStatus{
+		SourcePgVersion: new("17"), TargetPgVersion: new("18"), Strategy: &strategy,
+		BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt", EndpointIntentRevision: 4,
+			EndpointPreparation: &platformv1alpha1.BlueGreenEndpointPreparationStatus{Generation: 4}},
+	}
+	intent := mvutypes.Intent{Strategy: strategy, SourcePgVersion: "17", TargetPgVersion: "18", AttemptID: "attempt", State: []platformv1alpha1.PostgresMajorUpgradeStatus{entry}}
+	current := entry.DeepCopy()
+	current.BlueGreen.EndpointPreparation = nil
+	store := &recordingStateStore{fakeStateStore: fakeStateStore{entries: []platformv1alpha1.PostgresMajorUpgradeStatus{*current}}}
+	require.NoError(t, progressError(NewMajorUpgradeStateStore(store).SaveMajorUpgradeProgress(t.Context(), intent, mvutypes.Progress{
+		Report: reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Failed)}, BlueGreen: entry.BlueGreen,
+	})))
+	assert.Nil(t, store.saved[0].BlueGreen.EndpointPreparation)
+	assert.Equal(t, int64(4), store.saved[0].BlueGreen.EndpointIntentRevision)
+}
+
 func TestStateWithProgressPreservesExistingBlueGreenStatusWhenUnspecified(t *testing.T) {
 	source := "17"
 	target := "18"
@@ -1065,6 +1269,7 @@ type fakeStateStore struct {
 	sourcePgVersion string
 	specErr         error
 	statusErr       error
+	sourceErr       error
 }
 
 type recordingStateStore struct {
@@ -1072,8 +1277,12 @@ type recordingStateStore struct {
 	saved []platformv1alpha1.PostgresMajorUpgradeStatus
 }
 
-func (s *recordingStateStore) SetMajorUpgradeStatus(_ context.Context, entries []platformv1alpha1.PostgresMajorUpgradeStatus) error {
-	s.saved = append([]platformv1alpha1.PostgresMajorUpgradeStatus(nil), entries...)
+func (s *recordingStateStore) UpdateMajorUpgradeStatus(_ context.Context, update func([]platformv1alpha1.PostgresMajorUpgradeStatus) ([]platformv1alpha1.PostgresMajorUpgradeStatus, error)) error {
+	entries, err := update(s.entries)
+	if err != nil {
+		return err
+	}
+	s.saved = entries
 	return s.statusErr
 }
 
@@ -1089,14 +1298,85 @@ func (f fakeStateStore) GetSpecificationWithAnnotations(context.Context) (*platf
 
 func (fakeStateStore) GetReadyToStart(context.Context) (bool, error) { return true, nil }
 
+func (fakeStateStore) GetGeneration(context.Context) (int64, error) { return 1, nil }
+
 func (f fakeStateStore) GetMajorUpgradeStatus(context.Context) ([]platformv1alpha1.PostgresMajorUpgradeStatus, error) {
 	return f.entries, f.statusErr
 }
 
-func (f fakeStateStore) SetMajorUpgradeStatus(context.Context, []platformv1alpha1.PostgresMajorUpgradeStatus) error {
-	return f.statusErr
+func (f fakeStateStore) UpdateMajorUpgradeStatus(_ context.Context, update func([]platformv1alpha1.PostgresMajorUpgradeStatus) ([]platformv1alpha1.PostgresMajorUpgradeStatus, error)) error {
+	if f.statusErr != nil {
+		return f.statusErr
+	}
+	_, err := update(f.entries)
+	return err
 }
 
 func (f fakeStateStore) GetSourcePgVersion(context.Context) (string, error) {
+	if f.sourceErr != nil {
+		return "", f.sourceErr
+	}
 	return f.sourcePgVersion, f.statusErr
+}
+
+func TestConsumedCutoverIntentSurvivesMissingSourceAndMutableInputs(t *testing.T) {
+	now := metav1.Now()
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	entry := platformv1alpha1.PostgresMajorUpgradeStatus{SourcePgVersion: new("17"), TargetPgVersion: new("18"), Strategy: &strategy, Phase: new(string(mvutypes.SwitchingOver)), BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt", Blue: &platformv1alpha1.BlueGreenEnvironmentStatus{}, Switchover: &platformv1alpha1.BlueGreenSwitchoverStatus{Sequence: 1, StartedAt: &now}}}
+	store := fakeStateStore{spec: &platformv1alpha1.PostgresClusterSpec{PostgresVersion: new("19")}, entries: []platformv1alpha1.PostgresMajorUpgradeStatus{entry}, sourceErr: errors.New("old source no longer exists"), annotations: map[string]string{mvutypes.AnnotationMajorUpgradeRetryAt: "malformed"}}
+	intent, enabled, err := NewMajorUpgradeStateStore(store).ReadMajorUpgradeIntent(t.Context())
+	require.NoError(t, err)
+	require.True(t, enabled)
+	assert.Equal(t, "17", intent.SourcePgVersion)
+	assert.Equal(t, "18", intent.TargetPgVersion)
+	assert.Equal(t, strategy, intent.Strategy)
+	assert.Equal(t, "attempt", intent.AttemptID)
+	store.entries[0].BlueGreen.Switchover.SourceFenceRestoredAt = &now
+	store.spec.PostgresMajorUpgradeConfig = &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: new(true), Strategy: &strategy}
+	_, _, err = NewMajorUpgradeStateStore(store).ReadMajorUpgradeIntent(t.Context())
+	// Restored attempts use ordinary explicit-retry validation again.
+	assert.ErrorContains(t, err, "invalid")
+}
+
+func newTestClusterStateStore(t *testing.T, writer client.Client, key client.ObjectKey) *clusterk8s.ClusterStateStore {
+	t.Helper()
+	store, err := clusterk8s.NewClusterStateStoreWithReader(writer, writer, key)
+	require.NoError(t, err)
+	return store
+}
+
+func progressError(_ mvutypes.Progress, err error) error { return err }
+
+func TestDurableResumeDoesNotModifySpecOrAnnotations(t *testing.T) {
+	now := metav1.Now()
+	entry := platformv1alpha1.PostgresMajorUpgradeStatus{Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen), SourcePgVersion: new("17"), TargetPgVersion: new("18"), BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt", Switchover: &platformv1alpha1.BlueGreenSwitchoverStatus{StartedAt: &now, LatchedTimeout: &metav1.Duration{Duration: time.Minute}}}}
+	for _, config := range []*platformv1alpha1.PostgresMajorUpgradeConfig{nil, {Allow: new(false), Strategy: new(mvutypes.MajorUpgradeFlowPgUpgrade)}} {
+		spec := &platformv1alpha1.PostgresClusterSpec{PostgresVersion: new("19"), PostgresMajorUpgradeConfig: config}
+		before := spec.DeepCopy()
+		annotations := map[string]string{mvutypes.AnnotationMajorUpgradeRetryAt: "malformed", "unrelated": "kept"}
+		store := fakeStateStore{spec: spec, entries: []platformv1alpha1.PostgresMajorUpgradeStatus{entry}, annotations: annotations, sourceErr: errors.New("source absent")}
+		got, enabled, err := NewMajorUpgradeStateStore(store).ReadMajorUpgradeIntent(t.Context())
+		require.NoError(t, err)
+		require.True(t, enabled)
+		assert.Equal(t, "18", got.TargetPgVersion)
+		assert.Equal(t, before, spec)
+		assert.Equal(t, "malformed", annotations[mvutypes.AnnotationMajorUpgradeRetryAt])
+		assert.Equal(t, "kept", annotations["unrelated"])
+		broken := entry.DeepCopy()
+		broken.TargetPgVersion = nil
+		store.entries = []platformv1alpha1.PostgresMajorUpgradeStatus{*broken}
+		_, _, err = NewMajorUpgradeStateStore(store).ReadMajorUpgradeIntent(t.Context())
+		assert.ErrorIs(t, err, mvutypes.ErrInvalidUpgradeIntent)
+	}
+}
+
+func TestRearmUsesCurrentCASHistory(t *testing.T) {
+	entry := platformv1alpha1.PostgresMajorUpgradeStatus{Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen), SourcePgVersion: new("17"), TargetPgVersion: new("18"), BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "old", Cleanup: &platformv1alpha1.BlueGreenCleanupStatus{State: platformv1alpha1.BlueGreenCleanupStateCleaned}}}
+	intent := mvutypes.Intent{Strategy: mvutypes.MajorUpgradeFlowBlueGreen, SourcePgVersion: "17", TargetPgVersion: "18", AttemptID: "old", RequiresBlueGreenRearm: true, State: []platformv1alpha1.PostgresMajorUpgradeStatus{entry}}
+	newer := entry.DeepCopy()
+	newer.BlueGreen.AttemptID = "newer"
+	store := &recordingStateStore{fakeStateStore: fakeStateStore{entries: []platformv1alpha1.PostgresMajorUpgradeStatus{entry, *newer}}}
+	err := NewMajorUpgradeStateStore(store).SaveBlueGreenRearm(t.Context(), intent)
+	require.ErrorContains(t, err, "no longer current")
+	assert.Empty(t, store.saved)
 }

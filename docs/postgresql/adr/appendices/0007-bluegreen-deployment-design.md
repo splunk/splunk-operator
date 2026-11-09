@@ -104,6 +104,8 @@ The initial version excludes:
 
 The operator measures switchover against the configured `switchoverTimeout`. It defaults to 60 seconds; selecting another value explicitly changes that attempt's operator-controlled interruption target. The timeout is a hard rollback deadline until Endpoint Committed and an availability target afterward. It covers transaction drain, final catch-up, sequence synchronization, access ConfigMap writes, and restoration and verification of green login access.
 
+After commit, each recovery attempt has a fresh 30-second operation deadline, including SQL on established connections. An earlier caller deadline or cancellation still applies. Expiration releases the reconcile worker and retries toward green; it neither reopens blue nor reuses the expired pre-commit deadline.
+
 Applications must tolerate connection resets and retry aborted transactions. ConfigMap-backed environment variables do not update in running Pods, and mounted ConfigMap updates do not force application reloads. Application propagation, restart, and recovery time are therefore outside the configured switchover target.
 
 ### 2.4 Data-safety contract
@@ -217,6 +219,8 @@ postgresMajorUpgradeConfig:
 All controls default to `false`. Gates may be pre-authorized and are latched when consumed; setting a consumed gate back to `false` does not reverse work.
 
 `switchoverTimeout` defaults to `60s` and accepts `30s` through `3600s`.
+
+The first mutating reconciliation atomically records a `Scheduled` attempt before creating a backup or changing the source. Read-only scheduling does not cache an unpersisted identity; later reconciliations adopt the recorded attempt.
 
 Each blue/green attempt receives a durable `attemptID`. It scopes gates, resource names, labels, acknowledgments, and the canonical ConfigMap commit annotation. After a cancelled attempt is cleaned, the same version pair requires the controller to observe `allow: false` before a later `allow: true` creates another attempt. A different target version already supplies a distinct upgrade identity.
 
@@ -336,6 +340,8 @@ Fencing is declarative. The operator applies a CNPG operational overlay that:
 
 After CNPG applies the overlay and SQL catalogs and effective HBA state confirm it, the operator allows a bounded transaction-drain interval within the latched switchover timeout. It then terminates every write-capable or unclassified application or remote session. Only sessions authenticated through identities proven to be read-only may remain during final catch-up; if the operator cannot prove that distinction, it terminates every non-control and non-replication session. Uncommitted write work rolls back.
 
+The drain also checks initializing backends through their virtual-transaction locks. PostgreSQL starts that transaction before checking login permission, while a backend can remain absent from `pg_stat_activity` on PostgreSQL 17 or appear there with an incomplete startup identity on PostgreSQL 18. Such a backend blocks the final source position until it exits or becomes classifiable by the session drain. Unclassified internal processes are never terminated merely because they hold a startup lock.
+
 Only then does it capture the final blue LSN. Final parity requires:
 
 - every subscription applied through that LSN;
@@ -401,6 +407,10 @@ Before commit, failure clears the preparation intent and restores blue's fence b
 ### 5.7 Crash recovery around commit
 
 The canonical cluster ConfigMap carries the active-environment and attempt annotations and is the observable commit record. Status and database ConfigMaps are repairable projections.
+
+If the retired blue CNPG Cluster is missing after commit, recovery requires the exact durable commit, fence, and drain receipts and an uncached inventory proving that no blue instance remains. Surviving owned or source-labelled Pods block this missing-Cluster path even when unready or terminating. A same-name replacement Cluster is never adopted. When blue still exists, recovery continues to verify its effective fence and drain its remaining sessions.
+
+The endpoint coordinator owns its preparation, publication, commit receipt, intent revision, and canonical-recovery status as one Go group with the existing JSON fields. Runtime progress merges that complete group from the current resource version before validation and persistence. The immutable commit receipt is the single persisted commit-time record; interruption windows do not duplicate it. One derived cutover-stage policy selects mandatory recovery and the effective phase, including after a concurrent coordinator commit; returned reports and phase Events use the successfully persisted result.
 
 ```mermaid
 flowchart TD
