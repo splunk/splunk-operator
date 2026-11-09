@@ -26,16 +26,29 @@ import (
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ClusterStateStore struct {
 	client client.Client
+	reader client.Reader
 	key    client.ObjectKey
 }
 
-func NewClusterStateStore(c client.Client, key client.ObjectKey) *ClusterStateStore {
-	return &ClusterStateStore{client: c, key: key}
+// NewClusterStateStore uses the same client for reads and writes. Call
+// NewClusterStateStoreWithReader when safety reads require an uncached reader.
+func NewClusterStateStore(writer client.Client, key client.ObjectKey) (*ClusterStateStore, error) {
+	return NewClusterStateStoreWithReader(writer, writer, key)
+}
+
+// NewClusterStateStoreWithReader keeps intent and conflict-retry safety reads
+// outside the informer cache while retaining the ordinary client for writes.
+func NewClusterStateStoreWithReader(writer client.Client, reader client.Reader, key client.ObjectKey) (*ClusterStateStore, error) {
+	if writer == nil || reader == nil || key.Name == "" || key.Namespace == "" {
+		return nil, fmt.Errorf("postgres cluster state store requires writer, reader and namespaced parent key")
+	}
+	return &ClusterStateStore{client: writer, reader: reader, key: key}, nil
 }
 
 func (s *ClusterStateStore) GetSpecificationWithAnnotations(ctx context.Context) (*platformv1alpha1.PostgresClusterSpec, map[string]string, error) {
@@ -44,6 +57,14 @@ func (s *ClusterStateStore) GetSpecificationWithAnnotations(ctx context.Context)
 		return nil, nil, err
 	}
 	return cluster.Spec.DeepCopy(), maps.Clone(cluster.Annotations), nil
+}
+
+func (s *ClusterStateStore) GetGeneration(ctx context.Context) (int64, error) {
+	cluster, err := s.getCluster(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return cluster.Generation, nil
 }
 
 // GetReadyToStart checks the authoritative environment before the upgrade
@@ -63,7 +84,7 @@ func (s *ClusterStateStore) GetReadyToStart(ctx context.Context) (bool, error) {
 		key = client.ObjectKey{Namespace: cluster.Namespace, Name: ref.Name}
 	}
 	source := &cnpgv1.Cluster{}
-	if err := s.client.Get(ctx, key, source); err != nil {
+	if err := s.reader.Get(ctx, key, source); err != nil {
 		if apierrors.IsNotFound(err) {
 			return false, nil
 		}
@@ -102,26 +123,35 @@ func (s *ClusterStateStore) GetMajorUpgradeStatus(ctx context.Context) ([]platfo
 	return append([]platformv1alpha1.PostgresMajorUpgradeStatus(nil), cluster.Status.PostgresMajorUpgradeStatus...), nil
 }
 
-func (s *ClusterStateStore) SetMajorUpgradeStatus(ctx context.Context, entries []platformv1alpha1.PostgresMajorUpgradeStatus) error {
-	if s == nil || s.client == nil {
-		return fmt.Errorf("postgres cluster status client is not configured")
+// UpdateMajorUpgradeStatus binds the merge decision to the parent resource
+// version being written. A concurrent coordinator status write causes the
+// merge to run again against its durable result rather than replacing it.
+func (s *ClusterStateStore) UpdateMajorUpgradeStatus(ctx context.Context, update func([]platformv1alpha1.PostgresMajorUpgradeStatus) ([]platformv1alpha1.PostgresMajorUpgradeStatus, error)) error {
+	if update == nil {
+		return fmt.Errorf("major upgrade status update is not configured")
 	}
-	cluster, err := s.getCluster(ctx)
-	if err != nil {
-		return err
-	}
-	cluster.Status.PostgresMajorUpgradeStatus = append([]platformv1alpha1.PostgresMajorUpgradeStatus(nil), entries...)
-	return s.client.Status().Update(ctx, cluster)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		cluster, err := s.getCluster(ctx)
+		if err != nil {
+			return err
+		}
+		entries, err := update(cluster.Status.PostgresMajorUpgradeStatus)
+		if err != nil {
+			return err
+		}
+		cluster.Status.PostgresMajorUpgradeStatus = entries
+		return s.client.Status().Update(ctx, cluster)
+	})
 }
 
 // GetSourcePgVersion reports the PostgreSQL major version currently running, read
 // straight from the live CNPG Cluster (Status.PGDataImageInfo.MajorVersion)
 func (s *ClusterStateStore) GetSourcePgVersion(ctx context.Context) (string, error) {
-	if s == nil || s.client == nil {
+	if s == nil || s.client == nil || s.reader == nil {
 		return "", fmt.Errorf("postgres cluster source version reader is not configured")
 	}
 	cnpgCluster := &cnpgv1.Cluster{}
-	if err := s.client.Get(ctx, s.key, cnpgCluster); err != nil {
+	if err := s.reader.Get(ctx, s.key, cnpgCluster); err != nil {
 		if apierrors.IsNotFound(err) {
 			return "", nil
 		}
@@ -135,11 +165,11 @@ func (s *ClusterStateStore) GetSourcePgVersion(ctx context.Context) (string, err
 }
 
 func (s *ClusterStateStore) getCluster(ctx context.Context) (*platformv1alpha1.PostgresCluster, error) {
-	if s == nil || s.client == nil {
+	if s == nil || s.client == nil || s.reader == nil {
 		return nil, fmt.Errorf("postgres cluster status client is not configured")
 	}
 	cluster := &platformv1alpha1.PostgresCluster{}
-	if err := s.client.Get(ctx, s.key, cluster); err != nil {
+	if err := s.reader.Get(ctx, s.key, cluster); err != nil {
 		return nil, err
 	}
 	return cluster, nil

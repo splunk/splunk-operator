@@ -24,6 +24,7 @@ import (
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -37,26 +38,41 @@ func TestReportOnlyProgressPreservesDurableCutoverState(t *testing.T) {
 		{"consumed gate", platformv1alpha1.PostgresBlueGreenUpgradeStatus{Gates: &platformv1alpha1.BlueGreenGateStatus{Switchover: &platformv1alpha1.BlueGreenGateConsumptionStatus{Generation: 1, ConsumedAt: &now}}}},
 		{"interruption window", platformv1alpha1.PostgresBlueGreenUpgradeStatus{Switchover: &platformv1alpha1.BlueGreenSwitchoverStatus{Sequence: 1, StartedAt: &now}}},
 		{"commit receipt", platformv1alpha1.PostgresBlueGreenUpgradeStatus{CommitReceipt: &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 2}}},
-		{"canonical recovery", platformv1alpha1.PostgresBlueGreenUpgradeStatus{CommitReceipt: &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 2}, CanonicalRecovery: &platformv1alpha1.BlueGreenCanonicalRecoveryStatus{CommitSequence: 2}}},
+		{"canonical recovery", platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+			CommitReceipt:       &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 2, CanonicalConfigMap: &corev1.ObjectReference{Name: "canonical", Namespace: "ns", UID: "canonical-uid"}},
+			EndpointPreparation: &platformv1alpha1.BlueGreenEndpointPreparationStatus{EndpointFingerprint: new("routing")},
+			CanonicalRecovery:   &platformv1alpha1.BlueGreenCanonicalRecoveryStatus{CommitSequence: 2, ConfigMap: corev1.ObjectReference{Name: "canonical", Namespace: "ns", UID: "recovered-uid"}, EndpointFingerprint: "routing", RecoveredAt: &now},
+		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			test.bg.AttemptID = "attempt-1"
 			original := test.bg.DeepCopy()
 			intent := mvutypes.Intent{Strategy: mvutypes.MajorUpgradeFlowBlueGreen, AttemptID: test.bg.AttemptID, SourcePgVersion: "17", TargetPgVersion: "18"}
 			intent.State = []platformv1alpha1.PostgresMajorUpgradeStatus{{Strategy: &intent.Strategy, SourcePgVersion: &intent.SourcePgVersion, TargetPgVersion: &intent.TargetPgVersion, BlueGreen: &test.bg}}
-			store := &recordingStateStore{}
+			store := &recordingStateStore{fakeStateStore: fakeStateStore{entries: intent.State}}
 			cause := errors.New("original cutover probe failed")
 			adapter := NewMajorUpgradeStateStore(store)
-			err := adapter.SaveMajorUpgradeProgress(t.Context(), intent, mvutypes.Progress{Report: reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Failed), Message: cause.Error()}})
+			err := progressError(adapter.SaveMajorUpgradeProgress(t.Context(), intent, mvutypes.Progress{Report: reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Failed), Message: cause.Error()}}))
 			require.NoError(t, err)
 			require.Len(t, store.saved, 1)
-			require.Equal(t, string(mvutypes.Failed), *store.saved[0].Phase)
+			phase := mvutypes.Failed
+			if mvutypes.CutoverStageOfStatus(&test.bg).OwnsRecovery() {
+				phase = mvutypes.SwitchingOver
+			}
+			require.Equal(t, string(phase), *store.saved[0].Phase)
 			require.Contains(t, store.saved[0].Conditions[0].Message, cause.Error())
 			require.Equal(t, original, store.saved[0].BlueGreen)
 			require.Equal(t, original, intent.State[0].BlueGreen)
 			store.saved = nil
-			require.Error(t, adapter.SaveMajorUpgradeProgress(t.Context(), intent, mvutypes.Progress{BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: intent.AttemptID}}), "an explicit replacement must still retain durable state")
-			require.Empty(t, store.saved, "a rejected transition must never reach persistence")
+			replacementErr := progressError(adapter.SaveMajorUpgradeProgress(t.Context(), intent, mvutypes.Progress{BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: intent.AttemptID}}))
+			if test.bg.CommitReceipt != nil {
+				require.NoError(t, replacementErr, "coordinator-owned state always comes from the fresh snapshot")
+				require.Equal(t, original, store.saved[0].BlueGreen)
+			} else {
+				require.Error(t, replacementErr, "runtime-owned durable state cannot be discarded")
+				require.Empty(t, store.saved)
+			}
+
 		})
 	}
 }

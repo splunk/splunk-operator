@@ -56,6 +56,20 @@ func cutoverSessionPredicate(id cutoverIdentity) string {
 		quoteSQLStringLiteral(id.Role) + "," + quoteSQLStringLiteral(replicationRoleName(id.AttemptID)) + ",'streaming_replica','cnpg_pooler_pgbouncer') AND (client_addr IS NOT NULL OR usename <> 'postgres')"
 }
 
+// InitPostgres starts a transaction (and holds its virtualxid lock) before
+// checking LOGIN. On PG17 it registers activity only after startup completes;
+// PG18 can expose an incomplete "starting" entry. After the effective login
+// fence is verified, every earlier admitted but unclassified backend must
+// remain a blocker until it exits or becomes visible to the session drain.
+// Never terminate an unclassified process: it may be an internal worker.
+const cutoverStartupPIDsSQL = `SELECT COALESCE(array_agg(DISTINCT pid),ARRAY[]::integer[]) FROM pg_catalog.pg_locks
+WHERE locktype='virtualxid' AND mode='ExclusiveLock' AND granted AND pid<>pg_catalog.pg_backend_pid()`
+
+const cutoverInitializingBackendsSQL = `SELECT 1 FROM unnest($1::integer[]) startup(pid)
+LEFT JOIN pg_catalog.pg_stat_activity activity ON activity.pid=startup.pid
+WHERE activity.pid IS NULL OR activity.backend_type IS NULL
+ OR (activity.backend_type='client backend' AND (activity.usename IS NULL OR activity.state='starting'))`
+
 // controlHelperCallSQL invokes an operator-owned helper in the fixed control schema.
 func controlHelperCallSQL(function string) string {
 	return "SELECT " + pginfra.QuoteIdentifier(candidateGuardSchema) + "." + pginfra.QuoteIdentifier(function) + "()"

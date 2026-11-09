@@ -950,7 +950,7 @@ func TestHistoricalBlueGreenAttemptUsesCurrentProviderAuthority(t *testing.T) {
 			}
 			if tc.missingCommitReceipt {
 				committed := metav1.Now()
-				bg.Switchover = &platformv1alpha1.BlueGreenSwitchoverStatus{EndpointCommittedAt: &committed, TargetAvailableAt: &committed}
+				bg.Switchover = &platformv1alpha1.BlueGreenSwitchoverStatus{TargetAvailableAt: &committed}
 			}
 			parent := &platformv1alpha1.PostgresCluster{ObjectMeta: metav1.ObjectMeta{Name: "postgres", Namespace: "ns", UID: "parent-uid", ResourceVersion: "20"}, Status: platformv1alpha1.PostgresClusterStatus{ProvisionerRef: &corev1.ObjectReference{Name: providerName, UID: types.UID(providerName + "-uid")}, PostgresMajorUpgradeStatus: []platformv1alpha1.PostgresMajorUpgradeStatus{{BlueGreen: bg}, {}}}}
 			apiReader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(child, parent).Build()
@@ -1478,5 +1478,30 @@ func assertHistoricalEndpointError(t *testing.T, err error, cleanup platformv1al
 		require.ErrorContains(t, err, "no longer current")
 	} else {
 		require.NoError(t, err)
+	}
+}
+
+func TestHistoricalCancellationCannotDiscardCommitOrAvailabilityEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		receipt   *platformv1alpha1.BlueGreenCommitReceiptStatus
+		available bool
+		want      bool
+	}{
+		{name: "precommit source retained", want: true},
+		{name: "receipt without timestamp", receipt: &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 1}},
+		{name: "timestamped receipt", receipt: &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 1, CommittedAt: new(metav1.Now())}},
+		{name: "availability awaiting receipt repair", available: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			blue := corev1.ObjectReference{Name: "blue", UID: "blue-uid"}
+			bg := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt", Blue: &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: blue}, Cleanup: &platformv1alpha1.BlueGreenCleanupStatus{State: platformv1alpha1.BlueGreenCleanupStateCleaned}, CommitReceipt: tc.receipt}
+			if tc.available {
+				bg.Switchover = &platformv1alpha1.BlueGreenSwitchoverStatus{TargetAvailableAt: new(metav1.Now())}
+			}
+			view := endpointAttemptView{state: endpointAttemptHistorical, status: bg}
+			parent := &platformv1alpha1.PostgresCluster{Status: platformv1alpha1.PostgresClusterStatus{ProvisionerRef: blue.DeepCopy()}}
+			require.Equal(t, tc.want, view.precommitCancellation(parent))
+		})
 	}
 }

@@ -30,10 +30,10 @@ func TestRetainedSourceNeedsAnExactCommittedAttemptAndFenceProof(t *testing.T) {
 	status := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
 		AttemptID:     "attempt",
 		Green:         &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: corev1.ObjectReference{Name: "green", UID: "green-uid"}},
-		CommitReceipt: &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 1, CanonicalConfigMap: &corev1.ObjectReference{Name: "access", UID: "canonical-uid"}, Target: &corev1.ObjectReference{Name: "green", UID: "green-uid"}},
+		CommitReceipt: &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 1, CommittedAt: &now, CanonicalConfigMap: &corev1.ObjectReference{Name: "access", UID: "canonical-uid"}, Target: &corev1.ObjectReference{Name: "green", UID: "green-uid"}},
 		Switchover: &platformv1alpha1.BlueGreenSwitchoverStatus{
 			ControlIdentity: &platformv1alpha1.BlueGreenControlIdentityStatus{RoleName: "control", PreparedAt: &now},
-			FenceVerifiedAt: &now, DrainCompletedAt: &now, EndpointCommittedAt: &now, FinalBlueLSN: new("0/100"),
+			FenceVerifiedAt: &now, DrainCompletedAt: &now, FinalBlueLSN: new("0/100"),
 		},
 	}
 	require.True(t, HasRetainedSourceFenceProof(status, "attempt", "control"))
@@ -53,7 +53,7 @@ func TestRetainedSourceNeedsAnExactCommittedAttemptAndFenceProof(t *testing.T) {
 		{"fence unverified", func(s *platformv1alpha1.PostgresBlueGreenUpgradeStatus) { s.Switchover.FenceVerifiedAt = nil }},
 		{"undrained", func(s *platformv1alpha1.PostgresBlueGreenUpgradeStatus) { s.Switchover.DrainCompletedAt = nil }},
 		{"no final LSN", func(s *platformv1alpha1.PostgresBlueGreenUpgradeStatus) { s.Switchover.FinalBlueLSN = nil }},
-		{"no commit milestone", func(s *platformv1alpha1.PostgresBlueGreenUpgradeStatus) { s.Switchover.EndpointCommittedAt = nil }},
+		{"no commit timestamp", func(s *platformv1alpha1.PostgresBlueGreenUpgradeStatus) { s.CommitReceipt.CommittedAt = nil }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			next := status.DeepCopy()

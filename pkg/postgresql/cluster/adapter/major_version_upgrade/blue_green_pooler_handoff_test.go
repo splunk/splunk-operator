@@ -65,7 +65,7 @@ func TestCandidatePoolerEndpointsResolvePreparedTopology(t *testing.T) {
 			green := &cnpgv1.Cluster{
 				Name: "green", Namespace: parent.Namespace, UID: "green-uid",
 				Spec:   cnpgv1.ClusterSpec{Instances: 2},
-				Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, ReadyInstances: 2, WriteService: "green-rw", ReadService: "green-ro"},
+				Status: cnpgv1.ClusterStatus{Phase: cnpgv1.PhaseHealthy, ReadyInstances: 2, WriteService: "green-rw", ReadService: "green-r"},
 			}
 			preparer := &BlueGreenCandidatePreparer{cluster: parent}
 			objects := []client.Object{green}
