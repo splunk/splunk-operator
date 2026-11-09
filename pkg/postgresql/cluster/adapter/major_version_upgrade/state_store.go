@@ -18,7 +18,9 @@ package majorupgradeadapter
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -32,9 +34,10 @@ import (
 
 type MajorUpgradeStateStore interface {
 	GetSpecificationWithAnnotations(context.Context) (*platformv1alpha1.PostgresClusterSpec, map[string]string, error)
+	GetGeneration(context.Context) (int64, error)
 	GetReadyToStart(context.Context) (bool, error)
 	GetMajorUpgradeStatus(context.Context) ([]platformv1alpha1.PostgresMajorUpgradeStatus, error)
-	SetMajorUpgradeStatus(context.Context, []platformv1alpha1.PostgresMajorUpgradeStatus) error
+	UpdateMajorUpgradeStatus(context.Context, func([]platformv1alpha1.PostgresMajorUpgradeStatus) ([]platformv1alpha1.PostgresMajorUpgradeStatus, error)) error
 	GetSourcePgVersion(context.Context) (string, error)
 }
 
@@ -70,18 +73,116 @@ func (r *majorUpgradeInfoStoreAdapter) ReadMajorUpgradeIntent(ctx context.Contex
 	if err != nil {
 		return mvutypes.Intent{}, false, err
 	}
-	sourceVersion, err := r.store.GetSourcePgVersion(ctx)
+	var sourceVersion string
+	if len(entries) > 0 {
+		entry := entries[len(entries)-1]
+		stage := mvutypes.CutoverStageOf(entry)
+		if stage.OwnsRecovery() {
+			intent, err := intentFromDurableAttempt(entry, entries)
+			if err != nil {
+				return mvutypes.Intent{}, false, err
+			}
+			return r.withCurrentCutoverPolicy(ctx, intent, spec)
+		}
+		if stage == mvutypes.CutoverRestored && entry.SourcePgVersion != nil {
+			sourceVersion = *entry.SourcePgVersion
+		}
+	}
+	if sourceVersion == "" {
+		sourceVersion, err = r.store.GetSourcePgVersion(ctx)
+		if err != nil {
+			return mvutypes.Intent{}, false, err
+		}
+	}
+	intent, exists, err := MajorUpgradeInputFromParts(spec, entries, annotations, sourceVersion)
+	if err != nil || !exists || intent.Strategy != mvutypes.MajorUpgradeFlowBlueGreen {
+		return intent, exists, err
+	}
+	return r.withCurrentCutoverPolicy(ctx, intent, spec)
+}
+
+// intentFromDurableAttempt resumes mandatory recovery without synthesizing a
+// customer specification or suppressing its annotations. The persisted attempt
+// owns its versions and identity until source restoration or completion.
+func intentFromDurableAttempt(entry platformv1alpha1.PostgresMajorUpgradeStatus, entries []platformv1alpha1.PostgresMajorUpgradeStatus) (mvutypes.Intent, error) {
+	if entry.BlueGreen == nil || entry.BlueGreen.AttemptID == "" || entry.SourcePgVersion == nil || *entry.SourcePgVersion == "" || entry.TargetPgVersion == nil || *entry.TargetPgVersion == "" || entry.Strategy == nil || *entry.Strategy != mvutypes.MajorUpgradeFlowBlueGreen {
+		return mvutypes.Intent{}, errors.Join(mvutypes.ErrInvalidUpgradeIntent, errors.New("durable blue/green recovery identity is incomplete"))
+	}
+	return mvutypes.Intent{Strategy: *entry.Strategy, SourcePgVersion: *entry.SourcePgVersion, TargetPgVersion: *entry.TargetPgVersion, AttemptID: entry.BlueGreen.AttemptID, State: entries, Policy: mvutypes.DefaultUpgradePolicy()}, nil
+}
+
+func (r *majorUpgradeInfoStoreAdapter) withCurrentCutoverPolicy(ctx context.Context, intent mvutypes.Intent, spec *platformv1alpha1.PostgresClusterSpec) (mvutypes.Intent, bool, error) {
+	var err error
+	intent.Generation, err = r.store.GetGeneration(ctx)
 	if err != nil {
 		return mvutypes.Intent{}, false, err
 	}
-	return MajorUpgradeInputFromParts(spec, entries, annotations, sourceVersion)
+	intent.SwitchoverTimeout = platformv1alpha1.DefaultBlueGreenSwitchoverTimeout
+	if spec != nil && spec.PostgresMajorUpgradeConfig != nil && spec.PostgresMajorUpgradeConfig.BlueGreen != nil {
+		config := spec.PostgresMajorUpgradeConfig.BlueGreen
+		intent.SwitchoverAuthorized = config.Switchover != nil && *config.Switchover
+		intent.SwitchoverTimeout = config.EffectiveSwitchoverTimeout()
+	}
+	return intent, true, nil
 }
 
-func (r *majorUpgradeInfoStoreAdapter) SaveMajorUpgradeProgress(ctx context.Context, intent mvutypes.Intent, progress mvutypes.Progress) error {
-	if err := mvutypes.ValidateBlueGreenProgress(intent, progress); err != nil {
-		return err
+func (r *majorUpgradeInfoStoreAdapter) SaveMajorUpgradeProgress(ctx context.Context, intent mvutypes.Intent, proposed mvutypes.Progress) (mvutypes.Progress, error) {
+	var saved mvutypes.Progress
+	err := r.store.UpdateMajorUpgradeStatus(ctx, func(entries []platformv1alpha1.PostgresMajorUpgradeStatus) ([]platformv1alpha1.PostgresMajorUpgradeStatus, error) {
+		latest := intent
+		latest.State = entries
+		progress := proposed
+		if intent.Strategy == mvutypes.MajorUpgradeFlowBlueGreen {
+			var err error
+			progress, err = preserveEndpointProgress(intent, latest, progress)
+			if err != nil {
+				return nil, err
+			}
+			progress = mvutypes.NormalizeCutoverProgress(progress)
+		}
+		if err := mvutypes.ValidateBlueGreenProgress(latest, progress); err != nil {
+			return nil, err
+		}
+		saved = progress
+		return stateWithProgress(latest, progress), nil
+	})
+	return saved, err
+}
+
+// Endpoint orchestration persists its own barriers and commit receipt. Merge
+// these fields from the current resource version so an outer progress write
+// cannot undo a canonical commit, discard child acknowledgements, or restore
+// an endpoint intent that the coordinator has cancelled.
+func preserveEndpointProgress(original, latest mvutypes.Intent, progress mvutypes.Progress) (mvutypes.Progress, error) {
+	var current *platformv1alpha1.PostgresBlueGreenUpgradeStatus
+	for i := len(latest.State) - 1; i >= 0; i-- {
+		entry := latest.State[i]
+		if mvutypes.MatchesIntent(entry, latest) {
+			if i != len(latest.State)-1 {
+				return progress, fmt.Errorf("blue/green progress refers to a superseded attempt %q", original.AttemptID)
+			}
+			current = entry.BlueGreen
+			break
+		}
 	}
-	return r.store.SetMajorUpgradeStatus(ctx, stateWithProgress(intent, progress))
+	if current == nil {
+		for _, entry := range original.State {
+			if mvutypes.MatchesIntent(entry, original) {
+				return progress, fmt.Errorf("blue/green progress refers to a removed attempt %q", original.AttemptID)
+			}
+		}
+		if !reflect.DeepEqual(original.State, latest.State) {
+			return progress, fmt.Errorf("blue/green upgrade history changed before starting attempt %q", original.AttemptID)
+		}
+		return progress, nil
+	}
+	if progress.BlueGreen == nil {
+		progress.BlueGreen = current.DeepCopy()
+	} else {
+		progress.BlueGreen = progress.BlueGreen.DeepCopy()
+	}
+	progress.BlueGreen.BlueGreenEndpointProtocolStatus = *current.BlueGreenEndpointProtocolStatus.DeepCopy()
+	return progress, nil
 }
 
 func MajorUpgradeInputFromCluster(cluster *platformv1alpha1.PostgresCluster) (mvutypes.Intent, bool, error) {

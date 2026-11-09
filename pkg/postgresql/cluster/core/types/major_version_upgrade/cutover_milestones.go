@@ -55,7 +55,6 @@ func SwitchoverMilestones() []SwitchoverMilestone {
 		}},
 		{Field: "CandidateGuardsRemovedAt", Name: "candidate guard removal time", RequiredBeforeCommit: true, timestamp: func(s *platformv1alpha1.BlueGreenSwitchoverStatus) **metav1.Time { return &s.CandidateGuardsRemovedAt }},
 		{Field: "FinalParityVerifiedAt", Name: "final parity verification time", RequiredBeforeCommit: true, timestamp: func(s *platformv1alpha1.BlueGreenSwitchoverStatus) **metav1.Time { return &s.FinalParityVerifiedAt }},
-		{Field: "EndpointCommittedAt", Name: "endpoint commit time", RequiredBeforeCommit: false, timestamp: func(s *platformv1alpha1.BlueGreenSwitchoverStatus) **metav1.Time { return &s.EndpointCommittedAt }},
 		{Field: "BlueSessionsTerminatedAt", Name: "blue session termination time", RequiredBeforeCommit: false, timestamp: func(s *platformv1alpha1.BlueGreenSwitchoverStatus) **metav1.Time { return &s.BlueSessionsTerminatedAt }},
 		{Field: "GreenFenceRemovedAt", Name: "green fence removal time", RequiredBeforeCommit: false, timestamp: func(s *platformv1alpha1.BlueGreenSwitchoverStatus) **metav1.Time { return &s.GreenFenceRemovedAt }},
 		{Field: "TargetAvailableAt", Name: "target availability time", RequiredBeforeCommit: false, timestamp: func(s *platformv1alpha1.BlueGreenSwitchoverStatus) **metav1.Time { return &s.TargetAvailableAt }},

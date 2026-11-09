@@ -144,7 +144,7 @@ func (view endpointAttemptView) precommitCancellation(parent *platformv1alpha1.P
 		parent.Status.ProvisionerRef.Name != bg.Blue.Ref.Name || parent.Status.ProvisionerRef.UID != bg.Blue.Ref.UID {
 		return false
 	}
-	return bg.Switchover == nil || bg.Switchover.EndpointCommittedAt == nil && bg.Switchover.TargetAvailableAt == nil
+	return bg.Switchover == nil || bg.Switchover.TargetAvailableAt == nil
 }
 
 func classifyEndpointAttempt(view endpointAttemptView, entry platformv1alpha1.PostgresMajorUpgradeStatus) endpointAttemptState {

@@ -161,6 +161,13 @@ func drainCutoverInstance(ctx context.Context, conn pginfra.Conn, id cutoverIden
 	if err := verifyControlDatabase(ctx, conn, id); err != nil {
 		return false, err
 	}
+	// Capture startup locks in a separate round trip before activity can be
+	// snapshotted. Otherwise startup could register activity and release its
+	// lock between an older activity snapshot and a newer lock inventory.
+	var startupPIDs []int32
+	if err := queryOne(ctx, conn, &startupPIDs, cutoverStartupPIDsSQL); err != nil {
+		return false, err
+	}
 	if terminate {
 		var sent bool
 		if err := queryCutoverBoolean(ctx, conn, &sent, controlHelperCallSQL(controlTerminateFunction)); err != nil {
@@ -168,6 +175,6 @@ func drainCutoverInstance(ctx context.Context, conn pginfra.Conn, id cutoverIden
 		}
 	}
 	var drained bool
-	err := queryCutoverBoolean(ctx, conn, &drained, "SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_stat_activity WHERE "+cutoverSessionPredicate(id)+") AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_prepared_xacts)")
+	err := queryCutoverBoolean(ctx, conn, &drained, "SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_stat_activity WHERE "+cutoverSessionPredicate(id)+") AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_prepared_xacts) AND NOT EXISTS ("+cutoverInitializingBackendsSQL+")", startupPIDs)
 	return drained, err
 }

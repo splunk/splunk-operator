@@ -38,6 +38,7 @@ func TestCutoverDrainRequeriesAfterTermination(t *testing.T) {
 				if strings.Contains(sql, "SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_stat_activity WHERE") {
 					assert.True(t, terminated, "termination acknowledgment must not be treated as proof of absence")
 					assert.Contains(t, sql, "pg_prepared_xacts")
+					assert.Contains(t, sql, "unnest($1::integer[])")
 					return [][]any{{!remaining}}, nil
 				}
 				return [][]any{{true}}, nil

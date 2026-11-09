@@ -163,7 +163,7 @@ func TestMajorUpgradeUseCaseEntersBlueGreenPreflightBeforePreparingSource(t *tes
 
 	report, err := useCase.Act(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, string(mvutypes.Preflight), report.Phase)
+	assert.Equal(t, string(mvutypes.Scheduled), report.Phase)
 	assert.Equal(t, mvutypes.ReasonUpgradeFlowPending, report.Reason)
 	assert.Zero(t, preparer.calls, "source mutations begin only after Preflight is durable")
 	assert.Nil(t, store.progress.BlueGreen)
@@ -201,6 +201,8 @@ func TestMajorUpgradeUseCaseRequiresBackupBeforeBlueGreenPreparation(t *testing.
 	intent := mvutypes.Intent{Strategy: mvutypes.MajorUpgradeFlowBlueGreen, SourcePgVersion: "17", TargetPgVersion: "18", AttemptID: "attempt-1"}
 	useCase := NewMajorUpgradeUseCase(&blueGreenProgressStore{intent: intent}, nil, nil, pgupgradeflow.NoopNotifier(), &fakeBlueGreenPreparer{}, nil)
 
+	// A persisted scheduling entry exists before backup creation is attempted.
+	useCase.store.(*blueGreenProgressStore).intent.State = []platformv1alpha1.PostgresMajorUpgradeStatus{{Strategy: new(intent.Strategy), SourcePgVersion: new(intent.SourcePgVersion), TargetPgVersion: new(intent.TargetPgVersion), Phase: new(string(mvutypes.Scheduled)), BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: intent.AttemptID}}}
 	_, err := useCase.Act(t.Context())
 	require.ErrorIs(t, err, mvutypes.ErrBackupProviderMissing)
 }
@@ -804,8 +806,8 @@ func (f majorUpgradeInfoStoreFunc) ReadMajorUpgradeIntent(ctx context.Context) (
 
 func (majorUpgradeInfoStoreFunc) ReadyToStart(context.Context) (bool, error) { return true, nil }
 
-func (f majorUpgradeInfoStoreFunc) SaveMajorUpgradeProgress(context.Context, mvutypes.Intent, mvutypes.Progress) error {
-	return nil
+func (f majorUpgradeInfoStoreFunc) SaveMajorUpgradeProgress(_ context.Context, _ mvutypes.Intent, progress mvutypes.Progress) (mvutypes.Progress, error) {
+	return progress, nil
 }
 
 func (f majorUpgradeInfoStoreFunc) SaveBlueGreenRearm(context.Context, mvutypes.Intent) error {
@@ -829,9 +831,9 @@ func (s *blueGreenProgressStore) ReadMajorUpgradeIntent(context.Context) (mvutyp
 
 func (*blueGreenProgressStore) ReadyToStart(context.Context) (bool, error) { return true, nil }
 
-func (s *blueGreenProgressStore) SaveMajorUpgradeProgress(_ context.Context, _ mvutypes.Intent, progress mvutypes.Progress) error {
+func (s *blueGreenProgressStore) SaveMajorUpgradeProgress(_ context.Context, _ mvutypes.Intent, progress mvutypes.Progress) (mvutypes.Progress, error) {
 	s.progress = progress
-	return nil
+	return progress, nil
 }
 
 func (s *blueGreenProgressStore) SaveBlueGreenRearm(context.Context, mvutypes.Intent) error {
@@ -866,9 +868,9 @@ func (s *blueGreenRearmStore) ReadMajorUpgradeIntent(context.Context) (mvutypes.
 
 func (*blueGreenRearmStore) ReadyToStart(context.Context) (bool, error) { return true, nil }
 
-func (s *blueGreenRearmStore) SaveMajorUpgradeProgress(context.Context, mvutypes.Intent, mvutypes.Progress) error {
+func (s *blueGreenRearmStore) SaveMajorUpgradeProgress(_ context.Context, _ mvutypes.Intent, progress mvutypes.Progress) (mvutypes.Progress, error) {
 	s.progressWrites++
-	return nil
+	return progress, nil
 }
 
 func (s *blueGreenRearmStore) SaveBlueGreenRearm(context.Context, mvutypes.Intent) error {

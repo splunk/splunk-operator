@@ -61,9 +61,8 @@ func retainedSourceSQLFixture(t *testing.T) (*postgresSwitchoverSQL, *cnpgv1.Clu
 	now := metav1.Now()
 	status.Switchover.FenceVerifiedAt = &now
 	status.Switchover.DrainCompletedAt = &now
-	status.Switchover.EndpointCommittedAt = &now
 	status.Switchover.FinalBlueLSN = new("0/100")
-	status.CommitReceipt = &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 1, CanonicalConfigMap: &corev1.ObjectReference{Name: "canonical", UID: "canonical-uid"}, Target: status.Green.Ref.DeepCopy()}
+	status.CommitReceipt = &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 1, CommittedAt: &now, CanonicalConfigMap: &corev1.ObjectReference{Name: "canonical", UID: "canonical-uid"}, Target: status.Green.Ref.DeepCopy()}
 	id, err := access.Credentials(t.Context(), status)
 	require.NoError(t, err)
 	var calls []string
@@ -83,12 +82,16 @@ func retainedSourceSQLFixture(t *testing.T) (*postgresSwitchoverSQL, *cnpgv1.Clu
 
 type cutoverSQLTestConn struct {
 	preflightSQLTestConn
-	query    func(string, []any) ([][]any, error)
-	rowError func(string, []any) error
+	startupPIDs []int32
+	query       func(string, []any) ([][]any, error)
+	rowError    func(string, []any) error
 }
 
 func (c *cutoverSQLTestConn) Query(_ context.Context, sql string, args ...any) (pginfra.Rows, error) {
 	c.queries = append(c.queries, sql)
+	if sql == cutoverStartupPIDsSQL {
+		return &cutoverSQLTestRows{values: [][]any{{c.startupPIDs}}}, nil
+	}
 	rows, err := c.query(sql, args)
 	if err != nil {
 		return nil, err

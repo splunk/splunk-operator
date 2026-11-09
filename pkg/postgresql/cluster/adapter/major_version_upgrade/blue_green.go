@@ -34,11 +34,16 @@ func (r *majorUpgradeInfoStoreAdapter) SaveBlueGreenRearm(ctx context.Context, i
 	if !intent.RequiresBlueGreenRearm {
 		return fmt.Errorf("blue/green re-arm write requires a re-arm intent")
 	}
-	next, changed := stateWithBlueGreenRearm(intent.State, intent)
-	if !changed {
-		return nil
-	}
-	return r.store.SetMajorUpgradeStatus(ctx, next)
+	return r.store.UpdateMajorUpgradeStatus(ctx, func(entries []platformv1alpha1.PostgresMajorUpgradeStatus) ([]platformv1alpha1.PostgresMajorUpgradeStatus, error) {
+		if len(entries) == 0 || !mvutypes.MatchesIntent(entries[len(entries)-1], intent) {
+			return nil, fmt.Errorf("blue/green re-arm attempt %q is no longer current", intent.AttemptID)
+		}
+		next, changed := stateWithBlueGreenRearm(entries, intent)
+		if !changed {
+			return entries, nil
+		}
+		return next, nil
+	})
 }
 
 // shouldObserveBlueGreenRearm detects the only inactive configuration that
