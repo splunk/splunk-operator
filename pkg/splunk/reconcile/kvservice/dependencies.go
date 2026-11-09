@@ -165,6 +165,10 @@ func ensureTenantPostgresReady(ctx context.Context, c splcommon.ControllerClient
 				status.Reason = "AuthenticationInvalid"
 				status.Message = message
 			}
+			if !apierrors.IsNotFound(authErr) {
+				logging.FromContext(ctx).ErrorContext(ctx, "tenant authentication Secret unavailable", "tenant", tenant,
+					"namespace", status.Namespace, "secret", splcommon.GetNamespaceScopedSecretName(status.Namespace), "error", authErr)
+			}
 		} else if dbReady {
 			snapshot, info, resolveErr := k8sops.ResolveKVServiceTenantDependencies(ctx, c, cr, db, tenant)
 			if resolveErr != nil {

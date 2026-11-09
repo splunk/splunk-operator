@@ -15,11 +15,16 @@
 package kvservice
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"log/slog"
 	"testing"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	"github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	"github.com/stretchr/testify/require"
@@ -29,6 +34,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
 func TestServiceDatabaseStartsWithoutTenantsAndIsolatesTenantFailures(t *testing.T) {
@@ -111,14 +117,20 @@ func TestTenantStatusEventsAndRecoveryDoNotStallService(t *testing.T) {
 	require.NoError(t, c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: "ns-a", Name: "splunk-ns-a-secret"}}))
 	_, err := Apply(ctx, c, client.ObjectKeyFromObject(cr), recorder)
 	require.NoError(t, err)
-	require.Equal(t, 1, countKVServiceEvents(drainKVServiceEvents(recorder), "Warning TenantNotReady "))
+	require.Equal(t, 1, countKVServiceEvents(drainKVServiceEvents(recorder), "Warning "+string(common.EventReasonTenantNotReady)+" "))
 	deployment := &appsv1.Deployment{}
 	require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: cr.Namespace, Name: "splunk-kvs2-kvservice"}, deployment))
 	deployment.Status = appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1, ReadyReplicas: 1}
 	require.NoError(t, c.Status().Update(ctx, deployment))
 	_, err = Apply(ctx, c, client.ObjectKeyFromObject(cr), recorder)
 	require.NoError(t, err)
-	require.Zero(t, countKVServiceEvents(drainKVServiceEvents(recorder), "Warning TenantNotReady "))
+	transitionEvents := drainKVServiceEvents(recorder)
+	require.Zero(t, countKVServiceEvents(transitionEvents, "Warning "+string(common.EventReasonTenantNotReady)+" "))
+	require.Equal(t, 1, countKVServiceEvents(transitionEvents, "Normal "+string(common.EventReasonReady)+" "))
+	result, err := Apply(ctx, c, client.ObjectKeyFromObject(cr), recorder)
+	require.NoError(t, err)
+	require.Equal(t, 5*time.Second, result.RequeueAfter)
+	require.Empty(t, drainKVServiceEvents(recorder), "pending tenant retries must not repeat service Ready events")
 	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(cr), cr))
 	require.Equal(t, enterpriseApi.PhaseReady, cr.Status.Phase)
 	require.Equal(t, metav1.ConditionFalse, meta.FindStatusCondition(cr.Status.Conditions, "TenantsReady").Status)
@@ -126,7 +138,28 @@ func TestTenantStatusEventsAndRecoveryDoNotStallService(t *testing.T) {
 	require.NoError(t, c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: "ns-a", Name: "splunk-ns-a-secret"}, Data: map[string][]byte{"pass4SymmKey": []byte("alpha-key")}}))
 	_, err = Apply(ctx, c, client.ObjectKeyFromObject(cr), recorder)
 	require.NoError(t, err)
-	require.Equal(t, 1, countKVServiceEvents(drainKVServiceEvents(recorder), "Normal TenantReady "))
+	require.Equal(t, 1, countKVServiceEvents(drainKVServiceEvents(recorder), "Normal "+string(common.EventReasonTenantReady)+" "))
 	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(cr), cr))
 	require.Equal(t, metav1.ConditionTrue, meta.FindStatusCondition(cr.Status.Conditions, "TenantsReady").Status)
+}
+
+func TestTenantAuthenticationReadFailureIsLoggedAndIsolated(t *testing.T) {
+	cr, _, c := postgresReadinessFixture(t)
+	failure := errors.New("authentication read unavailable")
+	var logs bytes.Buffer
+	ctx := logging.WithLogger(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
+	guarded := interceptor.NewClient(c, interceptor.Funcs{Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+		if _, secret := obj.(*corev1.Secret); secret && key.Namespace == "ns-a" && key.Name == "splunk-ns-a-secret" {
+			return failure
+		}
+		return c.Get(ctx, key, obj, opts...)
+	}})
+	_, ready, _, err := ensureTenantPostgresReady(ctx, guarded, cr)
+	require.NoError(t, err)
+	require.True(t, ready)
+	require.Equal(t, "AuthenticationPending", cr.Status.Tenants[0].Reason)
+	require.True(t, cr.Status.Tenants[1].Ready)
+	for _, detail := range []string{failure.Error(), "tenant=alpha", "namespace=ns-a", "secret=splunk-ns-a-secret"} {
+		require.Contains(t, logs.String(), detail)
+	}
 }

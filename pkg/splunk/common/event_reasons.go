@@ -33,6 +33,11 @@ const (
 	EventReasonClusterQuorumRestored EventReason = "ClusterQuorumRestored"
 	EventReasonPasswordSyncCompleted EventReason = "PasswordSyncCompleted"
 
+	EventReasonTenantReady EventReason = "TenantReady"
+
+	// Warning event reasons — tenant readiness
+	EventReasonTenantNotReady EventReason = "TenantNotReady"
+
 	// Warning event reasons — spec & config
 	EventReasonValidateSpecFailed      EventReason = "ValidateSpecFailed"
 	EventReasonApplySplunkConfigFailed EventReason = "ApplySplunkConfigFailed"

@@ -174,7 +174,9 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	cr.Status.ReadyReplicas = deployment.Status.ReadyReplicas
 	cr.Status.Phase = phase
 	if phase == enterpriseApi.PhaseReady {
-		publisher.Normal(ctx, splcommon.EventReasonReady, fmt.Sprintf("KVService %s is ready with %d replicas", cr.Name, cr.Status.ReadyReplicas))
+		if previousPhase != enterpriseApi.PhaseReady {
+			publisher.Normal(ctx, splcommon.EventReasonReady, fmt.Sprintf("KVService %s is ready with %d replicas", cr.Name, cr.Status.ReadyReplicas))
+		}
 		result.RequeueAfter = 0
 		for _, tenant := range cr.Status.Tenants {
 			if !tenant.Ready && (tenant.Reason == "DatabasePending" || tenant.Reason == "CredentialsPending" || tenant.Reason == "AuthenticationPending") {
@@ -204,9 +206,9 @@ func recordTenantConditions(ctx context.Context, publisher *k8sops.K8EventPublis
 		}
 		message := fmt.Sprintf("Tenant %q in namespace %q: %s", tenant.Name, tenant.Namespace, tenant.Message)
 		if tenant.Ready {
-			publisher.Normal(ctx, "TenantReady", message)
+			publisher.Normal(ctx, splcommon.EventReasonTenantReady, message)
 		} else {
-			publisher.Warning(ctx, "TenantNotReady", message)
+			publisher.Warning(ctx, splcommon.EventReasonTenantNotReady, message)
 		}
 	}
 	condition := metav1.Condition{Type: "TenantsReady", Status: metav1.ConditionTrue, Reason: "AllTenantsReady", Message: fmt.Sprintf("%d of %d tenants have ready database and authentication dependencies", ready, len(cr.Status.Tenants)), ObservedGeneration: cr.Generation}

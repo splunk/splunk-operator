@@ -306,3 +306,19 @@ when its value is `"true"`. Setting it to `"false"`, setting it to an empty valu
 or removing it resumes reconciliation. A KVService created already paused reports
 `phase: Pending` and `Paused=True`. Pausing a resource with an existing phase
 preserves that phase.
+
+### Tenant readiness during rollouts
+
+Tenant membership and keyring files can update before a new pod receives its
+password mounts. CMP-K KVService retries missing tenant credentials without
+terminating the service; other ready tenants continue serving. Use a KVService
+image with this tenant-local credential handling when enabling independent
+service startup. Operator logs include the tenant, source namespace, Secret
+name, and error for authentication reads that fail for reasons other than a
+Secret not yet existing. Service and tenant readiness events are emitted on
+transitions rather than on each pending-tenant retry.
+
+KVService admission permits partial liveness/readiness probe overrides; zero
+values retain the runtime defaults. Updates that leave the spec unchanged on
+a terminating KVService permit finalizer cleanup even if feature gates have
+changed. Spec changes remain subject to validation.
