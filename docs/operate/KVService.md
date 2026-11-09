@@ -88,16 +88,18 @@ KVService shares workload settings with the Enterprise CRs through
 annotations, Service customization, volumes, service account,
 environment variables, image pull secrets, certificates, and initial probe
 delays. These fields remain directly under `spec` in YAML. PostgreSQL connection
-settings and credentials can be provided through `spec.extraEnv`, Secret references, and `spec.volumes`.
+settings and credentials are derived from the required `spec.postgres.clusterRef`
+and the generated database ConfigMaps and Secrets.
 Enterprise cluster and license references and Splunk storage settings are not
 part of the KVService API.
 
 - Resource defaults per pod are requests of 1 CPU and 4Gi memory, with limits of
   4 CPUs and 16Gi memory. Values in `spec.resources` override these defaults;
   `spec.disableResourceDefaults: true` disables resource defaulting.
-- Configure KVService and PostgreSQL through `spec.extraEnv`, using Secret
-  references for credentials. Enterprise `default.yml` and Ansible startup
-  settings are not part of the KVService API.
+- Configure PostgreSQL through `spec.postgres.clusterRef`. The Operator manages
+  database connection and tenant environment variables; use `spec.extraEnv` for
+  other KVService settings. Enterprise `default.yml` and Ansible startup settings
+  are not part of the KVService API.
 - `spec.podAnnotations` overrides inherited pod annotations.
 - Liveness and readiness checks use `/service/liveness` and `/service/readiness`
   on port 8066. Both default to a 30-second initial delay, a 1-second timeout,
