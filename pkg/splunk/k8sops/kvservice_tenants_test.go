@@ -77,11 +77,13 @@ func TestDiscoverKVServiceTenants(t *testing.T) {
 			cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "kvs", Namespace: "shared"}}
 			mapping, err := DiscoverKVServiceTenants(context.Background(), c, cr)
 			if test.err != "" {
-				require.ErrorContains(t, err, test.err)
+				require.NoError(t, err)
+				require.Len(t, mapping.Blocked, 1)
+				require.Contains(t, mapping.Blocked[0].Message, test.err)
 				return
 			}
 			require.NoError(t, err)
-			require.Equal(t, test.want, mapping)
+			require.Equal(t, test.want, mapping.Members)
 		})
 	}
 }
@@ -98,10 +100,9 @@ func TestDiscoverKVServiceRejectsDuplicateTenants(t *testing.T) {
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
 	cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "kvs", Namespace: "shared"}}
-	_, err := DiscoverKVServiceTenants(context.Background(), c, cr)
-	require.ErrorContains(t, err, "both namespaces")
-	_, terminal := splcommon.TerminalMessage(err)
-	require.True(t, terminal)
+	discovery, err := DiscoverKVServiceTenants(context.Background(), c, cr)
+	require.NoError(t, err)
+	require.Len(t, discovery.Blocked, 2)
 }
 
 type tenantListFailure struct{ client.Client }
@@ -147,7 +148,7 @@ func TestInvalidUnselectedAddressDoesNotSuspendOtherTenantNamespaces(t *testing.
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(selected, invalid).Build()
 	mapping, err := DiscoverKVServiceTenants(t.Context(), c, &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "kvs", Namespace: "shared"}})
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{"tenant1": "tenant1"}, mapping)
+	require.Equal(t, map[string]string{"tenant1": "tenant1"}, mapping.Members)
 }
 
 func TestTenantDiscoveryMessageIncludesNamespaceAndRepair(t *testing.T) {
@@ -156,15 +157,13 @@ func TestTenantDiscoveryMessageIncludesNamespaceAndRepair(t *testing.T) {
 	require.NoError(t, corev1.AddToScheme(scheme))
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tenant-one", Labels: map[string]string{splcommon.LabelKVService: "enabled", splcommon.LabelTenant: "invalid-tenant"}, Annotations: map[string]string{splcommon.AnnotationKVServiceAddr: "splunk-kvs-kvservice-service.shared:8066"}}}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ns).Build()
-	_, err := DiscoverKVServiceTenants(t.Context(), c, &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "kvs", Namespace: "shared"}})
-	message, terminal := splcommon.TerminalMessage(err)
-	require.True(t, terminal)
-	require.Contains(t, message, "tenant-one")
-	require.Contains(t, message, "Set label platform.splunk.com/tenant")
-	require.Contains(t, message, "^[a-z][a-z0-9]{0,29}$")
-	var validation *splcommon.TerminalError
-	require.ErrorAs(t, err, &validation)
-	require.NotNil(t, validation.Err)
+	discovery, err := DiscoverKVServiceTenants(t.Context(), c, &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "kvs", Namespace: "shared"}})
+	require.NoError(t, err)
+	require.Len(t, discovery.Blocked, 1)
+	require.Equal(t, "tenant-one", discovery.Blocked[0].Namespace)
+	require.Contains(t, discovery.Blocked[0].Message, "label platform.splunk.com/tenant")
+	require.Contains(t, discovery.Blocked[0].Message, "^[a-z][a-z0-9]{0,29}$")
+
 }
 
 func TestKVServiceAddressContractAcrossConsumers(t *testing.T) {
@@ -192,12 +191,12 @@ func TestKVServiceAddressContractAcrossConsumers(t *testing.T) {
 			mapper := KVServicePostgresMapper{Client: c}
 			requests := mapper.MapTenantNamespaceSecret(t.Context(), &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: ns.Name, Name: splcommon.GetNamespaceScopedSecretName(ns.Name)}})
 			if tc.allowed {
-				require.Equal(t, map[string]string{"tenant1": ns.Name}, mapping)
+				require.Equal(t, map[string]string{"tenant1": ns.Name}, mapping.Members)
 				require.Len(t, requests, 1)
 				require.Equal(t, tc.name, requests[0].Name)
 				require.Equal(t, tc.namespace, requests[0].Namespace)
 			} else {
-				require.Empty(t, mapping)
+				require.Empty(t, mapping.Members)
 				require.Empty(t, requests)
 			}
 		})

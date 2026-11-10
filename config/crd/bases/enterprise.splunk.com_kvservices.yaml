@@ -4308,6 +4308,35 @@ spec:
               selector:
                 description: selector for pods, used by HorizontalPodAutoscaler
                 type: string
+              tenants:
+                description: Tenants reports namespace discovery and provisioning
+                  independently of pod readiness.
+                items:
+                  description: |-
+                    KVServiceTenantStatus reports one selected namespace independently of service readiness.
+                    Fields without omitempty retain explicit zero values in status.
+                  properties:
+                    databaseName:
+                      type: string
+                    message:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                    ready:
+                      type: boolean
+                    reason:
+                      description: KVServiceTenantReason identifies a tenant's last
+                        evaluated provisioning outcome.
+                      type: string
+                  required:
+                  - namespace
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - namespace
+                x-kubernetes-list-type: map
             type: object
         required:
         - spec

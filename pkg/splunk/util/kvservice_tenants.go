@@ -18,12 +18,17 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
 var kvServiceTenantNamePattern = regexp.MustCompile(`^[a-z][a-z0-9]{0,29}$`)
 
 // ValidateKVServiceTenantName checks the database naming contract shared by consumers and provisioners.
 func ValidateKVServiceTenantName(tenant string) error {
+	if tenant == common.KVServiceSystemDatabase {
+		return fmt.Errorf("tenant %q is reserved for the KVService system database", tenant)
+	}
 	if !kvServiceTenantNamePattern.MatchString(tenant) {
 		return fmt.Errorf("invalid tenant %q: must match ^[a-z][a-z0-9]{0,29}$", tenant)
 	}

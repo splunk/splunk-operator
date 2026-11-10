@@ -169,7 +169,7 @@ var _ = Describe("KVService Controller", func() {
 			}
 			createFixture(kvservice)
 
-			By("publishing independent ready tenant database connection dependencies")
+			By("publishing independent ready service and tenant database dependencies")
 			tenantNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "kvservice-tenant-",
 				Labels: map[string]string{
@@ -184,45 +184,51 @@ var _ = Describe("KVService Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: splcommon.GetNamespaceScopedSecretName(tenantNamespace.Name), Namespace: tenantNamespace.Name},
 				Data:       map[string][]byte{"pass4SymmKey": []byte("controller-tenant-key")},
 			})
-			createFixture(&corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{Name: "tenant-connection", Namespace: backendNamespace.Name},
-				Data: map[string]string{
-					"CLUSTER_RW_ENDPOINT":  "test-postgres-rw." + backendNamespace.Name,
-					"DEFAULT_CLUSTER_PORT": "5432",
-					"ADMIN_USER_NAME":      tenantName + "_admin",
-				},
-			})
-			createFixture(&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: "tenant-admin", Namespace: backendNamespace.Name},
-				Data:       map[string][]byte{"password": []byte("controller-database-password")},
-			})
-			// The PostgreSQL controller owns cluster readiness and connection publication.
-			// Supply its API contract directly; this suite needs no PostgreSQL server.
-			database := &platformv1alpha1.PostgresDatabase{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: tenantName + "-database", Namespace: backendNamespace.Name,
-					Annotations: map[string]string{"enterprise.splunk.com/kvservice-owner": backendNamespace.Name + "/" + resourceName},
-				},
-				Spec: platformv1alpha1.PostgresDatabaseSpec{
-					ClusterRef: corev1.LocalObjectReference{Name: clusterName},
-					Databases: []platformv1alpha1.DatabaseDefinition{{
-						Name: tenantName, DeletionPolicy: "Retain", Extensions: []string{"pg_stat_statements", "pgcrypto"},
-					}},
-				},
-			}
-			createFixture(database)
-			ready, generation := "Ready", database.Generation
-			database.Status = platformv1alpha1.PostgresDatabaseStatus{
-				Phase: &ready, ObservedGeneration: &generation,
-				Databases: []platformv1alpha1.DatabaseInfo{{
-					Name: tenantName, Ready: true,
-					ConfigMapRef: &corev1.LocalObjectReference{Name: "tenant-connection"},
-					AdminUserSecretRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: "tenant-admin"}, Key: "password",
+			for _, logicalName := range []string{tenantName, splcommon.KVServiceSystemDatabase} {
+				databaseName := logicalName + "-database"
+				if logicalName == splcommon.KVServiceSystemDatabase {
+					databaseName = splcommon.KVServiceSystemDatabaseResource
+				}
+				createFixture(&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: databaseName + "-connection", Namespace: backendNamespace.Name},
+					Data: map[string]string{
+						"CLUSTER_RW_ENDPOINT":  "test-postgres-rw." + backendNamespace.Name,
+						"DEFAULT_CLUSTER_PORT": "5432",
+						"ADMIN_USER_NAME":      logicalName + "_admin",
 					},
-				}},
+				})
+				createFixture(&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: databaseName + "-admin", Namespace: backendNamespace.Name},
+					Data:       map[string][]byte{"password": []byte("controller-database-password")},
+				})
+				// The PostgreSQL controller owns cluster readiness and connection publication.
+				// Supply its API contract directly; this suite needs no PostgreSQL server.
+				database := &platformv1alpha1.PostgresDatabase{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: databaseName, Namespace: backendNamespace.Name,
+						Annotations: map[string]string{"enterprise.splunk.com/kvservice-owner": backendNamespace.Name + "/" + resourceName},
+					},
+					Spec: platformv1alpha1.PostgresDatabaseSpec{
+						ClusterRef: corev1.LocalObjectReference{Name: clusterName},
+						Databases: []platformv1alpha1.DatabaseDefinition{{
+							Name: logicalName, DeletionPolicy: "Retain", Extensions: []string{"pg_stat_statements", "pgcrypto"},
+						}},
+					},
+				}
+				createFixture(database)
+				ready, generation := "Ready", database.Generation
+				database.Status = platformv1alpha1.PostgresDatabaseStatus{
+					Phase: &ready, ObservedGeneration: &generation,
+					Databases: []platformv1alpha1.DatabaseInfo{{
+						Name: logicalName, Ready: true,
+						ConfigMapRef: &corev1.LocalObjectReference{Name: databaseName + "-connection"},
+						AdminUserSecretRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: databaseName + "-admin"}, Key: "password",
+						},
+					}},
+				}
+				Expect(k8sClient.Status().Update(ctx, database)).To(Succeed())
 			}
-			Expect(k8sClient.Status().Update(ctx, database)).To(Succeed())
 		})
 
 		AfterEach(func() {

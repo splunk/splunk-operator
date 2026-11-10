@@ -69,7 +69,7 @@ func TestClassifyTenantDatabaseRetentionAndOwnership(t *testing.T) {
 				tc.modify(db)
 			}
 			before := db.DeepCopy()
-			adopt, err := classifyTenantDatabase(db, cr, "alpha", tc.services)
+			adopt, err := classifyManagedDatabase(db, cr, "alpha", tc.services)
 			if tc.err != "" {
 				require.ErrorContains(t, err, tc.err)
 				require.False(t, adopt)
@@ -86,6 +86,30 @@ func TestClassifyTenantDatabaseRetentionAndOwnership(t *testing.T) {
 				require.Equal(t, tc.adopt, adopt)
 			}
 			require.Equal(t, before, db, "classification must never mutate a retained database")
+		})
+	}
+}
+
+func TestSystemDatabaseConflictHasSystemRepairAdvice(t *testing.T) {
+	_, cr, _ := tenantFixture(t)
+	for _, failure := range []string{"unmanaged", "controller", "configuration"} {
+		t.Run(failure, func(t *testing.T) {
+			db := resources.NewKVServiceSystemDatabase(cr)
+			switch failure {
+			case "unmanaged":
+				db.Annotations = nil
+			case "controller":
+				db.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(cr, enterpriseApi.GroupVersion.WithKind("KVService"))}
+			case "configuration":
+				db.Spec.ClusterRef.Name = "other"
+			}
+			_, err := classifyManagedDatabase(db, cr, splcommon.KVServiceSystemDatabase, nil)
+			message, terminal := splcommon.TerminalMessage(err)
+			require.True(t, terminal)
+			require.Contains(t, message, "KVService system database")
+			require.Contains(t, message, splcommon.KVServiceSystemDatabaseResource)
+			require.NotContains(t, message, splcommon.LabelTenant)
+			require.NotContains(t, message, splcommon.AnnotationKVServiceAddr)
 		})
 	}
 }

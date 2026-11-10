@@ -56,3 +56,9 @@ Changes to the enable or tenant label, or address annotation, update KVService c
 automatically. Missing or empty address annotations in enabled namespaces cause
 reconciliation errors. See
 [Enterprise client configuration](KVService.md#enterprise-client-configuration).
+
+Tenant database names must satisfy `^[a-z][a-z0-9]{0,29}$`;
+`kvservicesystem` is reserved for service state. Invalid or duplicate names
+exclude only the affected tenants and appear in `KVService.status.tenants`.
+Correcting the Namespace metadata requeues the selected backend. Healthy tenants
+and the service listener remain available.

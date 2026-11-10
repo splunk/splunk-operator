@@ -45,6 +45,13 @@ func NewKVServiceTenantDatabase(cr *enterpriseApi.KVService, tenant string) *pla
 	}}
 }
 
+// NewKVServiceSystemDatabase uses the same retention policy as tenant databases.
+func NewKVServiceSystemDatabase(cr *enterpriseApi.KVService) *platformApi.PostgresDatabase {
+	db := NewKVServiceTenantDatabase(cr, common.KVServiceSystemDatabase)
+	db.Name = common.KVServiceSystemDatabaseResource
+	return db
+}
+
 // NewKVServiceTenantKeyring builds the namespace-shared request keyring.
 func NewKVServiceTenantKeyring(cr *enterpriseApi.KVService) *corev1.Secret {
 	return &corev1.Secret{ObjectMeta: metav1.ObjectMeta{

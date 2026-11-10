@@ -62,13 +62,14 @@ func pendingPostgresFixture(t *testing.T) (*enterpriseApi.KVService, client.With
 func postgresReadinessFixture(t *testing.T) (*enterpriseApi.KVService, *platformApi.PostgresDatabase, client.WithWatch) {
 	t.Helper()
 	cr, c := pendingPostgresFixture(t)
-	_, ready, message, err := ensureTenantPostgresReady(t.Context(), c, cr)
+	postgres, err := ensureTenantPostgresReady(t.Context(), c, cr)
+	ready, message := postgres.ready, postgres.message
 	require.NoError(t, err)
 	require.False(t, ready)
-	require.Contains(t, message, "alpha, bravo")
+	require.Contains(t, message, "service database kvservicesystem")
 	readyTenantDatabases(t, t.Context(), c)
 	database := &platformApi.PostgresDatabase{}
-	require.NoError(t, c.Get(t.Context(), client.ObjectKey{Namespace: cr.Namespace, Name: "alpha-database"}, database))
+	require.NoError(t, c.Get(t.Context(), client.ObjectKey{Namespace: cr.Namespace, Name: splcommon.KVServiceSystemDatabaseResource}, database))
 	return cr, database, c
 }
 
@@ -80,80 +81,72 @@ func TestEnsureKVServicePostgresReadiness(t *testing.T) {
 		ready                  bool
 	}{
 		{name: "ready", ready: true},
-		{name: "database generation not observed", mutate: func(d *platformApi.PostgresDatabase) { d.Status.ObservedGeneration = nil }, wantMessage: "waiting for tenant databases"},
-		{name: "database generation stale", mutate: func(d *platformApi.PostgresDatabase) { stale := d.Generation - 1; d.Status.ObservedGeneration = &stale }, wantMessage: "waiting for tenant databases"},
-		{name: "database phase absent", mutate: func(d *platformApi.PostgresDatabase) { d.Status.Phase = nil }, wantMessage: "waiting for tenant databases"},
-		{name: "database failed", mutate: func(d *platformApi.PostgresDatabase) { phase := "Failed"; d.Status.Phase = &phase }, wantMessage: "waiting for tenant databases"},
-		{name: "database provisioning", mutate: func(d *platformApi.PostgresDatabase) { phase := "Pending"; d.Status.Phase = &phase }, wantMessage: "waiting for tenant databases"},
-		{name: "logical database not ready", mutate: func(d *platformApi.PostgresDatabase) { d.Status.Databases[0].Ready = false }, wantMessage: "waiting for connection references for tenant"},
-		{name: "logical database status absent", mutate: func(d *platformApi.PostgresDatabase) { d.Status.Databases = nil }, wantMessage: "waiting for connection references for tenant"},
-		{name: "connection ConfigMap not published", mutate: func(d *platformApi.PostgresDatabase) { d.Status.Databases[0].ConfigMapRef = nil }, wantMessage: "waiting for connection references for tenant"},
-		{name: "admin Secret not published", mutate: func(d *platformApi.PostgresDatabase) { d.Status.Databases[0].AdminUserSecretRef = nil }, wantMessage: "waiting for connection references for tenant"},
+		{name: "database generation not observed", mutate: func(d *platformApi.PostgresDatabase) { d.Status.ObservedGeneration = nil }, wantMessage: "waiting for service database kvservicesystem"},
+		{name: "database generation stale", mutate: func(d *platformApi.PostgresDatabase) { stale := d.Generation - 1; d.Status.ObservedGeneration = &stale }, wantMessage: "waiting for service database kvservicesystem"},
+		{name: "database phase absent", mutate: func(d *platformApi.PostgresDatabase) { d.Status.Phase = nil }, wantMessage: "waiting for service database kvservicesystem"},
+		{name: "database failed", mutate: func(d *platformApi.PostgresDatabase) { phase := "Failed"; d.Status.Phase = &phase }, wantMessage: "waiting for service database kvservicesystem"},
+		{name: "database provisioning", mutate: func(d *platformApi.PostgresDatabase) { phase := "Pending"; d.Status.Phase = &phase }, wantMessage: "waiting for service database kvservicesystem"},
+		{name: "logical database not ready", mutate: func(d *platformApi.PostgresDatabase) { d.Status.Databases[0].Ready = false }, wantMessage: "waiting for service database kvservicesystem"},
+		{name: "logical database status absent", mutate: func(d *platformApi.PostgresDatabase) { d.Status.Databases = nil }, wantMessage: "waiting for service database kvservicesystem"},
+		{name: "connection ConfigMap not published", mutate: func(d *platformApi.PostgresDatabase) { d.Status.Databases[0].ConfigMapRef = nil }, wantMessage: "waiting for service database kvservicesystem"},
+		{name: "admin Secret not published", mutate: func(d *platformApi.PostgresDatabase) { d.Status.Databases[0].AdminUserSecretRef = nil }, wantMessage: "waiting for service database kvservicesystem"},
 		{name: "database missing logical name", mutate: func(d *platformApi.PostgresDatabase) { d.Spec.Databases = nil }, wantError: "incompatible configuration"},
 		{name: "database references another cluster", mutate: func(d *platformApi.PostgresDatabase) { d.Spec.ClusterRef.Name = "other-cluster" }, wantError: "incompatible configuration"},
 	}
-	for _, tenant := range []string{"alpha", "bravo"} {
-		for _, tt := range tests {
-			t.Run(tenant+"/"+tt.name, func(t *testing.T) {
-				cr, _, c := postgresReadinessFixture(t)
-				database := &platformApi.PostgresDatabase{}
-				require.NoError(t, c.Get(t.Context(), client.ObjectKey{Namespace: cr.Namespace, Name: tenant + "-database"}, database))
-				if tt.mutate != nil {
-					tt.mutate(database)
-				}
-				status := database.Status
-				require.NoError(t, c.Update(t.Context(), database))
-				database.Status = status
-				require.NoError(t, c.Status().Update(t.Context(), database))
-				before := database.DeepCopy()
-				dependencies, ready, message, err := ensureTenantPostgresReady(t.Context(), c, cr)
-				if tt.wantError != "" {
-					require.ErrorContains(t, err, tt.wantError)
-					require.ErrorContains(t, err, "reconcile database "+database.Namespace+"/"+database.Name)
-					assert.ErrorIs(t, err, reconcile.TerminalError(nil))
-					conditionMessage, terminal := splcommon.TerminalMessage(err)
-					assert.True(t, terminal)
-					assert.Contains(t, conditionMessage, "Tenant database ")
-					assert.NotContains(t, conditionMessage, "ensure tenant databases:")
-				} else {
-					require.NoError(t, err)
-				}
-				assert.Equal(t, tt.ready, ready)
-				if ready {
-					require.NotNil(t, dependencies)
-					assert.Empty(t, message)
-				} else {
-					assert.Nil(t, dependencies)
-				}
-				if tt.wantMessage != "" {
-					assert.Equal(t, enterpriseApi.PhasePending, cr.Status.Phase)
-					assert.Contains(t, message, tt.wantMessage)
-					assert.Contains(t, message, tenant)
-				}
-				stored := &platformApi.PostgresDatabase{}
-				require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(database), stored))
-				assert.Equal(t, before, stored, "readiness checks must preserve tenant database spec, status, and ownership")
-			})
-		}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr, database, c := postgresReadinessFixture(t)
+			if tt.mutate != nil {
+				tt.mutate(database)
+			}
+			status := database.Status
+			require.NoError(t, c.Update(t.Context(), database))
+			database.Status = status
+			require.NoError(t, c.Status().Update(t.Context(), database))
+			before := database.DeepCopy()
+			postgres, err := ensureTenantPostgresReady(t.Context(), c, cr)
+			dependencies, ready, message := postgres.dependencies, postgres.ready, postgres.message
+			if tt.wantError != "" {
+				require.ErrorContains(t, err, tt.wantError)
+				require.ErrorIs(t, err, reconcile.TerminalError(nil))
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tt.ready, ready)
+			if ready {
+				require.NotNil(t, dependencies)
+				require.Empty(t, message)
+			} else {
+				require.Nil(t, dependencies)
+			}
+			if tt.wantMessage != "" {
+				require.Contains(t, message, tt.wantMessage)
+			}
+			stored := &platformApi.PostgresDatabase{}
+			require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(database), stored))
+			require.Equal(t, before, stored)
+			bravo := &platformApi.PostgresDatabase{}
+			require.NoError(t, c.Get(t.Context(), client.ObjectKey{Namespace: cr.Namespace, Name: "bravo-database"}, bravo))
+			assert.True(t, bravo.Status.Databases[0].Ready, "the other tenant must remain ready")
+		})
 	}
 }
 
 func TestEnsureKVServicePostgresDatabaseConsumption(t *testing.T) {
-	for _, operation := range []string{"missing database", "existing database", "missing logical database", "foreign database"} {
+	for _, operation := range []string{"missing database", "foreign database"} {
 		t.Run(operation, func(t *testing.T) {
 			cr, database, c := postgresReadinessFixture(t)
 			switch operation {
 			case "missing database":
 				require.NoError(t, c.Delete(t.Context(), database))
-			case "missing logical database":
-				database.Spec.Databases = nil
-				require.NoError(t, c.Update(t.Context(), database))
 			case "foreign database":
 				database.Annotations = nil
 				require.NoError(t, c.Update(t.Context(), database))
 			}
 			before := database.DeepCopy()
-			dependencies, ready, message, err := ensureTenantPostgresReady(t.Context(), c, cr)
+			postgres, err := ensureTenantPostgresReady(t.Context(), c, cr)
+			dependencies, ready, message := postgres.dependencies, postgres.ready, postgres.message
 			stored := &platformApi.PostgresDatabase{}
 			require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(database), stored))
 			switch operation {
@@ -161,19 +154,14 @@ func TestEnsureKVServicePostgresDatabaseConsumption(t *testing.T) {
 				require.NoError(t, err)
 				assert.False(t, ready)
 				assert.Nil(t, dependencies)
-				assert.Equal(t, "waiting for tenant databases: alpha", message)
+				assert.Contains(t, message, "waiting for service database kvservicesystem")
 				assert.Equal(t, cr.Spec.Postgres.ClusterRef, stored.Spec.ClusterRef)
 				require.Len(t, stored.Spec.Databases, 1)
-				assert.Equal(t, "alpha", stored.Spec.Databases[0].Name)
+				assert.Equal(t, splcommon.KVServiceSystemDatabase, stored.Spec.Databases[0].Name)
 				assert.Equal(t, "Retain", stored.Spec.Databases[0].DeletionPolicy)
 				assert.ElementsMatch(t, []string{"pg_stat_statements", "pgcrypto"}, stored.Spec.Databases[0].Extensions)
 				assert.Empty(t, stored.OwnerReferences, "retained tenant databases must survive KVService deletion")
 				assert.Empty(t, stored.Status.Databases)
-			case "existing database":
-				require.NoError(t, err)
-				assert.True(t, ready)
-				assert.NotNil(t, dependencies)
-				assert.Equal(t, before, stored, "ready tenant databases must not be rewritten")
 			default:
 				require.ErrorIs(t, err, reconcile.TerminalError(nil))
 				assert.False(t, ready)
@@ -191,7 +179,8 @@ func TestEnsureKVServicePostgresGuardsAndClientErrors(t *testing.T) {
 	t.Run("disabled feature gate", func(t *testing.T) {
 		cr, c := pendingPostgresFixture(t)
 		featuregatetesting.SetFeatureGateDuringTest(t, config.DefaultMutableFeatureGate, config.PostgresController, false)
-		_, ready, _, err := ensureTenantPostgresReady(t.Context(), c, cr)
+		postgres, err := ensureTenantPostgresReady(t.Context(), c, cr)
+		ready := postgres.ready
 		require.ErrorContains(t, err, "feature gate")
 		assert.ErrorIs(t, err, reconcile.TerminalError(nil))
 		assert.False(t, ready)
@@ -205,9 +194,10 @@ func TestEnsureKVServicePostgresGuardsAndClientErrors(t *testing.T) {
 			}
 			return c.Get(ctx, key, obj, opts...)
 		}})
-		dependencies, ready, _, err := ensureTenantPostgresReady(t.Context(), failing, cr)
+		nextPostgres, err := ensureTenantPostgresReady(t.Context(), failing, cr)
+		dependencies, ready := nextPostgres.dependencies, nextPostgres.ready
 		require.ErrorIs(t, err, failure)
-		require.ErrorContains(t, err, "ensure tenant databases: get tenant database "+cr.Namespace+"/alpha-database")
+		require.ErrorContains(t, err, "prepare service database "+cr.Namespace+"/"+splcommon.KVServiceSystemDatabaseResource)
 		assert.NotErrorIs(t, err, reconcile.TerminalError(nil))
 		assert.Nil(t, dependencies)
 		assert.False(t, ready)
@@ -245,7 +235,7 @@ func testKVServicePostgresReconciliationLifecycle(t *testing.T) {
 	assert.Equal(t, enterpriseApi.PhaseReady, cr.Status.Phase)
 	require.NoError(t, c.Get(t.Context(), deploymentKey, workload))
 	version := workload.ResourceVersion
-	require.NoError(t, c.Delete(t.Context(), &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "bravo-config", Namespace: cr.Namespace}}))
+	require.NoError(t, c.Delete(t.Context(), &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "kvservicesystem-config", Namespace: cr.Namespace}}))
 	_, err = Apply(t.Context(), c, key, recorder)
 	require.Error(t, err)
 	require.NoError(t, c.Get(t.Context(), deploymentKey, workload))
