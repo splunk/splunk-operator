@@ -204,8 +204,14 @@ func (s *BlueGreenSwitchover) beforeCommit(ctx context.Context, intent mvutypes.
 		return s.pending(status, "Checking the frozen green configuration."), err
 	}
 	greenConfiguration, err := candidateConfigurationFingerprint(normalizedGreen)
-	if err != nil || w.GreenConfigurationFingerprint == nil || greenConfiguration != *w.GreenConfigurationFingerprint {
-		return s.pending(status, "Checking the frozen green configuration."), errors.Join(err, errors.New("frozen green configuration changed during switchover"))
+	if err != nil {
+		return s.pending(status, "Checking the frozen green configuration."), err
+	}
+	if w.GreenConfigurationFingerprint == nil {
+		return s.pending(status, "Checking the frozen green configuration."), errors.New("frozen green configuration fingerprint is missing")
+	}
+	if greenConfiguration != *w.GreenConfigurationFingerprint {
+		return s.pending(status, "Checking the frozen green configuration."), fmt.Errorf("%w: frozen green configuration changed during switchover", mvutypes.ErrCandidateInvalid)
 	}
 	greenCredentials, err := s.credentialBaseline().credentialFingerprints(ctx, normalizedGreen, databases, replicationSecretName(s.key.Name, status.AttemptID))
 	if err != nil {
@@ -474,6 +480,7 @@ func (s *BlueGreenSwitchover) precommitError(ctx context.Context, intent mvutype
 		return s.refreshed(ctx, intent.AttemptID, "The canonical write committed; recovery will continue toward green.")
 	}
 	status.Switchover.Failure = new(cause.Error())
+	mvutypes.MarkBlueGreenRebuildRequired(status, cause)
 	if status.Switchover.DeadlineAt != nil && !s.now().Before(status.Switchover.DeadlineAt.Time) && status.Switchover.TimedOutAt == nil {
 		status.Switchover.TimedOutAt = new(metav1.NewTime(s.now()))
 	}
@@ -509,12 +516,21 @@ func (s *BlueGreenSwitchover) restoreSource(ctx context.Context, intent mvutypes
 	if w.SourceFenceRestoredAt == nil {
 		w.SourceFenceRestoredAt = new(metav1.NewTime(s.now()))
 	}
+	return bluegreen.Outcome{BlueGreen: status, Report: restoredWindowReport(status)}, nil
+}
+
+// restoredWindowReport tells the user how the attempt can continue once blue
+// is restored: a newer retry, or a rebuild when green can no longer be reused.
+func restoredWindowReport(status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) reconciliationtypes.Report {
+	if mvutypes.BlueGreenRebuildRequired(status) {
+		return mvutypes.ReportFromError(mvutypes.ErrCandidateInvalid)
+	}
 	reason := "SwitchoverFailed"
-	if w.TimedOutAt != nil {
+	if status.Switchover.TimedOutAt != nil {
 		reason = "SwitchoverTimedOut"
 	}
-	return bluegreen.Outcome{BlueGreen: status, Report: reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Failed), Reason: reason,
-		Message: "Blue remains authoritative and its access is restored. A newer retry timestamp is required for another interruption."}}, nil
+	return reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Failed), Reason: reason,
+		Message: "Blue remains authoritative and its access is restored. A newer retry timestamp is required for another interruption."}
 }
 
 func (s *BlueGreenSwitchover) verifyFrozenConfiguration(ctx context.Context, source *cnpgv1.Cluster, databases []declaredDatabase, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {
@@ -528,7 +544,7 @@ func (s *BlueGreenSwitchover) verifyFrozenConfiguration(ctx context.Context, sou
 		return err
 	}
 	if status.SourceConfigurationFingerprint == nil || fingerprint != *status.SourceConfigurationFingerprint {
-		return fmt.Errorf("%w: frozen source configuration changed during switchover", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: frozen source configuration changed during switchover", mvutypes.ErrCandidateInvalid)
 	}
 	credentials, err := baseline.credentialFingerprints(ctx, normalized, databases, replicationSecretName(s.key.Name, status.AttemptID))
 	if err != nil {
@@ -566,22 +582,35 @@ func (s *BlueGreenSwitchover) environment(ctx context.Context, environment *plat
 		return nil, err
 	}
 	if cluster.UID != environment.Ref.UID || cluster.DeletionTimestamp != nil || !metav1.IsControlledBy(cluster, s.owner) {
-		return nil, errors.New("switchover CNPG environment identity changed")
+		return nil, errEnvironmentReplaced
 	}
 	return cluster, nil
 }
 
+// errEnvironmentReplaced reports a recorded environment that was replaced,
+// re-owned, or is being deleted.
+var errEnvironmentReplaced = errors.New("switchover CNPG environment identity changed")
+
+// inputs reads the pre-commit environments. Before commit, a replaced
+// environment invalidates the attempt, so it is rebuild evidence.
 func (s *BlueGreenSwitchover) inputs(ctx context.Context, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (*cnpgv1.Cluster, *cnpgv1.Cluster, []declaredDatabase, error) {
 	blue, err := s.environment(ctx, status.Blue)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, classifyReplacedEnvironment(err)
 	}
 	green, err := s.environment(ctx, status.Green)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, classifyReplacedEnvironment(err)
 	}
 	databases, err := listManagedDatabases(ctx, liveReadClient{Client: s.client, reader: s.reader}, s.key)
 	return blue, green, databases, err
+}
+
+func classifyReplacedEnvironment(err error) error {
+	if errors.Is(err, errEnvironmentReplaced) {
+		return fmt.Errorf("%w: %w", mvutypes.ErrCandidateInvalid, err)
+	}
+	return err
 }
 
 func (s *BlueGreenSwitchover) refreshed(ctx context.Context, attemptID, message string) (bluegreen.Outcome, error) {

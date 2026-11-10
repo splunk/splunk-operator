@@ -72,7 +72,7 @@ func TestCutoverGuardRemovalReceiptRequiresContinuedAbsence(t *testing.T) {
 			conn := &preflightSQLTestConn{results: [][]any{{test.present}}}
 			err := verifyCutoverGuardState(t.Context(), conn, &test.status, sideGreen)
 			if test.fail {
-				require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+				require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 			} else {
 				require.NoError(t, err)
 			}
@@ -96,7 +96,7 @@ func TestCutoverSubscriptionRosterIncludesMaintenanceDatabase(t *testing.T) {
 			conn := &preflightSQLTestConn{results: [][]any{test.actual}}
 			err := verifyCutoverSubscriptionRoster(t.Context(), conn, []declaredDatabase{{name: "orders"}}, "orders", test.side)
 			if test.fail {
-				require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+				require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 			} else {
 				require.NoError(t, err)
 			}
@@ -171,7 +171,7 @@ func TestCutoverGreenRequiresExactImportedPublicationContract(t *testing.T) {
 			if valid {
 				require.NoError(t, err)
 			} else {
-				require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+				require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 				require.ErrorContains(t, err, "unsupported green publication")
 			}
 		})

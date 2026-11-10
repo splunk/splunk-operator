@@ -178,7 +178,7 @@ func TestBlueGreenPreparerReconcilesSourceArtifactsIdempotently(t *testing.T) {
 	preparer.preflight = successfulSourcePreflight{}
 	*preparer.plan.TargetConfiguration.Storage = resource.MustParse("9Gi")
 	_, err = preparer.Prepare(t.Context(), intent)
-	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed, "the target plan must stay frozen after source claim")
+	require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid, "the target plan must stay frozen after source claim")
 	require.True(t, apierrors.IsNotFound(client.Get(t.Context(), publicationKey, &cnpgv1.Publication{})))
 	*preparer.plan.TargetConfiguration.Storage = resource.MustParse("10Gi")
 	_, err = preparer.Prepare(t.Context(), intent)
@@ -189,7 +189,7 @@ func TestBlueGreenPreparerReconcilesSourceArtifactsIdempotently(t *testing.T) {
 	changedSource.UID = types.UID("replacement-source-uid")
 	require.NoError(t, client.Update(t.Context(), changedSource))
 	_, err = preparer.Prepare(t.Context(), intent)
-	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed, "a replacement source must not inherit the prior claim")
+	require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid, "a replacement source must not inherit the prior claim")
 	changedSource.UID = source.UID
 	require.NoError(t, client.Update(t.Context(), changedSource))
 
@@ -272,7 +272,7 @@ func TestBlueGreenPreparerRejectsForeignPublication(t *testing.T) {
 	}
 	preparer := &BlueGreenPreparer{client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(foreign).Build(), key: types.NamespacedName{Name: parent.Name, Namespace: parent.Namespace}, cluster: parent}
 	_, err := preparer.reconcilePublication(t.Context(), "source", database, "attempt-1")
-	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+	require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 }
 
 func TestPublicationNameFitsPostgresIdentifierLimit(t *testing.T) {

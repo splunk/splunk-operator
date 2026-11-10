@@ -80,7 +80,7 @@ func TestCutoverSequenceSynchronizationRejectsInventoryAndReadbackDrift(t *testi
 				return nil, fmt.Errorf("unexpected query")
 			}}
 			err := syncCutoverSequences(t.Context(), conn, []cutoverSequence{{schema: "public", name: "ids", value: 7, called: true}})
-			require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+			require.True(t, mvutypes.IsTerminalFlowFailure(err), "%v", err)
 		})
 	}
 }

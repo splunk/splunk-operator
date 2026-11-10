@@ -67,7 +67,7 @@ func TestCutoverControlBootstrapRefusesToReplaceAnAlteredHelper(t *testing.T) {
 		return [][]any{{false}}, nil
 	}}
 	err := (&postgresSwitchoverSQL{}).installControlDatabase(t.Context(), conn, "orders", cutoverIdentity{Role: "control", AttemptID: "attempt-1"}, true)
-	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+	require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid, "an altered owned helper is control drift")
 	assert.NotContains(t, strings.Join(conn.execs, "\n"), "CREATE FUNCTION")
 	assert.NotContains(t, strings.Join(conn.execs, "\n"), "CREATE OR REPLACE")
 }

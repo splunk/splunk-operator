@@ -18,6 +18,7 @@ package majorversionupgradetypes
 
 import (
 	"errors"
+	"fmt"
 
 	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 )
@@ -51,7 +52,40 @@ var (
 	ErrUpgradeVerificationFailed          = errors.New("major upgrade verification failed")
 	ErrUpgradeUnrecoverablePreConversion  = errors.New("major upgrade failed before data directory conversion")
 	ErrUpgradeUnrecoverablePostConversion = errors.New("major upgrade failed after data directory conversion")
+
+	// ErrCandidateInvalid is a terminal blue/green failure after which a retry
+	// cannot reuse the attempt. Return it only for evidence that invalidates
+	// what green was built from or what it holds:
+	//   - drift of the frozen baseline: configuration, credentials, CA,
+	//     schema and access fingerprints, and the database, role, object,
+	//     publication, subscription, slot, and sequence inventories;
+	//   - broken logical history: an invalidated slot, a subscription apply
+	//     error, or a changed publication, subscription, or replication
+	//     credential owned by the attempt;
+	//   - green content or identity that no longer matches the attempt: a
+	//     mismatched schema import, tampered write guards, or a changed or
+	//     replaced environment.
+	// Eligibility checks before the baseline is frozen, unavailable
+	// dependencies, wiring errors, and failed operations whose inputs remain
+	// valid stay ErrUpgradeFlowFailed and may be retried.
+	ErrCandidateInvalid = errors.New("blue/green attempt must be rebuilt")
 )
+
+// AsCandidateInvalid classifies a terminal failure from a shared check as
+// rebuild evidence. Other errors are returned unchanged.
+func AsCandidateInvalid(err error) error {
+	if err == nil || errors.Is(err, ErrCandidateInvalid) || !IsTerminalFlowFailure(err) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", ErrCandidateInvalid, err)
+}
+
+// IsTerminalFlowFailure reports a flow failure that must stop the workflow
+// until explicit user action. Classify through it instead of matching
+// ErrUpgradeFlowFailed directly, so every terminal flow sentinel is covered.
+func IsTerminalFlowFailure(err error) bool {
+	return errors.Is(err, ErrUpgradeFlowFailed) || errors.Is(err, ErrCandidateInvalid)
+}
 
 func ReportFromError(err error) reconciliationtypes.Report {
 	switch {
@@ -139,6 +173,11 @@ func ReportFromError(err error) reconciliationtypes.Report {
 		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Failed),
 			Reason: ReasonRollbackCapabilityFailed, Message: reportMessageRollbackCapabilityUnavailable,
+			Retry: false, Sleep: new(reportSleepNone)}
+	case errors.Is(err, ErrCandidateInvalid):
+		return reconciliationtypes.Report{
+			Name: UseCaseName, Phase: string(Failed),
+			Reason: ReasonCandidateRebuildRequired, Message: reportMessageCandidateRebuildRequired,
 			Retry: false, Sleep: new(reportSleepNone)}
 	case errors.Is(err, ErrUpgradeFlowFailed):
 		return reconciliationtypes.Report{

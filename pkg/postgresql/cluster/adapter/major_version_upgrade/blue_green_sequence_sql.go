@@ -131,11 +131,11 @@ func syncCutoverSequences(ctx context.Context, green pginfra.Conn, sequences []c
 		return err
 	}
 	if len(actual) != len(sequences) {
-		return fmt.Errorf("%w: green sequence inventory changed", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: green sequence inventory changed", mvutypes.ErrCandidateInvalid)
 	}
 	for i, seq := range sequences {
 		if actual[i].schema != seq.schema || actual[i].name != seq.name {
-			return fmt.Errorf("%w: green sequence identity changed", mvutypes.ErrUpgradeFlowFailed)
+			return fmt.Errorf("%w: green sequence identity changed", mvutypes.ErrCandidateInvalid)
 		}
 		var value int64
 		if err := queryOne(ctx, green, &value, `SELECT pg_catalog.setval($1::regclass,$2,$3)`, pginfra.QuoteIdentifier(seq.schema)+"."+pginfra.QuoteIdentifier(seq.name), seq.value, seq.called); err != nil {

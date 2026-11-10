@@ -66,10 +66,10 @@ func TestBlueGreenCandidatePreparerCreatesInitialCopySubscriptions(t *testing.T)
 	assert.Equal(t, "attempt-1", subscription.Labels[blueGreenAttemptLabel])
 	subscription.Spec.Parameters["failover"] = "false"
 	desired := preparer.buildCandidateSubscription(candidate.Name, database.name, subscription.Name, "attempt-1")
-	require.ErrorIs(t, preparer.validateSubscription(subscription, desired, "attempt-1"), mvutypes.ErrUpgradeFlowFailed)
+	require.ErrorIs(t, preparer.validateSubscription(subscription, desired, "attempt-1"), mvutypes.ErrCandidateInvalid)
 	subscription.Spec.Parameters["failover"] = "true"
 	subscription.Spec.ReclaimPolicy = cnpgv1.SubscriptionReclaimRetain
-	require.ErrorIs(t, preparer.validateSubscription(subscription, desired, "attempt-1"), mvutypes.ErrUpgradeFlowFailed)
+	require.ErrorIs(t, preparer.validateSubscription(subscription, desired, "attempt-1"), mvutypes.ErrCandidateInvalid)
 }
 
 func TestReplicationSlotNameUsesPostgresAlphabet(t *testing.T) {
@@ -125,7 +125,7 @@ func TestCandidateSubscriptionsRejectSpecDriftWithoutMutation(t *testing.T) {
 			require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(subscription), before))
 			status := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{DatabaseReplication: []platformv1alpha1.BlueGreenDatabaseReplicationStatus{{DatabaseName: database.name, SchemaImported: new(true)}}}
 			ready, err := preparer.reconcileSubscriptions(t.Context(), candidate, []declaredDatabase{database}, "attempt-1", status)
-			require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+			require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 			assert.False(t, ready)
 			assert.Zero(t, writes, "drift must fail before any resource mutation")
 			after := &cnpgv1.Subscription{}

@@ -683,6 +683,15 @@ type PostgresBlueGreenUpgradeStatus struct {
 	// +optional
 	HistoryCompacted bool `json:"historyCompacted,omitempty"`
 
+	// RebuildRequired records why the operator can no longer prove that this
+	// attempt's candidate, replication history, or frozen baseline is valid.
+	// It is write-once and is never set after endpoint commit. A retry cannot
+	// reuse the attempt; it must be cancelled, cleaned up, and replaced by a
+	// new attempt.
+	// +kubebuilder:validation:MaxLength=1024
+	// +optional
+	RebuildRequired *string `json:"rebuildRequired,omitempty"`
+
 	// Blue is the source environment that is authoritative before endpoint
 	// commit.
 	// +optional

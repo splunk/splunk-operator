@@ -82,7 +82,7 @@ func TestCandidateCertManagerLeafReusesFrozenBlueCA(t *testing.T) {
 	greenCA.Data["ca.crt"] = []byte("different-ca")
 	require.NoError(t, client.Update(t.Context(), greenCA))
 	_, err = preparer.reconcileCandidateServerTLS(t.Context(), source, "orders-bg", "attempt-1")
-	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+	require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 }
 
 func TestCNPGCandidateLeafRequiresSourceCASigningKey(t *testing.T) {
