@@ -63,6 +63,23 @@ specs check published child resources and cluster PVC removal before teardown.
 
 `CLUSTER_PROVIDER` controls shell provider defaults; `TEST_CLUSTER_PLATFORM` selects cluster setup and Go test provider behavior. Kraken sets both to `kraken`.
 
+## Nightly artifact inputs in CI
+
+Scheduled nightly jobs on `develop` consume the protected
+`artifact-set-<CI_COMMIT_SHA>.json` produced by the matching branch pipeline;
+they do not rebuild the operator image, charts, or deployment archive. The
+resolver waits for publication after the producer's blocking image scan and
+validates the commit SHA, artifact lane, and required ECR metadata
+before handing the manifest to the EKS, Azure, GCP, and Helm runners. EKS and
+cloud suites pull the recorded ECR digest; Helm validation downloads and verifies
+the recorded chart archives. Test source stays in the GitLab checkout for the
+same commit, since the deployment archive is not a test-source archive.
+
+Manual nightly jobs in MR pipelines use the current pipeline's `generic-test`
+artifact set after `build-stage-charts` succeeds. See the
+[MR nightly instructions](../../gitlab-ci/README.md#merge-request-lane) for
+starting those optional jobs. Resolving artifacts alone does not run a suite.
+
 ## What E2E Tests Exist
 
 The Ginkgo suites live in `test/`. Most feature directories are one suite;
