@@ -47,12 +47,16 @@ another namespace. The mapping propagates the same references to PostgreSQL and
 Pooler pods. Synthetic unit/envtest fixture images
 are intentionally not published and must never be used for live tests.
 
-EKS PostgreSQL CI runs supply these inputs through shared pipeline configuration.
-They use public CloudNativePG GHCR images pinned by tag and multi-architecture
-index digest. Workload nodes pull them directly without registry credentials or
-a PostgreSQL ECR mirror. CI checks for missing inputs before provisioning the
-cluster. Use approved `tag@sha256` references when overriding images. Direct
-private-registry runs still need the namespace-local credentials described above.
+EKS and Kraken PostgreSQL CI resolve these inputs from the checked-in
+[public release catalog](../postgresql/releases/postgresok-2026-11-06/release-manifest.json)
+before provisioning. `POSTGRES_RELEASE_MANIFEST` selects another reviewed catalog;
+explicit `TEST_PG*_IMAGE` variables override workload defaults. The shared CI
+helper verifies the public CNPG chart's archive checksum and installs it with the
+catalog's public controller/bootstrap image. Nodes pull backend images directly
+from Docker Hub; runtime context records the release and effective references.
+SOK still uses the pipeline's selected operator image. Use approved `tag@sha256`
+references for overrides; private registries need namespace-local credentials.
+Ordinary Go unit/envtest runs do not download backend artifacts.
 
 The PostgreSQL database happy path also checks generated admin/rw credentials
 with independent client Jobs over the published RW endpoint using `verify-full`
