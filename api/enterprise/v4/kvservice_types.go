@@ -84,7 +84,7 @@ const (
 // Fields without omitempty retain explicit zero values in status.
 type KVServiceTenantStatus struct {
 	// +optional
-	Name string `json:"name"`
+	Name string `json:"name,omitempty"`
 	// +kubebuilder:validation:Required
 	Namespace string `json:"namespace"`
 	// +optional

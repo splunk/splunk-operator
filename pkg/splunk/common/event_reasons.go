@@ -33,9 +33,8 @@ const (
 	EventReasonClusterQuorumRestored EventReason = "ClusterQuorumRestored"
 	EventReasonPasswordSyncCompleted EventReason = "PasswordSyncCompleted"
 
-	EventReasonTenantReady EventReason = "TenantReady"
-
-	// Warning event reasons — tenant readiness
+	// Tenant readiness event reasons (Normal and Warning, respectively).
+	EventReasonTenantReady    EventReason = "TenantReady"
 	EventReasonTenantNotReady EventReason = "TenantNotReady"
 
 	// Warning event reasons — spec & config
