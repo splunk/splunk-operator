@@ -39,18 +39,28 @@ func TestEvaluateTenantOutcomes(t *testing.T) {
 		resolved     resolvedTenantDependencies
 		reason       enterpriseApi.KVServiceTenantReason
 		retry, ready bool
+		resolveCalls int
+		secret       string
 	}{
-		{"database pending", databaseResult{}, nil, complete, enterpriseApi.KVServiceTenantDatabasePending, true, false},
-		{"database API failure", databaseResult{err: unavailable}, nil, complete, enterpriseApi.KVServiceTenantDatabasePending, true, false},
-		{"database conflict", databaseResult{err: invalid}, nil, complete, enterpriseApi.KVServiceTenantDatabaseConflict, false, false},
-		{"authentication pending", databaseResult{ready: true}, unavailable, complete, enterpriseApi.KVServiceTenantAuthenticationPending, true, false},
-		{"authentication invalid", databaseResult{ready: true}, invalid, complete, enterpriseApi.KVServiceTenantAuthenticationInvalid, false, false},
-		{"missing connection references", databaseResult{ready: true}, nil, resolvedTenantDependencies{}, enterpriseApi.KVServiceTenantCredentialsPending, true, false},
-		{"credential read failure", databaseResult{ready: true}, nil, resolvedTenantDependencies{err: unavailable}, enterpriseApi.KVServiceTenantCredentialsPending, true, false},
-		{"ready", databaseResult{ready: true}, nil, complete, enterpriseApi.KVServiceTenantReady, false, true},
+		{"database pending", databaseResult{}, nil, complete, enterpriseApi.KVServiceTenantDatabasePending, true, false, 0, ""},
+		{"database API failure", databaseResult{err: unavailable}, nil, complete, enterpriseApi.KVServiceTenantDatabasePending, true, false, 0, ""},
+		{"database conflict", databaseResult{err: invalid}, nil, complete, enterpriseApi.KVServiceTenantDatabaseConflict, false, false, 0, ""},
+		{"database failure before authentication", databaseResult{err: unavailable}, unavailable, complete, enterpriseApi.KVServiceTenantDatabasePending, true, false, 0, ""},
+		{"authentication pending", databaseResult{ready: true}, unavailable, complete, enterpriseApi.KVServiceTenantAuthenticationPending, true, false, 0, "splunk-tenant1-secret"},
+		{"authentication invalid", databaseResult{ready: true}, invalid, complete, enterpriseApi.KVServiceTenantAuthenticationInvalid, false, false, 0, "splunk-tenant1-secret"},
+		{"authentication before database readiness", databaseResult{}, unavailable, complete, enterpriseApi.KVServiceTenantAuthenticationPending, true, false, 0, "splunk-tenant1-secret"},
+		{"missing connection references", databaseResult{ready: true}, nil, resolvedTenantDependencies{}, enterpriseApi.KVServiceTenantCredentialsPending, true, false, 1, ""},
+		{"credential read failure", databaseResult{ready: true}, nil, resolvedTenantDependencies{err: unavailable}, enterpriseApi.KVServiceTenantCredentialsPending, true, false, 1, ""},
+		{"ready", databaseResult{ready: true}, nil, complete, enterpriseApi.KVServiceTenantReady, false, true, 1, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := evaluateTenant("alpha", "tenant1", tc.db, tc.auth, tc.resolved)
+			resolveCalls := 0
+			got := evaluateTenant("alpha", "tenant1", tc.db, tc.auth, func() resolvedTenantDependencies {
+				resolveCalls++
+				return tc.resolved
+			})
+			require.Equal(t, tc.resolveCalls, resolveCalls)
+			require.Equal(t, tc.secret, got.secret)
 			require.Equal(t, tc.reason, got.status.Reason)
 			require.Equal(t, tc.retry, got.retry)
 			require.Equal(t, tc.ready, got.status.Ready)

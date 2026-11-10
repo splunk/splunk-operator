@@ -167,7 +167,7 @@ func TestTenantAuthenticationReadFailureIsLoggedAndIsolated(t *testing.T) {
 }
 
 func TestTenantStatusIsUnknownWhenEvaluationCannotRun(t *testing.T) {
-	for _, failure := range []string{"reservation", "list"} {
+	for _, failure := range []string{"reservation", "list", "membership create", "membership update"} {
 		t.Run(failure, func(t *testing.T) {
 			t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 			cr, _, c := postgresReadinessFixture(t)
@@ -181,23 +181,54 @@ func TestTenantStatusIsUnknownWhenEvaluationCannotRun(t *testing.T) {
 				require.NoError(t, c.Get(ctx, client.ObjectKey{Namespace: cr.Namespace, Name: common.KVServiceTenantVerificationKeysName}, ring))
 				ring.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(&enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "previous", UID: "previous"}}, enterpriseApi.GroupVersion.WithKind("KVService"))}
 				require.NoError(t, c.Update(ctx, ring))
-			} else {
+			} else if failure == "list" {
 				guarded = interceptor.NewClient(c, interceptor.Funcs{List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
 					if _, services := list.(*enterpriseApi.KVServiceList); services {
 						return errors.New("list unavailable")
 					}
 					return c.List(ctx, list, opts...)
 				}})
+			} else {
+				membership := resources.NewKVServiceTenantConfig(cr, nil)
+				if failure == "membership create" {
+					require.NoError(t, c.Delete(ctx, membership))
+				}
+				guarded = interceptor.NewClient(c, interceptor.Funcs{
+					Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+						if _, config := obj.(*corev1.ConfigMap); config && client.ObjectKeyFromObject(obj) == client.ObjectKeyFromObject(membership) {
+							return errors.New("membership unavailable")
+						}
+						return c.Create(ctx, obj, opts...)
+					},
+					Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+						if _, config := obj.(*corev1.ConfigMap); config && client.ObjectKeyFromObject(obj) == client.ObjectKeyFromObject(membership) {
+							return errors.New("membership unavailable")
+						}
+						return c.Update(ctx, obj, opts...)
+					},
+				})
 			}
 			recorder := events.NewFakeRecorder(20)
 			_, err := Apply(ctx, guarded, client.ObjectKeyFromObject(cr), recorder)
-			require.Equal(t, failure == "list", err != nil)
+			require.Equal(t, failure != "reservation", err != nil)
 			require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(cr), cr))
 			require.Equal(t, previous, cr.Status.Tenants)
 			condition := meta.FindStatusCondition(cr.Status.Conditions, "TenantsReady")
 			require.Equal(t, metav1.ConditionUnknown, condition.Status)
 			require.Equal(t, "TenantEvaluationPending", condition.Reason)
 			require.Empty(t, drainKVServiceEvents(recorder))
+			if failure == "membership create" || failure == "membership update" {
+				require.ErrorContains(t, err, "publish tenant membership")
+				_, err = Apply(ctx, c, client.ObjectKeyFromObject(cr), recorder)
+				require.NoError(t, err)
+				require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(cr), cr))
+				require.Len(t, cr.Status.Tenants, 2)
+				require.Equal(t, metav1.ConditionTrue, meta.FindStatusCondition(cr.Status.Conditions, "TenantsReady").Status)
+				require.Equal(t, 2, countKVServiceEvents(drainKVServiceEvents(recorder), "Normal "+string(common.EventReasonTenantReady)+" "))
+				_, err = Apply(ctx, c, client.ObjectKeyFromObject(cr), recorder)
+				require.NoError(t, err)
+				require.Empty(t, drainKVServiceEvents(recorder))
+			}
 		})
 	}
 }

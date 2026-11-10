@@ -168,17 +168,16 @@ func ensureTenantPostgresReady(ctx context.Context, c splcommon.ControllerClient
 	for _, tenant := range slices.Sorted(maps.Keys(mapping)) {
 		db, dbReady, dbErr := ensureDatabase(ctx, c, cr,
 			resources.NewKVServiceTenantDatabase(cr, tenant), tenant, services)
-		var resolved resolvedTenantDependencies
-		if dbErr == nil && dbReady && keyFailures[tenant] == nil {
-			resolved.dependencies, resolved.info, resolved.err = k8sops.ResolveKVServiceTenantDependencies(ctx, c, cr, db, tenant)
-		}
-		evaluation := evaluateTenant(tenant, mapping[tenant], databaseResult{ready: dbReady, err: dbErr}, keyFailures[tenant], resolved)
+		evaluation := evaluateTenant(tenant, mapping[tenant], databaseResult{ready: dbReady, err: dbErr}, keyFailures[tenant], func() resolvedTenantDependencies {
+			dependencies, info, err := k8sops.ResolveKVServiceTenantDependencies(ctx, c, cr, db, tenant)
+			return resolvedTenantDependencies{dependencies: dependencies, info: info, err: err}
+		})
 		if evaluation.diagnostic != nil {
 			args := []any{"tenant", tenant, "namespace", mapping[tenant],
 				"database", evaluation.status.DatabaseName, "reason", evaluation.status.Reason,
 				"error", evaluation.diagnostic}
-			if dbErr == nil && keyFailures[tenant] != nil {
-				args = append(args, "secret", splcommon.GetNamespaceScopedSecretName(mapping[tenant]))
+			if evaluation.secret != "" {
+				args = append(args, "secret", evaluation.secret)
 			}
 			logger := logging.FromContext(ctx)
 			if apierrors.IsNotFound(evaluation.diagnostic) || slices.Contains(cr.Status.Tenants, evaluation.status) {
@@ -198,12 +197,12 @@ func ensureTenantPostgresReady(ctx context.Context, c splcommon.ControllerClient
 	if statuses == nil {
 		statuses = []enterpriseApi.KVServiceTenantStatus{}
 	}
-	cr.Status.Tenants = statuses
-	result.tenantsEvaluated = true
 	runtimeConfig, err := k8sops.ApplyKVServiceTenantConfig(ctx, c, cr, ready)
 	if err != nil {
 		return result, fmt.Errorf("publish tenant membership: %w", err)
 	}
+	cr.Status.Tenants = statuses
+	result.tenantsEvaluated = true
 	if serviceErr != nil {
 		return result, fmt.Errorf("prepare service database %s/%s: %w", cr.Namespace, splcommon.KVServiceSystemDatabaseResource, serviceErr)
 	}
@@ -236,10 +235,12 @@ type tenantEvaluation struct {
 	database   *tenantDatabase
 	retry      bool
 	diagnostic error
+	secret     string
 }
 
-// evaluateTenant is pure: every outcome states its status and retry policy.
-func evaluateTenant(tenant, namespace string, db databaseResult, authErr error, resolved resolvedTenantDependencies) tenantEvaluation {
+// evaluateTenant owns tenant outcome precedence and resolves credentials only after
+// database and authentication prerequisites pass.
+func evaluateTenant(tenant, namespace string, db databaseResult, authErr error, resolve func() resolvedTenantDependencies) tenantEvaluation {
 	result := tenantEvaluation{status: enterpriseApi.KVServiceTenantStatus{
 		Name: tenant, Namespace: namespace, DatabaseName: splutil.KVServiceTenantDatabaseName(tenant),
 	}}
@@ -259,6 +260,7 @@ func evaluateTenant(tenant, namespace string, db databaseResult, authErr error, 
 		result.status.Message = "Waiting for the tenant namespace authentication Secret"
 		result.retry = true
 		result.diagnostic = authErr
+		result.secret = splcommon.GetNamespaceScopedSecretName(namespace)
 		if message, terminal := splcommon.TerminalMessage(authErr); terminal {
 			result.status.Reason = enterpriseApi.KVServiceTenantAuthenticationInvalid
 			result.status.Message = message
@@ -268,12 +270,15 @@ func evaluateTenant(tenant, namespace string, db databaseResult, authErr error, 
 		result.status.Reason = enterpriseApi.KVServiceTenantDatabasePending
 		result.status.Message = "Waiting for tenant database readiness"
 		result.retry = true
-	case resolved.err != nil || resolved.info == nil || resolved.dependencies == nil:
-		result.status.Reason = enterpriseApi.KVServiceTenantCredentialsPending
-		result.status.Message = "Waiting for usable tenant connection ConfigMap and database credentials"
-		result.retry = true
-		result.diagnostic = resolved.err
 	default:
+		resolved := resolve()
+		if resolved.err != nil || resolved.info == nil || resolved.dependencies == nil {
+			result.status.Reason = enterpriseApi.KVServiceTenantCredentialsPending
+			result.status.Message = "Waiting for usable tenant connection ConfigMap and database credentials"
+			result.retry = true
+			result.diagnostic = resolved.err
+			return result
+		}
 		result.status.Ready = true
 		result.status.Reason = enterpriseApi.KVServiceTenantReady
 		result.status.Message = "Tenant database and authentication dependencies are ready"
