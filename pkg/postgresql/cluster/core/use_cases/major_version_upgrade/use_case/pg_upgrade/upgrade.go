@@ -78,7 +78,7 @@ func (v *pgUpgradeFlow) onPreflight(ctx context.Context) (reconciliationtypes.Re
 		return mvutypes.ReportFromError(errDriverNotConfigured), errDriverNotConfigured
 	}
 	if err := v.driver.ApplyTargetImage(ctx); err != nil {
-		if errors.Is(err, mvutypes.ErrUpgradeFlowFailed) {
+		if mvutypes.IsTerminalFlowFailure(err) {
 			return mvutypes.ReportFromError(err), err
 		}
 		return reconciliationtypes.Report{
@@ -105,7 +105,7 @@ func (v *pgUpgradeFlow) onUpgrading(ctx context.Context) (reconciliationtypes.Re
 	}
 	done, err := v.driver.UpgradeComplete(ctx)
 	if err != nil {
-		if errors.Is(err, mvutypes.ErrUpgradeFlowFailed) ||
+		if mvutypes.IsTerminalFlowFailure(err) ||
 			errors.Is(err, mvutypes.ErrUpgradeUnrecoverablePreConversion) ||
 			errors.Is(err, mvutypes.ErrUpgradeUnrecoverablePostConversion) {
 			return mvutypes.ReportFromError(err), err

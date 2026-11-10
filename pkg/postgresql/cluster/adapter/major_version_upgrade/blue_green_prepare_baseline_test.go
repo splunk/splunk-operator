@@ -63,7 +63,7 @@ func TestSourceBaselineDetectsServerCARotation(t *testing.T) {
 	require.NoError(t, reader.Update(t.Context(), ca))
 	current, err := baseline.credentialFingerprints(t.Context(), source, nil, "")
 	require.NoError(t, err)
-	require.ErrorIs(t, verifyCredentialBaseline(frozen, current), mvutypes.ErrUpgradeFlowFailed)
+	require.ErrorIs(t, verifyCredentialBaseline(frozen, current), mvutypes.ErrCandidateInvalid)
 }
 
 func TestValidateReplicationNetworkPolicyRejectsImplicitIngressPolicySelectingSource(t *testing.T) {
@@ -120,7 +120,7 @@ func TestVerifyBlueGreenBaselineRejectsConfigurationDrift(t *testing.T) {
 	oldFingerprint, newFingerprint := "old", "new"
 	intent := mvutypes.Intent{AttemptID: "attempt-1", State: []platformv1alpha1.PostgresMajorUpgradeStatus{{BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1", Blue: &platformv1alpha1.BlueGreenEnvironmentStatus{}, SourceConfigurationFingerprint: &oldFingerprint}}}}
 	err := verifyBlueGreenBaseline(intent, &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1", SourceConfigurationFingerprint: &newFingerprint})
-	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+	require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 }
 
 func TestVerifyBlueGreenBaselineStartsAfterSourceClaim(t *testing.T) {
@@ -131,14 +131,14 @@ func TestVerifyBlueGreenBaselineStartsAfterSourceClaim(t *testing.T) {
 	require.NoError(t, verifyBlueGreenBaseline(intent, current), "the Preflight placeholder is not a baseline")
 
 	intent.State[0].BlueGreen.Blue = &platformv1alpha1.BlueGreenEnvironmentStatus{}
-	require.ErrorIs(t, verifyBlueGreenBaseline(intent, current), mvutypes.ErrUpgradeFlowFailed,
+	require.ErrorIs(t, verifyBlueGreenBaseline(intent, current), mvutypes.ErrCandidateInvalid,
 		"a claimed empty database inventory must reject a later addition")
 }
 
 func TestVerifyDatabaseBaselineRejectsAddedDeclaration(t *testing.T) {
 	previous := []platformv1alpha1.BlueGreenDatabaseReplicationStatus{{DatabaseName: "orders"}}
 	current := append(append([]platformv1alpha1.BlueGreenDatabaseReplicationStatus{}, previous...), platformv1alpha1.BlueGreenDatabaseReplicationStatus{DatabaseName: "extra"})
-	require.ErrorIs(t, verifyDatabaseBaseline(previous, current), mvutypes.ErrUpgradeFlowFailed)
+	require.ErrorIs(t, verifyDatabaseBaseline(previous, current), mvutypes.ErrCandidateInvalid)
 }
 
 func TestConfigurationFingerprintCoversFrozenDeclarationsAndLiveBlue(t *testing.T) {
@@ -219,4 +219,27 @@ func TestPreserveCredentialCaptureTimesRetainsExistingBaselineTime(t *testing.T)
 	result := preserveCredentialCaptureTimes(previous, current)
 	require.Equal(t, capturedAt, *result[0].CapturedAt)
 	require.Nil(t, result[1].CapturedAt)
+}
+
+func TestFrozenBaselineDriftRequiresRebuild(t *testing.T) {
+	fingerprint := func(value string) []platformv1alpha1.BlueGreenCredentialFingerprintStatus {
+		return []platformv1alpha1.BlueGreenCredentialFingerprintStatus{{SecretName: "app", SecretUID: "uid", Fingerprint: value}}
+	}
+	database := func(schema string) []platformv1alpha1.BlueGreenDatabaseReplicationStatus {
+		return []platformv1alpha1.BlueGreenDatabaseReplicationStatus{{PostgresDatabaseName: "orders", PostgresDatabaseUID: "uid", DatabaseName: "orders",
+			SourceSchemaFingerprint: new(schema), SourceAccessPolicyFingerprint: new("policy")}}
+	}
+
+	require.ErrorIs(t, verifyCredentialBaseline(fingerprint("a"), fingerprint("b")), mvutypes.ErrCandidateInvalid)
+	require.NoError(t, verifyCredentialBaseline(fingerprint("a"), fingerprint("a")))
+	require.ErrorIs(t, verifyDatabaseBaseline(database("a"), database("b")), mvutypes.ErrCandidateInvalid)
+	require.ErrorIs(t, verifyDatabaseBaseline(database("a"), nil), mvutypes.ErrCandidateInvalid)
+	require.NoError(t, verifyDatabaseBaseline(database("a"), database("a")))
+
+	intent := mvutypes.Intent{AttemptID: "attempt", State: []platformv1alpha1.PostgresMajorUpgradeStatus{{BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+		AttemptID: "attempt", Blue: &platformv1alpha1.BlueGreenEnvironmentStatus{}, SourceConfigurationFingerprint: new("before"),
+	}}}}
+	err := verifyBlueGreenBaseline(intent, &platformv1alpha1.PostgresBlueGreenUpgradeStatus{SourceConfigurationFingerprint: new("after")})
+	require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
+	require.True(t, mvutypes.IsTerminalFlowFailure(err))
 }

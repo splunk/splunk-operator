@@ -90,7 +90,7 @@ func (p *BlueGreenPreparer) Prepare(ctx context.Context, intent mvutypes.Intent)
 	}
 	if previous != nil && previous.Blue != nil &&
 		(previous.Blue.Ref.Name != cluster.Name || previous.Blue.Ref.Namespace != cluster.Namespace || previous.Blue.Ref.UID != cluster.UID) {
-		return previous, fmt.Errorf("%w: source CNPG Cluster identity changed after blue/green preflight", mvutypes.ErrUpgradeFlowFailed)
+		return previous, fmt.Errorf("%w: source CNPG Cluster identity changed after blue/green preflight", mvutypes.ErrCandidateInvalid)
 	}
 	status, err := p.captureSourceBaseline(ctx, intent, cluster, previous, databases, checks)
 	if err != nil {
@@ -301,7 +301,7 @@ func verifyBlueGreenBaseline(intent mvutypes.Intent, current *platformv1alpha1.P
 		}
 		if previous.SourceConfigurationFingerprint != nil &&
 			(current.SourceConfigurationFingerprint == nil || *previous.SourceConfigurationFingerprint != *current.SourceConfigurationFingerprint) {
-			return fmt.Errorf("%w: source configuration changed after blue/green preflight", mvutypes.ErrUpgradeFlowFailed)
+			return fmt.Errorf("%w: source configuration changed after blue/green preflight", mvutypes.ErrCandidateInvalid)
 		}
 		if err := verifyCredentialBaseline(previous.CredentialFingerprints, current.CredentialFingerprints); err != nil {
 			return err
@@ -325,7 +325,7 @@ func verifyCredentialBaseline(previous, current []platformv1alpha1.BlueGreenCred
 	for _, fingerprint := range previous {
 		key := fingerprint.SecretName + "/" + fingerprint.SecretUID
 		if values[key] != fingerprint.Fingerprint {
-			return fmt.Errorf("%w: credential Secret %q changed after blue/green preflight", mvutypes.ErrUpgradeFlowFailed, fingerprint.SecretName)
+			return fmt.Errorf("%w: credential Secret %q changed after blue/green preflight", mvutypes.ErrCandidateInvalid, fingerprint.SecretName)
 		}
 	}
 	return nil
@@ -333,7 +333,7 @@ func verifyCredentialBaseline(previous, current []platformv1alpha1.BlueGreenCred
 
 func verifyDatabaseBaseline(previous, current []platformv1alpha1.BlueGreenDatabaseReplicationStatus) error {
 	if len(previous) != len(current) {
-		return fmt.Errorf("%w: managed database inventory changed after blue/green preflight", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: managed database inventory changed after blue/green preflight", mvutypes.ErrCandidateInvalid)
 	}
 	values := make(map[string]platformv1alpha1.BlueGreenDatabaseReplicationStatus, len(current))
 	for _, database := range current {
@@ -343,7 +343,7 @@ func verifyDatabaseBaseline(previous, current []platformv1alpha1.BlueGreenDataba
 		key := database.PostgresDatabaseName + "/" + database.PostgresDatabaseUID + "/" + database.DatabaseName
 		currentDatabase, ok := values[key]
 		if !ok || !sameOptionalString(database.SourceSchemaFingerprint, currentDatabase.SourceSchemaFingerprint) || !sameOptionalString(database.SourceAccessPolicyFingerprint, currentDatabase.SourceAccessPolicyFingerprint) {
-			return fmt.Errorf("%w: schema or access policy for database %q changed after blue/green preflight", mvutypes.ErrUpgradeFlowFailed, database.DatabaseName)
+			return fmt.Errorf("%w: schema or access policy for database %q changed after blue/green preflight", mvutypes.ErrCandidateInvalid, database.DatabaseName)
 		}
 	}
 	return nil
@@ -565,7 +565,7 @@ func (p *BlueGreenPreparer) reconcilePublication(ctx context.Context, clusterNam
 	err := p.client.Get(ctx, types.NamespacedName{Namespace: p.key.Namespace, Name: name}, publication)
 	if err == nil {
 		if !publicationMatchesAttempt(publication, p.cluster, clusterName, database.name, attemptID) {
-			return false, fmt.Errorf("%w: publication %s does not match the managed source/database contract", mvutypes.ErrUpgradeFlowFailed, name)
+			return false, fmt.Errorf("%w: publication %s does not match the managed source/database contract", mvutypes.ErrCandidateInvalid, name)
 		}
 		return publication.Status.ObservedGeneration == publication.Generation && publication.Status.Applied != nil && *publication.Status.Applied, nil
 	}
@@ -620,11 +620,11 @@ func (p *BlueGreenPreparer) reconcileReplicationSecret(ctx context.Context, atte
 	err := p.client.Get(ctx, types.NamespacedName{Namespace: p.key.Namespace, Name: name}, secret)
 	if err == nil {
 		if secret.Labels[blueGreenAttemptLabel] != attemptID || !metav1.IsControlledBy(secret, p.cluster) {
-			return "", "", fmt.Errorf("%w: replication Secret %s belongs to another blue/green attempt", mvutypes.ErrUpgradeFlowFailed, name)
+			return "", "", fmt.Errorf("%w: replication Secret %s belongs to another blue/green attempt", mvutypes.ErrCandidateInvalid, name)
 		}
 		username, password := string(secret.Data[replicationSecretUsernameKey]), string(secret.Data[replicationSecretPasswordKey])
 		if username == "" || password == "" {
-			return "", "", fmt.Errorf("%w: replication Secret %s is incomplete", mvutypes.ErrUpgradeFlowFailed, name)
+			return "", "", fmt.Errorf("%w: replication Secret %s is incomplete", mvutypes.ErrCandidateInvalid, name)
 		}
 		return username, password, nil
 	}

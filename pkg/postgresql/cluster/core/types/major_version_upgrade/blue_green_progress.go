@@ -63,11 +63,28 @@ func validateSourcePreparationReceipt(attemptID string, proposed *platformv1alph
 	return nil
 }
 
+// validateRebuildClassification keeps the rebuild classification write-once.
+// It may not first appear after the endpoint commit, when only fail-forward
+// recovery remains.
+func validateRebuildClassification(attemptID string, current, proposed *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {
+	if current.RebuildRequired != nil {
+		if proposed.RebuildRequired == nil || *proposed.RebuildRequired != *current.RebuildRequired {
+			return fmt.Errorf("blue/green progress cannot change the rebuild classification for attempt %q", attemptID)
+		}
+	} else if proposed.RebuildRequired != nil && CutoverStageOfStatus(current).Committed() {
+		return fmt.Errorf("blue/green progress cannot classify a committed attempt for rebuild in attempt %q", attemptID)
+	}
+	return nil
+}
+
 func validateExistingBlueGreenProgress(attemptID string, current, proposed *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {
 	// An omitted payload is a report-only update, not a replacement of the
 	// durable attempt state. Persistence preserves it unchanged.
 	if proposed == nil {
 		return nil
+	}
+	if err := validateRebuildClassification(attemptID, current, proposed); err != nil {
+		return err
 	}
 	if previous := current.SourcePreparation; previous != nil && previous.CompletedAt != nil {
 		receipt := proposed.SourcePreparation

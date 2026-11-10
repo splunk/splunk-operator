@@ -103,7 +103,7 @@ func (p *BlueGreenCandidatePreparer) PrepareCandidate(ctx context.Context, inten
 		return status, fmt.Errorf("reading prepared blue CNPG Cluster: %w", err)
 	}
 	if status.Blue.Ref.UID != "" && source.UID != status.Blue.Ref.UID {
-		return status, fmt.Errorf("%w: prepared blue CNPG Cluster UID changed", mvutypes.ErrUpgradeFlowFailed)
+		return status, fmt.Errorf("%w: prepared blue CNPG Cluster UID changed", mvutypes.ErrCandidateInvalid)
 	}
 	databases, err := listManagedDatabases(ctx, p.client, p.key)
 	if err != nil {
@@ -138,7 +138,7 @@ func (p *BlueGreenCandidatePreparer) PrepareCandidate(ctx context.Context, inten
 	if status.Green != nil && (status.Green.Ref.Name != candidate.Name ||
 		status.Green.Ref.Namespace != candidate.Namespace ||
 		(status.Green.Ref.UID != "" && status.Green.Ref.UID != candidate.UID)) {
-		return status, fmt.Errorf("%w: recorded green CNPG Cluster does not match this attempt", mvutypes.ErrUpgradeFlowFailed)
+		return status, fmt.Errorf("%w: recorded green CNPG Cluster does not match this attempt", mvutypes.ErrCandidateInvalid)
 	}
 	status.Green = &platformv1alpha1.BlueGreenEnvironmentStatus{
 		Ref: corev1.ObjectReference{
@@ -191,7 +191,7 @@ func (p *BlueGreenCandidatePreparer) PrepareCandidate(ctx context.Context, inten
 // silently recapturing a new baseline.
 func (p *BlueGreenCandidatePreparer) verifyFrozenSource(ctx context.Context, source *cnpgv1.Cluster, databases []declaredDatabase, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus, attemptID string) error {
 	if source.Status.Certificates.ServerCASecret == "" || !hasCredentialFingerprint(status.CredentialFingerprints, source.Status.Certificates.ServerCASecret) {
-		return fmt.Errorf("%w: frozen blue server CA receipt is missing", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: frozen blue server CA receipt is missing", mvutypes.ErrCandidateInvalid)
 	}
 	baseline := sourceBaseline{
 		client:              p.client,
@@ -205,7 +205,7 @@ func (p *BlueGreenCandidatePreparer) verifyFrozenSource(ctx context.Context, sou
 		return err
 	}
 	if status.SourceConfigurationFingerprint == nil || configuration != *status.SourceConfigurationFingerprint {
-		return fmt.Errorf("%w: frozen blue/green configuration changed after preflight", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: frozen blue/green configuration changed after preflight", mvutypes.ErrCandidateInvalid)
 	}
 	credentials, err := baseline.credentialFingerprints(ctx, source, databases, replicationSecretName(p.key.Name, attemptID))
 	if err != nil {
@@ -334,14 +334,14 @@ func (p *BlueGreenCandidatePreparer) replicationUsername(ctx context.Context, at
 		return "", fmt.Errorf("reading blue/green replication Secret: %w", err)
 	}
 	if secret.Labels[blueGreenAttemptLabel] != attemptID || !metav1.IsControlledBy(secret, p.cluster) {
-		return "", fmt.Errorf("%w: replication Secret %s does not belong to this attempt", mvutypes.ErrUpgradeFlowFailed, name)
+		return "", fmt.Errorf("%w: replication Secret %s does not belong to this attempt", mvutypes.ErrCandidateInvalid, name)
 	}
 	username := string(secret.Data[replicationSecretUsernameKey])
 	if username == "" {
-		return "", fmt.Errorf("%w: replication Secret %s has no username", mvutypes.ErrUpgradeFlowFailed, name)
+		return "", fmt.Errorf("%w: replication Secret %s has no username", mvutypes.ErrCandidateInvalid, name)
 	}
 	if username != replicationRoleName(attemptID) {
-		return "", fmt.Errorf("%w: replication Secret %s has an unexpected attempt role", mvutypes.ErrUpgradeFlowFailed, name)
+		return "", fmt.Errorf("%w: replication Secret %s has an unexpected attempt role", mvutypes.ErrCandidateInvalid, name)
 	}
 	return username, nil
 }
@@ -352,10 +352,10 @@ func candidatePublisherShadowSQL(role string) string {
 
 func (p *BlueGreenCandidatePreparer) validateCandidate(candidate, desired, source *cnpgv1.Cluster, attemptID string) error {
 	if candidate.Labels[blueGreenAttemptLabel] != attemptID || !metav1.IsControlledBy(candidate, p.cluster) {
-		return fmt.Errorf("%w: green CNPG Cluster %s belongs to another attempt", mvutypes.ErrUpgradeFlowFailed, candidate.Name)
+		return fmt.Errorf("%w: green CNPG Cluster %s belongs to another attempt", mvutypes.ErrCandidateInvalid, candidate.Name)
 	}
 	if candidate.Spec.Instances != 1 && candidate.Spec.Instances != p.plan.TargetInstances {
-		return fmt.Errorf("%w: green CNPG Cluster %s has unexpected topology", mvutypes.ErrUpgradeFlowFailed, candidate.Name)
+		return fmt.Errorf("%w: green CNPG Cluster %s has unexpected topology", mvutypes.ErrCandidateInvalid, candidate.Name)
 	}
 	expected := desired.DeepCopy()
 	if candidate.Spec.Instances == p.plan.TargetInstances {
@@ -370,7 +370,7 @@ func (p *BlueGreenCandidatePreparer) validateCandidate(candidate, desired, sourc
 	expected.Default()
 	observed.Default()
 	if !equality.Semantic.DeepEqual(expected.Spec, observed.Spec) {
-		return fmt.Errorf("%w: green CNPG Cluster %s differs from the desired candidate spec", mvutypes.ErrUpgradeFlowFailed, candidate.Name)
+		return fmt.Errorf("%w: green CNPG Cluster %s differs from the desired candidate spec", mvutypes.ErrCandidateInvalid, candidate.Name)
 	}
 	return nil
 }
@@ -585,10 +585,10 @@ func (p *BlueGreenCandidatePreparer) buildCandidateSubscription(candidateName, d
 
 func (p *BlueGreenCandidatePreparer) validateSubscription(subscription, desired *cnpgv1.Subscription, attemptID string) error {
 	if subscription.Labels[blueGreenAttemptLabel] != attemptID || !metav1.IsControlledBy(subscription, p.cluster) {
-		return fmt.Errorf("%w: green logical Subscription %s belongs to another attempt", mvutypes.ErrUpgradeFlowFailed, subscription.Name)
+		return fmt.Errorf("%w: green logical Subscription %s belongs to another attempt", mvutypes.ErrCandidateInvalid, subscription.Name)
 	}
 	if !equality.Semantic.DeepEqual(subscription.Spec, desired.Spec) {
-		return fmt.Errorf("%w: green logical Subscription %s does not match the candidate contract", mvutypes.ErrUpgradeFlowFailed, subscription.Name)
+		return fmt.Errorf("%w: green logical Subscription %s does not match the candidate contract", mvutypes.ErrCandidateInvalid, subscription.Name)
 	}
 	return nil
 }
@@ -665,7 +665,7 @@ func (p *BlueGreenCandidatePreparer) reconcileCandidateServerTLS(ctx context.Con
 		return "", fmt.Errorf("reading green server CA: %w", err)
 	}
 	if len(blueCA.Data["ca.crt"]) == 0 || !bytes.Equal(bytes.TrimSpace(blueCA.Data["ca.crt"]), bytes.TrimSpace(greenCA.Data["ca.crt"])) {
-		return "", fmt.Errorf("%w: green server leaf does not chain to the frozen blue CA", mvutypes.ErrUpgradeFlowFailed)
+		return "", fmt.Errorf("%w: green server leaf does not chain to the frozen blue CA", mvutypes.ErrCandidateInvalid)
 	}
 	return leafName, nil
 }

@@ -1531,6 +1531,11 @@ func (in *PostgresBlueGreenUpgradeStatus) DeepCopyInto(out *PostgresBlueGreenUpg
 		in, out := &in.RearmedAt, &out.RearmedAt
 		*out = (*in).DeepCopy()
 	}
+	if in.RebuildRequired != nil {
+		in, out := &in.RebuildRequired, &out.RebuildRequired
+		*out = new(string)
+		**out = **in
+	}
 	if in.Blue != nil {
 		in, out := &in.Blue, &out.Blue
 		*out = new(BlueGreenEnvironmentStatus)

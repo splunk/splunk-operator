@@ -33,13 +33,13 @@ func verifyCutoverGuardState(ctx context.Context, conn pginfra.Conn, switchover 
 	}
 	if side == sideBlue {
 		if present {
-			return fmt.Errorf("%w: unexpected candidate guard on blue", mvutypes.ErrUpgradeFlowFailed)
+			return fmt.Errorf("%w: unexpected candidate guard on blue", mvutypes.ErrCandidateInvalid)
 		}
 		return nil
 	}
 	if switchover.CandidateGuardsRemovedAt != nil {
 		if present {
-			return fmt.Errorf("%w: candidate guards reappeared after verified removal", mvutypes.ErrUpgradeFlowFailed)
+			return fmt.Errorf("%w: candidate guards reappeared after verified removal", mvutypes.ErrCandidateInvalid)
 		}
 		return nil
 	}
@@ -47,7 +47,7 @@ func verifyCutoverGuardState(ctx context.Context, conn pginfra.Conn, switchover 
 		return verifyCandidateDMLGuards(ctx, conn)
 	}
 	if switchover.CandidateGuardsRemovalStartedAt == nil {
-		return fmt.Errorf("%w: candidate guards disappeared without a durable removal intent", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: candidate guards disappeared without a durable removal intent", mvutypes.ErrCandidateInvalid)
 	}
 	return nil
 }

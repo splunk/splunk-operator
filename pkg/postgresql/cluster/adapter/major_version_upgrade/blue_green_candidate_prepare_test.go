@@ -147,7 +147,7 @@ func TestBlueGreenCandidatePreparerCreatesSchemaOnlyTargetWithoutProductionArchi
 	legacy.Status.PhaseReason = "schema restore failed because its ACL recipient was absent"
 	require.NoError(t, client.Update(t.Context(), legacy))
 	_, err = preparer.PrepareCandidate(t.Context(), intent)
-	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+	require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 	assert.ErrorContains(t, err, "differs from the desired candidate spec")
 	unchangedLegacy := new(cnpgv1.Cluster)
 	require.NoError(t, client.Get(t.Context(), types.NamespacedName{Name: legacy.Name, Namespace: legacy.Namespace}, unchangedLegacy))
@@ -167,7 +167,7 @@ func TestBlueGreenCandidatePreparerCreatesSchemaOnlyTargetWithoutProductionArchi
 	driftIntent.State[0].BlueGreen.AttemptID = driftIntent.AttemptID
 	driftIntent.State[0].BlueGreen.Green = nil
 	_, err = preparer.PrepareCandidate(t.Context(), driftIntent)
-	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+	require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 	assert.ErrorContains(t, err, "frozen blue/green configuration changed")
 	err = client.Get(t.Context(), types.NamespacedName{Name: candidateClusterName(parent.Name, driftIntent.AttemptID), Namespace: parent.Namespace}, &cnpgv1.Cluster{})
 	require.True(t, apierrors.IsNotFound(err), "source drift must be rejected before a second green is created")
@@ -259,12 +259,13 @@ func TestCandidateValidationRejectsManagedSpecDrift(t *testing.T) {
 		{"schema import", func(c *cnpgv1.Cluster) { c.Spec.Bootstrap.InitDB.Import.Databases = []string{"other"} }},
 		{"external cluster", func(c *cnpgv1.Cluster) { c.Spec.ExternalClusters[0].ConnectionParameters["host"] = "other-rw" }},
 		{"CA", func(c *cnpgv1.Cluster) { c.Spec.Certificates.ServerCASecret = "other-ca" }},
+		{"topology", func(c *cnpgv1.Cluster) { c.Spec.Instances = 2 }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			candidate := base.DeepCopy()
 			test.mutate(candidate)
-			require.ErrorIs(t, preparer.validateCandidate(candidate, desired, source, "attempt-1"), mvutypes.ErrUpgradeFlowFailed)
+			require.ErrorIs(t, preparer.validateCandidate(candidate, desired, source, "attempt-1"), mvutypes.ErrCandidateInvalid)
 		})
 	}
 }

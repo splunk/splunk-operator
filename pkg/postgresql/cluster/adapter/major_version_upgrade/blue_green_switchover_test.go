@@ -271,6 +271,7 @@ type cutoverSQLFake struct {
 	strictHA        bool
 	retainedDrains  int
 	targetDurable   bool
+	parityErr       error
 }
 
 func (s *cutoverSQLFake) Drain(_ context.Context, cluster *cnpgv1.Cluster, _ cutoverIdentity, terminate bool) (bool, error) {
@@ -314,6 +315,9 @@ func (s *cutoverSQLFake) SourceLSN(context.Context, *cnpgv1.Cluster, cutoverIden
 }
 func (s *cutoverSQLFake) VerifyFinalParity(_ context.Context, _, _ *cnpgv1.Cluster, _ []declaredDatabase, bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus, _ cutoverIdentity) (bool, error) {
 	s.f.calls = append(s.f.calls, "parity")
+	if s.parityErr != nil {
+		return false, s.parityErr
+	}
 	if s.guardsAbsent && bg.Switchover.CandidateGuardsRemovalStartedAt == nil && bg.Switchover.CandidateGuardsRemovedAt == nil {
 		return false, errors.New("missing guard removal authority")
 	}
@@ -338,6 +342,7 @@ type cutoverEndpointsFake struct {
 	f                                                  *cutoverFixture
 	committed, prepared, published, loseCommitResponse bool
 	commits                                            int
+	commitErr                                          error
 }
 
 func (e *cutoverEndpointsFake) ObserveCommit(context.Context, types.NamespacedName, string) (bool, error) {
@@ -360,6 +365,11 @@ func (e *cutoverEndpointsFake) CommitCanonical(context.Context, types.Namespaced
 	if !e.committed {
 		e.commits++
 		e.committed = true
+	}
+	if e.commitErr != nil {
+		err := e.commitErr
+		e.commitErr = nil
+		return err
 	}
 	if e.loseCommitResponse {
 		e.loseCommitResponse = false

@@ -176,13 +176,13 @@ func TestCutoverSQLAgainstPostgres(t *testing.T) {
 	assert.Equal(t, sequences, actual)
 	_, err = bootstrap.Exec(t.Context(), "GRANT SELECT (subconninfo) ON pg_catalog.pg_subscription TO "+pginfra.QuoteIdentifier(id.Role))
 	require.NoError(t, err)
-	require.ErrorIs(t, verifyControlDatabase(t.Context(), restricted, id), mvutypes.ErrUpgradeFlowFailed, "unrequested catalog-column access must invalidate control proof")
+	require.ErrorIs(t, verifyControlDatabase(t.Context(), restricted, id), mvutypes.ErrCandidateInvalid, "unrequested catalog-column access must invalidate control proof")
 	_, err = bootstrap.Exec(t.Context(), "REVOKE SELECT (subconninfo) ON pg_catalog.pg_subscription FROM "+pginfra.QuoteIdentifier(id.Role))
 	require.NoError(t, err)
 	require.NoError(t, verifyControlDatabase(t.Context(), restricted, id))
 	_, err = bootstrap.Exec(t.Context(), "GRANT SELECT ON public.orders TO "+pginfra.QuoteIdentifier(id.Role))
 	require.NoError(t, err)
-	require.ErrorIs(t, verifyControlDatabase(t.Context(), restricted, id), mvutypes.ErrUpgradeFlowFailed, "unexpected grants must be rejected before normalization")
+	require.ErrorIs(t, verifyControlDatabase(t.Context(), restricted, id), mvutypes.ErrCandidateInvalid, "unexpected grants must be rejected before normalization")
 }
 
 func verifyCutoverPublicationSQLAgainstPostgres(t *testing.T, admin *pgx.Conn, restricted pginfra.Conn, database string) {

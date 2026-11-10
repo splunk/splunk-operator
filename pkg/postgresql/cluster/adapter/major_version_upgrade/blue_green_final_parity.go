@@ -57,7 +57,7 @@ func (s *postgresSwitchoverSQL) VerifyFinalParity(ctx context.Context, source, t
 		return false, nil
 	}
 	if len(databases) != len(status.DatabaseReplication) {
-		return false, fmt.Errorf("%w: final parity database roster changed", mvutypes.ErrUpgradeFlowFailed)
+		return false, fmt.Errorf("%w: final parity database roster changed", mvutypes.ErrCandidateInvalid)
 	}
 	v := s.verifier(id)
 	instances, pods, err := v.healthySourcePods(ctx, source)
@@ -117,7 +117,7 @@ func (s *postgresSwitchoverSQL) verifyFrozenCatalogs(ctx context.Context, cluste
 	for _, db := range databases {
 		index := slices.IndexFunc(status.DatabaseReplication, func(r platformv1alpha1.BlueGreenDatabaseReplicationStatus) bool { return r.DatabaseName == db.name })
 		if index < 0 {
-			return fmt.Errorf("%w: database has no frozen receipt", mvutypes.ErrUpgradeFlowFailed)
+			return fmt.Errorf("%w: database has no frozen receipt", mvutypes.ErrCandidateInvalid)
 		}
 		receipt := status.DatabaseReplication[index]
 		schemaExpected, accessExpected := receipt.SourceSchemaFingerprint, receipt.SourceAccessPolicyFingerprint
@@ -125,7 +125,7 @@ func (s *postgresSwitchoverSQL) verifyFrozenCatalogs(ctx context.Context, cluste
 			schemaExpected, accessExpected = receipt.TargetSchemaFingerprint, receipt.TargetAccessPolicyFingerprint
 		}
 		if schemaExpected == nil || accessExpected == nil {
-			return fmt.Errorf("%w: incomplete frozen catalog receipt", mvutypes.ErrUpgradeFlowFailed)
+			return fmt.Errorf("%w: incomplete frozen catalog receipt", mvutypes.ErrCandidateInvalid)
 		}
 		var schema, access string
 		if err := s.withConn(ctx, cluster, "", db.name, id, func(conn pginfra.Conn) error {
@@ -149,7 +149,7 @@ func (s *postgresSwitchoverSQL) verifyFrozenCatalogs(ctx context.Context, cluste
 			return err
 		}
 		if schema != *schemaExpected || access != *accessExpected {
-			return fmt.Errorf("%w: frozen catalog for database %q changed during cutover", mvutypes.ErrUpgradeFlowFailed, db.name)
+			return fmt.Errorf("%w: frozen catalog for database %q changed during cutover", mvutypes.ErrCandidateInvalid, db.name)
 		}
 	}
 	return nil
@@ -163,7 +163,7 @@ func (s *postgresSwitchoverSQL) verifyMaintenanceCatalog(ctx context.Context, co
 	allowed := declaredRoleNames(databases, id.AttemptID)
 	allowed[id.Role] = struct{}{}
 	if err := validateSourceRoles(roles, allowed); err != nil {
-		return err
+		return mvutypes.AsCandidateInvalid(err)
 	}
 	actual, err := queryStrings(ctx, conn, sourceDatabasesSQL)
 	if err != nil {
@@ -175,7 +175,7 @@ func (s *postgresSwitchoverSQL) verifyMaintenanceCatalog(ctx context.Context, co
 	}
 	slices.Sort(expected)
 	if !slices.Equal(expected, actual) {
-		return fmt.Errorf("%w: database inventory changed during cutover", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: database inventory changed during cutover", mvutypes.ErrCandidateInvalid)
 	}
 	if err := verifyCutoverSubscriptionRoster(ctx, conn, databases, s.logicalName, side); err != nil {
 		return err
@@ -185,7 +185,7 @@ func (s *postgresSwitchoverSQL) verifyMaintenanceCatalog(ctx context.Context, co
 		return err
 	}
 	if len(unsupported) > 0 {
-		return fmt.Errorf("%w: unsupported cluster inventory changed: %s", mvutypes.ErrUpgradeFlowFailed, strings.Join(unsupported, ","))
+		return fmt.Errorf("%w: unsupported cluster inventory changed: %s", mvutypes.ErrCandidateInvalid, strings.Join(unsupported, ","))
 	}
 	return nil
 }
@@ -203,7 +203,7 @@ func verifyCutoverSubscriptionRoster(ctx context.Context, conn pginfra.Conn, dat
 		slices.Sort(expected)
 	}
 	if !slices.Equal(actual, expected) {
-		return fmt.Errorf("%w: cluster subscription roster changed during cutover", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: cluster subscription roster changed during cutover", mvutypes.ErrCandidateInvalid)
 	}
 	return nil
 }
@@ -214,26 +214,28 @@ func (s *postgresSwitchoverSQL) verifySupportedObjects(ctx context.Context, conn
 		return err
 	}
 	if unsupported {
-		return fmt.Errorf("%w: unsupported database objects appeared during cutover", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: unsupported database objects appeared during cutover", mvutypes.ErrCandidateInvalid)
 	}
+	// The prepared attempt passed these preflight checks; a failure now is
+	// drift. Query errors stay retryable.
 	if err := checkUnloggedTables(ctx, conn, db.name); err != nil {
-		return err
+		return mvutypes.AsCandidateInvalid(err)
 	}
 	if err := checkDatabaseExtensions(ctx, conn, db); err != nil {
-		return err
+		return mvutypes.AsCandidateInvalid(err)
 	}
 	foreign, err := queryStrings(ctx, conn, foreignObjectsSQL)
 	if err != nil {
 		return err
 	}
 	if len(foreign) > 0 {
-		return fmt.Errorf("%w: foreign objects appeared during cutover", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: foreign objects appeared during cutover", mvutypes.ErrCandidateInvalid)
 	}
 	if side == sideBlue {
 		p := newPostgresSourcePreflight(s.client, s.logicalName, s.owner)
 		name, err := p.attemptPublication(ctx, cluster, db.name, id.AttemptID)
 		if err != nil {
-			return err
+			return mvutypes.AsCandidateInvalid(err)
 		}
 		var valid bool
 		err = queryOne(ctx, conn, &valid, cutoverPublicationInventorySQL, name)
@@ -241,7 +243,7 @@ func (s *postgresSwitchoverSQL) verifySupportedObjects(ctx context.Context, conn
 			return err
 		}
 		if !valid {
-			return fmt.Errorf("%w: publication inventory changed during cutover", mvutypes.ErrUpgradeFlowFailed)
+			return fmt.Errorf("%w: publication inventory changed during cutover", mvutypes.ErrCandidateInvalid)
 		}
 	} else {
 		var valid bool
@@ -250,7 +252,7 @@ func (s *postgresSwitchoverSQL) verifySupportedObjects(ctx context.Context, conn
 			return err
 		}
 		if !valid {
-			return fmt.Errorf("%w: subscription inventory changed during cutover", mvutypes.ErrUpgradeFlowFailed)
+			return fmt.Errorf("%w: subscription inventory changed during cutover", mvutypes.ErrCandidateInvalid)
 		}
 		// CNPG's schema-only pg_dump/pg_restore includes the source's managed
 		// publication. Only that exact mirrored contract is supported on green;
@@ -259,7 +261,7 @@ func (s *postgresSwitchoverSQL) verifySupportedObjects(ctx context.Context, conn
 			return err
 		}
 		if !valid {
-			return fmt.Errorf("%w: unsupported green publication appeared during cutover", mvutypes.ErrUpgradeFlowFailed)
+			return fmt.Errorf("%w: unsupported green publication appeared during cutover", mvutypes.ErrCandidateInvalid)
 		}
 	}
 	return nil

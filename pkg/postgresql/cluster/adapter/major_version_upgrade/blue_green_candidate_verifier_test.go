@@ -81,7 +81,32 @@ func TestCandidateBaselineAcceptsItsPreparedPublication(t *testing.T) {
 	verifier.connect = func(_ context.Context, _, database, _, _ string, _ []byte) (pginfra.Conn, error) {
 		return sourceInventoryConn{database: database, publication: name, publicationIncomplete: true}, nil
 	}
-	require.ErrorIs(t, verifier.VerifySourceBaseline(t.Context(), source, []declaredDatabase{{name: "orders"}}, status), mvutypes.ErrUpgradeFlowFailed)
+	err := verifier.VerifySourceBaseline(t.Context(), source, []declaredDatabase{{name: "orders"}}, status)
+	require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid, "a prepared publication that stopped publishing may have skipped changes")
+	require.True(t, mvutypes.MarkBlueGreenRebuildRequired(status, err))
+
+	// Repairing the publication passes the check again but cannot clear the
+	// recorded rebuild requirement.
+	verifier.connect = func(_ context.Context, _, database, _, _ string, _ []byte) (pginfra.Conn, error) {
+		return sourceInventoryConn{database: database, publication: name}, nil
+	}
+	require.NoError(t, verifier.VerifySourceBaseline(t.Context(), source, []declaredDatabase{{name: "orders"}}, status))
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	intent := mvutypes.Intent{Strategy: strategy, SourcePgVersion: "17", TargetPgVersion: "18", AttemptID: "attempt-1",
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{{Strategy: &strategy, SourcePgVersion: new("17"), TargetPgVersion: new("18"), BlueGreen: status.DeepCopy()}}}
+	repaired := status.DeepCopy()
+	repaired.RebuildRequired = nil
+	require.Error(t, mvutypes.ValidateBlueGreenProgress(intent, mvutypes.Progress{BlueGreen: repaired}))
+}
+
+func TestCandidateBaselineKeepsCapacityAnEligibilityCheck(t *testing.T) {
+	source, verifier, _ := sourceInventoryTestFixture(t, nil, false)
+	verifier.connect = func(_ context.Context, _, database, _, _ string, _ []byte) (pginfra.Conn, error) {
+		return sourceInventoryConn{database: database, capacityExhausted: true}, nil
+	}
+	err := verifier.VerifySourceBaseline(t.Context(), source, []declaredDatabase{{name: "orders"}}, &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1"})
+	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+	assert.NotErrorIs(t, err, mvutypes.ErrCandidateInvalid, "insufficient capacity is not evidence of lost changes")
 }
 
 func TestCandidateReadyRejectsUnexpectedSourceLogicalSlot(t *testing.T) {
@@ -99,7 +124,7 @@ func TestCandidateReadyRejectsUnexpectedSourceLogicalSlot(t *testing.T) {
 			source, verifier, _ := sourceInventoryTestFixture(t, test.slots, false)
 			ready, err := verifier.verifySourceSlotInventory(t.Context(), source, []declaredDatabase{{name: "orders"}})
 			if test.fail {
-				require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+				require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 			} else {
 				require.NoError(t, err)
 			}
@@ -275,9 +300,17 @@ func TestSubscriptionStateRequiresRunningCaughtUpApplyWorkerAndEveryTableCopied(
 			assert.Equal(t, test.tablesCopied, tablesCopied)
 		})
 	}
+	t.Run("apply conflict", func(t *testing.T) {
+		verifier.connect = func(context.Context, string, string, string, string, []byte) (pginfra.Conn, error) {
+			return subscriptionStateConn{applyErrors: 1, applyWorker: true, caughtUp: true, tablesCopied: true, t: t}, nil
+		}
+		_, _, err := verifier.subscriptionState(t.Context(), target, "orders", "0/16B6C50")
+		require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid, "a conflict breaks the provable logical history")
+	})
 }
 
 type subscriptionStateConn struct {
+	applyErrors  int64
 	applyWorker  bool
 	caughtUp     bool
 	tablesCopied bool
@@ -288,6 +321,9 @@ func (subscriptionStateConn) Begin(context.Context) (pginfra.Tx, error) { panic(
 func (subscriptionStateConn) Close(context.Context) error               { return nil }
 func (c subscriptionStateConn) Query(_ context.Context, sql string, args ...any) (pginfra.Rows, error) {
 	switch {
+	case sql == subscriptionApplyErrorsSQL:
+		assert.Equal(c.t, []any{subscriptionName("orders", "orders")}, args)
+		return &sourceInventoryRows{values: []any{c.applyErrors}}, nil
 	case strings.Contains(sql, "pg_stat_subscription"):
 		assert.Contains(c.t, sql, "worker.pid IS NOT NULL")
 		assert.Contains(c.t, sql, "sub.subfailover")
@@ -333,6 +369,7 @@ type sourceInventoryConn struct {
 	unsupported           bool
 	publication           string
 	publicationIncomplete bool
+	capacityExhausted     bool
 }
 
 func (sourceInventoryConn) Begin(context.Context) (pginfra.Tx, error) { panic("read-only inspection") }
@@ -343,7 +380,7 @@ func (sourceInventoryConn) Exec(context.Context, string, ...any) (pgconn.Command
 func (c sourceInventoryConn) Query(_ context.Context, sql string, args ...any) (pginfra.Rows, error) {
 	switch {
 	case strings.Contains(sql, "current_setting('max_replication_slots')"):
-		return &sourceInventoryRows{values: []any{true}}, nil
+		return &sourceInventoryRows{values: []any{!c.capacityExhausted}}, nil
 	case strings.Contains(sql, "SELECT datname FROM pg_database"):
 		return &sourceInventoryRows{values: []any{"orders"}}, nil
 	case strings.Contains(sql, "SELECT rolname FROM pg_roles"):
@@ -409,6 +446,8 @@ func (r *sourceInventoryRows) Scan(dest ...any) error {
 		*dest[0].(*bool) = value
 	case string:
 		*dest[0].(*string) = value
+	case int64:
+		*dest[0].(*int64) = value
 	default:
 		return fmt.Errorf("unexpected result type %T", value)
 	}
@@ -430,7 +469,7 @@ func TestCandidateGuardInstalledFailsClosedOnAlteredGuard(t *testing.T) {
 		t.Run(test.state, func(t *testing.T) {
 			installed, err := candidateGuardInstalled(t.Context(), guardStateConn{state: test.state}, "public", "orders")
 			if test.failed {
-				require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+				require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 			} else {
 				require.NoError(t, err)
 			}
@@ -493,7 +532,7 @@ func TestCandidateGuardsAreInstalledOnceThenOnlyVerified(t *testing.T) {
 		{schema}, {access}, {true}, {true}, {[]any{"public", "orders"}}, {"missing"},
 	}}
 	err := verifier.VerifyAndGuard(t.Context(), target, databases, statusWithoutGuardReceipt(status))
-	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+	require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 	assert.Empty(t, conn.execs, "partial guards without a receipt must invalidate the candidate")
 
 	conn = &preflightSQLTestConn{results: [][]any{
@@ -520,7 +559,7 @@ func TestCandidateGuardsAreInstalledOnceThenOnlyVerified(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			conn = &preflightSQLTestConn{results: test.results}
 			err := verifier.VerifyAndGuard(t.Context(), target, databases, status)
-			require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+			require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 			assert.Empty(t, conn.execs, "lost protection must invalidate, not repair, a prepared candidate")
 		})
 	}
@@ -556,7 +595,7 @@ func TestCandidateGuardReceiptSurvivesLaterDatabaseFailure(t *testing.T) {
 		return second, nil
 	}
 	err := verifier.VerifyAndGuard(t.Context(), target, []declaredDatabase{{name: "orders"}, {name: "inventory"}}, status)
-	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+	require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 	assert.Equal(t, new(true), status.DatabaseReplication[0].SchemaImported)
 	assert.Nil(t, status.DatabaseReplication[1].SchemaImported)
 }

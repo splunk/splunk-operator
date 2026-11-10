@@ -212,7 +212,7 @@ func verifyControlSequenceGrants(ctx context.Context, conn pginfra.Conn, id cuto
 		return err
 	}
 	if !valid {
-		return fmt.Errorf("%w: cutover sequence grants differ from the environment's required scope", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: cutover sequence grants differ from the environment's required scope", mvutypes.ErrCandidateInvalid)
 	}
 	return nil
 }
@@ -224,24 +224,26 @@ func verifyControlHelper(ctx context.Context, conn pginfra.Conn, helper cutoverH
 		return err
 	}
 	if !valid {
-		return fmt.Errorf("%w: cutover helper %q ownership, body, or privileges changed", mvutypes.ErrUpgradeFlowFailed, helper.name)
+		return fmt.Errorf("%w: cutover helper %q ownership, body, or privileges changed", mvutypes.ErrCandidateInvalid, helper.name)
 	}
 	return nil
 }
 
+// verifyControlDatabase proves the owned control overlay is unchanged. Any
+// mismatch is drift of the attempt's cutover role, so it is rebuild evidence.
 func verifyControlDatabase(ctx context.Context, conn pginfra.Conn, id cutoverIdentity) error {
 	var safe bool
 	if err := queryCutoverBoolean(ctx, conn, &safe, controlRoleSQL, id.Role); err != nil {
 		return err
 	}
 	if !safe {
-		return fmt.Errorf("%w: cutover role has unexpected capabilities", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: cutover role has unexpected capabilities", mvutypes.ErrCandidateInvalid)
 	}
 	if err := queryCutoverBoolean(ctx, conn, &safe, controlMembershipProofSQL, id.Role); err != nil {
 		return err
 	}
 	if !safe {
-		return fmt.Errorf("%w: cutover role membership changed", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: cutover role membership changed", mvutypes.ErrCandidateInvalid)
 	}
 	for _, helper := range cutoverHelpers(id) {
 		if err := verifyControlHelper(ctx, conn, helper, id); err != nil {
@@ -252,13 +254,13 @@ func verifyControlDatabase(ctx context.Context, conn pginfra.Conn, id cutoverIde
 		return err
 	}
 	if !safe {
-		return fmt.Errorf("%w: reserved cutover schema ownership or inventory changed", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: reserved cutover schema ownership or inventory changed", mvutypes.ErrCandidateInvalid)
 	}
 	if err := queryCutoverBoolean(ctx, conn, &safe, controlGrantInventorySQL, id.Role, candidateGuardSchema); err != nil {
 		return err
 	}
 	if !safe {
-		return fmt.Errorf("%w: cutover control grants exceed their owned overlay", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: cutover control grants exceed their owned overlay", mvutypes.ErrCandidateInvalid)
 	}
 	return nil
 }

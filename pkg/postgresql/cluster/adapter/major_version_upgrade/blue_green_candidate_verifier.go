@@ -62,12 +62,12 @@ func (v *postgresCandidateVerifier) VerifyAndGuard(ctx context.Context, target *
 	for _, database := range databases {
 		index, found := byDatabase[database.name]
 		if !found || status.DatabaseReplication[index].SourceSchemaFingerprint == nil || status.DatabaseReplication[index].SourceAccessPolicyFingerprint == nil {
-			return fmt.Errorf("%w: green candidate has no frozen source receipt for database %q", mvutypes.ErrUpgradeFlowFailed, database.name)
+			return fmt.Errorf("%w: green candidate has no frozen source receipt for database %q", mvutypes.ErrCandidateInvalid, database.name)
 		}
 		replication := &status.DatabaseReplication[index]
 		guardsInstalled := replication.SchemaImported != nil && *replication.SchemaImported
 		if guardsInstalled && (replication.TargetSchemaFingerprint == nil || replication.TargetAccessPolicyFingerprint == nil) {
-			return fmt.Errorf("%w: green candidate has an incomplete guard installation receipt for database %q", mvutypes.ErrUpgradeFlowFailed, database.name)
+			return fmt.Errorf("%w: green candidate has an incomplete guard installation receipt for database %q", mvutypes.ErrCandidateInvalid, database.name)
 		}
 		conn, err := v.connectTarget(ctx, target, database.name)
 		if err != nil {
@@ -84,7 +84,7 @@ func (v *postgresCandidateVerifier) VerifyAndGuard(ctx context.Context, target *
 		}
 		if schema != *replication.SourceSchemaFingerprint || access != *replication.SourceAccessPolicyFingerprint {
 			conn.Close(ctx)
-			return fmt.Errorf("%w: schema-only import for database %q does not match the frozen blue receipt", mvutypes.ErrUpgradeFlowFailed, database.name)
+			return fmt.Errorf("%w: schema-only import for database %q does not match the frozen blue receipt", mvutypes.ErrCandidateInvalid, database.name)
 		}
 		if !guardsInstalled {
 			// The SQL transaction may have committed before its status receipt was
@@ -197,10 +197,10 @@ func (v *postgresCandidateVerifier) VerifySourceBaseline(ctx context.Context, so
 	for _, check := range checks {
 		baseline, found := byDatabase[check.name]
 		if !found || baseline.SourceSchemaFingerprint == nil || baseline.SourceAccessPolicyFingerprint == nil {
-			return fmt.Errorf("%w: blue database %q has no frozen catalog receipt", mvutypes.ErrUpgradeFlowFailed, check.name)
+			return fmt.Errorf("%w: blue database %q has no frozen catalog receipt", mvutypes.ErrCandidateInvalid, check.name)
 		}
 		if check.schemaFingerprint != *baseline.SourceSchemaFingerprint || check.accessFingerprint != *baseline.SourceAccessPolicyFingerprint {
-			return fmt.Errorf("%w: source schema or access policy for database %q changed after blue/green preflight", mvutypes.ErrUpgradeFlowFailed, check.name)
+			return fmt.Errorf("%w: source schema or access policy for database %q changed after blue/green preflight", mvutypes.ErrCandidateInvalid, check.name)
 		}
 	}
 	return nil
@@ -327,7 +327,7 @@ func (v *postgresCandidateVerifier) verifySourceSlotInventory(ctx context.Contex
 			pendingSyncSlot = true
 			continue
 		}
-		return false, fmt.Errorf("%w: blue logical-slot inventory changed after preflight", mvutypes.ErrUpgradeFlowFailed)
+		return false, fmt.Errorf("%w: blue logical-slot inventory changed after preflight", mvutypes.ErrCandidateInvalid)
 	}
 	return len(expected) == 0 && !pendingSyncSlot, nil
 }
@@ -335,6 +335,9 @@ func (v *postgresCandidateVerifier) verifySourceSlotInventory(ctx context.Contex
 func (v *postgresCandidateVerifier) healthySourcePods(ctx context.Context, source *cnpgv1.Cluster) ([]string, map[string]corev1.Pod, error) {
 	return healthyInstancePods(ctx, v.client, source)
 }
+
+const subscriptionApplyErrorsSQL = `SELECT COALESCE((SELECT stats.apply_error_count FROM pg_catalog.pg_stat_subscription_stats stats
+  JOIN pg_catalog.pg_subscription sub ON sub.oid = stats.subid WHERE sub.subname = $1), 0)`
 
 func (v *postgresCandidateVerifier) subscriptionState(ctx context.Context, target *cnpgv1.Cluster, database, sourceLSN string) (bool, bool, error) {
 	conn, err := v.connectTarget(ctx, target, database)
@@ -353,6 +356,14 @@ func (v *postgresCandidateVerifier) subscriptionState(ctx context.Context, targe
     AND worker.latest_end_lsn >= $3::pg_lsn
 )`, name, slotName, sourceLSN); err != nil {
 		return false, false, fmt.Errorf("checking green subscription %q: %w", name, err)
+	}
+	// Apply errors (for example conflicts) break the provable logical history.
+	var applyErrors int64
+	if err := queryOne(ctx, conn, &applyErrors, subscriptionApplyErrorsSQL, name); err != nil {
+		return false, false, fmt.Errorf("checking green subscription %q apply errors: %w", name, err)
+	}
+	if applyErrors > 0 {
+		return false, false, fmt.Errorf("%w: green subscription %q reported %d apply errors", mvutypes.ErrCandidateInvalid, name, applyErrors)
 	}
 	var copyComplete bool
 	if err := queryOne(ctx, conn, &copyComplete, `SELECT NOT EXISTS (
@@ -406,7 +417,7 @@ func (v *postgresCandidateVerifier) slotState(ctx context.Context, source *cnpgv
 			return result, false, fmt.Errorf("closing blue instance connection %q: %w", instance, closeErr)
 		}
 		if state.invalidation != "" && state.invalidation != "missing" {
-			return result, false, fmt.Errorf("%w: blue logical slot %q on %q is invalidated: %s", mvutypes.ErrUpgradeFlowFailed, slotName, instance, state.invalidation)
+			return result, false, fmt.Errorf("%w: blue logical slot %q on %q is invalidated: %s", mvutypes.ErrCandidateInvalid, slotName, instance, state.invalidation)
 		}
 		valid := settingsReady && logicalSlotReady(state, instance == source.Status.CurrentPrimary)
 		now := metav1.Now()
@@ -556,7 +567,7 @@ func verifyCandidateDMLGuards(ctx context.Context, conn pginfra.Conn) error {
 		return err
 	}
 	if !functionValid {
-		return fmt.Errorf("%w: green DML guard function is missing or changed", mvutypes.ErrUpgradeFlowFailed)
+		return fmt.Errorf("%w: green DML guard function is missing or changed", mvutypes.ErrCandidateInvalid)
 	}
 	tables, err := candidateTables(ctx, conn)
 	if err != nil {
@@ -568,7 +579,7 @@ func verifyCandidateDMLGuards(ctx context.Context, conn pginfra.Conn) error {
 			return err
 		}
 		if !installed {
-			return fmt.Errorf("%w: green DML guard on %s.%s is missing", mvutypes.ErrUpgradeFlowFailed, table.schema, table.name)
+			return fmt.Errorf("%w: green DML guard on %s.%s is missing", mvutypes.ErrCandidateInvalid, table.schema, table.name)
 		}
 	}
 	return nil
@@ -624,10 +635,10 @@ END`, schema, table, candidateGuardTrigger, candidateGuardSchema, candidateGuard
 		return false, err
 	}
 	if state == "invalid" {
-		return false, fmt.Errorf("%w: candidate DML guard on %s.%s was altered or disabled", mvutypes.ErrUpgradeFlowFailed, schema, table)
+		return false, fmt.Errorf("%w: candidate DML guard on %s.%s was altered or disabled", mvutypes.ErrCandidateInvalid, schema, table)
 	}
 	if state != "valid" && state != "missing" {
-		return false, fmt.Errorf("%w: unexpected candidate DML guard state %q on %s.%s", mvutypes.ErrUpgradeFlowFailed, state, schema, table)
+		return false, fmt.Errorf("%w: unexpected candidate DML guard state %q on %s.%s", mvutypes.ErrCandidateInvalid, state, schema, table)
 	}
 	return state == "valid", nil
 }

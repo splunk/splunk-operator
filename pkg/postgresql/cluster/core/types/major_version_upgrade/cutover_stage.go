@@ -82,6 +82,15 @@ func (stage CutoverStage) OwnsRecovery() bool {
 	return false
 }
 
+// Committed reports a durable endpoint commit; recovery can only fail forward.
+func (stage CutoverStage) Committed() bool {
+	switch stage {
+	case CutoverCommitted, CutoverTargetAvailable, CutoverHandedOff:
+		return true
+	}
+	return false
+}
+
 // NormalizeCutoverProgress is the one phase-safety policy used by flow and by
 // persistence after merging any newer coordinator evidence inside its CAS.
 func NormalizeCutoverProgress(progress Progress) Progress {

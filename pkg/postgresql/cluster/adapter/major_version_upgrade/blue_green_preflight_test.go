@@ -41,7 +41,7 @@ func TestDeclaredRoleNamesIncludesAttemptReplicationRole(t *testing.T) {
 
 func TestSourceCapacityReservesPhysicalAndTableSyncResources(t *testing.T) {
 	conn := &preflightSQLTestConn{results: [][]any{{true}, {"orders"}}}
-	err := checkSourceCapacityAndDatabases(t.Context(), conn, []declaredDatabase{{name: "orders"}}, 2)
+	err := checkSourceCapacity(t.Context(), conn, 1, 2)
 	require.NoError(t, err)
 	require.NotEmpty(t, conn.queries)
 	query := conn.queries[0]
@@ -69,7 +69,7 @@ func TestSourceCapacityAgainstPostgres(t *testing.T) {
 	// Capture the exact production statement, including its version-dependent
 	// setting lookup. PostgreSQL 17 must execute it without an unknown-GUC error.
 	capture := &preflightSQLTestConn{results: [][]any{{true}, {"orders"}}}
-	require.NoError(t, checkSourceCapacityAndDatabases(t.Context(), capture, []declaredDatabase{{name: "orders"}}, 0))
+	require.NoError(t, checkSourceCapacity(t.Context(), capture, 1, 0))
 	query := capture.queries[0]
 	var capacityOK bool
 	require.NoError(t, queryOne(t.Context(), conn, &capacityOK, query, 1, 0))

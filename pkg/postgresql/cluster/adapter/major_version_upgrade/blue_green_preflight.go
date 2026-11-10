@@ -83,7 +83,9 @@ func (p *postgresSourcePreflight) Inspect(ctx context.Context, source *cnpgv1.Cl
 
 // inspectPrepared repeats the read-only preflight inventory after the
 // attempt's subscriptions have created their logical slots. Slot inventory is
-// verified separately once the initial table copy has completed.
+// verified separately once the initial table copy has completed. A prepared
+// source that fails an inventory check may already have lost changes, so the
+// failure is rebuild evidence; capacity remains an eligibility check.
 func (p *postgresSourcePreflight) inspectPrepared(ctx context.Context, source *cnpgv1.Cluster, databases []declaredDatabase, attemptID string) ([]databasePreflight, error) {
 	return p.inspect(ctx, source, databases, attemptID, false)
 }
@@ -94,7 +96,18 @@ func (p *postgresSourcePreflight) inspect(ctx context.Context, source *cnpgv1.Cl
 		return nil, err
 	}
 	defer conn.Close(ctx)
-	if err := checkSourceCapacityAndDatabases(ctx, conn, databases, source.Spec.Instances-1); err != nil {
+	if err := checkSourceCapacity(ctx, conn, len(databases), source.Spec.Instances-1); err != nil {
+		return nil, err
+	}
+	result, err := p.inspectInventory(ctx, conn, source, databases, attemptID, rejectLogicalSlots)
+	if !rejectLogicalSlots {
+		err = mvutypes.AsCandidateInvalid(err)
+	}
+	return result, err
+}
+
+func (p *postgresSourcePreflight) inspectInventory(ctx context.Context, conn pginfra.Conn, source *cnpgv1.Cluster, databases []declaredDatabase, attemptID string, rejectLogicalSlots bool) ([]databasePreflight, error) {
+	if err := checkSourceDatabases(ctx, conn, databases); err != nil {
 		return nil, err
 	}
 	roles, err := checkSourceClusterObjects(ctx, conn, rejectLogicalSlots)
@@ -116,7 +129,7 @@ func (p *postgresSourcePreflight) inspect(ctx context.Context, source *cnpgv1.Cl
 	return result, nil
 }
 
-func checkSourceCapacityAndDatabases(ctx context.Context, conn pginfra.Conn, databases []declaredDatabase, sourceReplicas int) error {
+func checkSourceCapacity(ctx context.Context, conn pginfra.Conn, databases, sourceReplicas int) error {
 	var capacityOK bool
 	if err := queryOne(ctx, conn, &capacityOK, `
 WITH capacity AS (
@@ -144,13 +157,16 @@ SELECT sync_per_subscription > 0 AND logical_workers > $1::int
    AND pg_size_bytes(current_setting('max_slot_wal_keep_size')) >=
        (SELECT COALESCE(sum(pg_database_size(datname)), 0)
         FROM pg_database WHERE datname NOT IN ('postgres', 'template0', 'template1'))
-FROM peak`, len(databases), max(sourceReplicas, 0)); err != nil {
+FROM peak`, databases, max(sourceReplicas, 0)); err != nil {
 		return fmt.Errorf("checking source logical-replication capacity: %w", err)
 	}
 	if !capacityOK {
 		return fmt.Errorf("%w: source worker, replication-slot, or WAL-retention settings cannot support this attempt", mvutypes.ErrUpgradeFlowFailed)
 	}
+	return nil
+}
 
+func checkSourceDatabases(ctx context.Context, conn pginfra.Conn, databases []declaredDatabase) error {
 	actualDatabases, err := queryStrings(ctx, conn, sourceDatabasesSQL)
 	if err != nil {
 		return fmt.Errorf("listing source databases: %w", err)

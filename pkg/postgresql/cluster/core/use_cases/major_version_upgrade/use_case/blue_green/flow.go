@@ -91,6 +91,30 @@ func (f Flow) Advance(ctx context.Context, intent mvutypes.Intent) (Outcome, err
 	return outcome, err
 }
 
+// rebuildRequiredOutcome persists an integrity-breaking preparation failure
+// with the same status write that reports it. Preparation runs strictly before
+// any switchover window, so no endpoint commit can have happened; the
+// switchover port classifies its own failures after observing the canonical
+// commit record.
+func rebuildRequiredOutcome(status *platformv1alpha1.PostgresBlueGreenUpgradeStatus, intent mvutypes.Intent, err error) Outcome {
+	if status == nil {
+		status = latestBlueGreenStatus(intent)
+	} else {
+		status = status.DeepCopy()
+	}
+	mvutypes.MarkBlueGreenRebuildRequired(status, err)
+	return Outcome{BlueGreen: status}
+}
+
+// terminalPreparationOutcome reports a terminal preparation failure, recording
+// it as rebuild-required only when it is rebuild evidence.
+func terminalPreparationOutcome(status *platformv1alpha1.PostgresBlueGreenUpgradeStatus, intent mvutypes.Intent, err error) Outcome {
+	if errors.Is(err, mvutypes.ErrCandidateInvalid) {
+		return rebuildRequiredOutcome(status, intent, err)
+	}
+	return Outcome{BlueGreen: status}
+}
+
 func (f Flow) advance(ctx context.Context, intent mvutypes.Intent) (Outcome, error) {
 	if intent.AttemptID == "" {
 		return Outcome{}, errors.Join(mvutypes.ErrInvalidUpgradeIntent, errors.New("blue/green attempt ID is required"))
@@ -139,10 +163,10 @@ func (f Flow) advance(ctx context.Context, intent mvutypes.Intent) (Outcome, err
 		if sourcePreparationRetryable(err) {
 			return pendingOutcome(status), nil
 		}
-		if !errors.Is(err, mvutypes.ErrUpgradeFlowFailed) && !errors.Is(err, mvutypes.ErrInvalidUpgradeIntent) {
+		if !mvutypes.IsTerminalFlowFailure(err) && !errors.Is(err, mvutypes.ErrInvalidUpgradeIntent) {
 			return retryableFailureOutcome(status, err), err
 		}
-		return Outcome{BlueGreen: status}, err
+		return terminalPreparationOutcome(status, intent, err), err
 	}
 	return Outcome{
 		Report: reconciliationTypes.Report{
@@ -168,10 +192,10 @@ func (f Flow) prepareCandidate(ctx context.Context, intent mvutypes.Intent) (Out
 		if sourcePreparationRetryable(err) {
 			return candidatePendingOutcome(status), nil
 		}
-		if !errors.Is(err, mvutypes.ErrUpgradeFlowFailed) && !errors.Is(err, mvutypes.ErrInvalidUpgradeIntent) {
+		if !mvutypes.IsTerminalFlowFailure(err) && !errors.Is(err, mvutypes.ErrInvalidUpgradeIntent) {
 			return candidateRetryableFailureOutcome(status, err), err
 		}
-		return Outcome{BlueGreen: status}, err
+		return terminalPreparationOutcome(status, intent, err), err
 	}
 	if CandidateReady(status) {
 		if intent.SwitchoverAuthorized {
@@ -307,9 +331,10 @@ func CandidateReady(status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) boo
 }
 
 // sourcePreparationRetryable keeps infrastructure observations in the source
-// preparation phase. Preparation adapters use ErrUpgradeFlowFailed only for a
-// proved invariant violation; all other errors are safe to retry without
-// re-entering the generic pg_upgrade error mapping.
+// preparation phase. Preparation adapters return a terminal flow failure
+// (mvutypes.IsTerminalFlowFailure) only for a proved invariant violation; all
+// other errors are safe to retry without re-entering the generic pg_upgrade
+// error mapping.
 func sourcePreparationRetryable(err error) bool {
 	return errors.Is(err, mvutypes.ErrUpgradeFlowPending)
 }

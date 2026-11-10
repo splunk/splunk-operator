@@ -145,7 +145,7 @@ func TestFrozenCandidateCatalogRejectsDriftBeforeCommit(t *testing.T) {
 			if scenario == "unchanged" {
 				require.NoError(t, err)
 			} else {
-				require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+				require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid, "every frozen-catalog drift requires a rebuild")
 			}
 		})
 	}

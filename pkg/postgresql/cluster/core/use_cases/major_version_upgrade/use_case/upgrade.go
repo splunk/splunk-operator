@@ -292,10 +292,10 @@ func completedReport() reconciliationtypes.Report {
 }
 
 // resolveBackupErr maps a backup error to a report and its propagation cause.
-// Terminal errors (ErrUpgradeFlowFailed) pass through unchanged; all others are
+// Terminal flow errors pass through unchanged; all others are
 // wrapped in retryableSentinel so ReportFromError maps them to a retryable phase.
 func resolveBackupErr(err, retryableSentinel error) (reconciliationtypes.Report, error) {
-	if errors.Is(err, mvutypes.ErrUpgradeFlowFailed) {
+	if mvutypes.IsTerminalFlowFailure(err) {
 		return mvutypes.ReportFromError(err), err
 	}
 	report := mvutypes.ReportFromError(errors.Join(retryableSentinel, err))
