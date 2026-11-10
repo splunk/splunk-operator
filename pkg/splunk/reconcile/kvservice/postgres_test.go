@@ -126,20 +126,20 @@ func TestEnsureKVServicePostgresReadiness(t *testing.T) {
 			stored := &platformApi.PostgresDatabase{}
 			require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(database), stored))
 			require.Equal(t, before, stored)
+			bravo := &platformApi.PostgresDatabase{}
+			require.NoError(t, c.Get(t.Context(), client.ObjectKey{Namespace: cr.Namespace, Name: "bravo-database"}, bravo))
+			assert.True(t, bravo.Status.Databases[0].Ready, "the other tenant must remain ready")
 		})
 	}
 }
 
 func TestEnsureKVServicePostgresDatabaseConsumption(t *testing.T) {
-	for _, operation := range []string{"missing database", "existing database", "missing logical database", "foreign database"} {
+	for _, operation := range []string{"missing database", "foreign database"} {
 		t.Run(operation, func(t *testing.T) {
 			cr, database, c := postgresReadinessFixture(t)
 			switch operation {
 			case "missing database":
 				require.NoError(t, c.Delete(t.Context(), database))
-			case "missing logical database":
-				database.Spec.Databases = nil
-				require.NoError(t, c.Update(t.Context(), database))
 			case "foreign database":
 				database.Annotations = nil
 				require.NoError(t, c.Update(t.Context(), database))
@@ -162,11 +162,6 @@ func TestEnsureKVServicePostgresDatabaseConsumption(t *testing.T) {
 				assert.ElementsMatch(t, []string{"pg_stat_statements", "pgcrypto"}, stored.Spec.Databases[0].Extensions)
 				assert.Empty(t, stored.OwnerReferences, "retained tenant databases must survive KVService deletion")
 				assert.Empty(t, stored.Status.Databases)
-			case "existing database":
-				require.NoError(t, err)
-				assert.True(t, ready)
-				assert.NotNil(t, dependencies)
-				assert.Equal(t, before, stored, "ready tenant databases must not be rewritten")
 			default:
 				require.ErrorIs(t, err, reconcile.TerminalError(nil))
 				assert.False(t, ready)

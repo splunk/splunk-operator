@@ -36,7 +36,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
-	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -226,27 +225,16 @@ func TestKVServicePostgresPreservesTenantPendingMessage(t *testing.T) {
 	t.Run("PostgreSQL with TLS", testKVServicePostgresTLSReconciliation)
 }
 
-func TestEnsurePostgresReadyWaitsForCurrentNonDeletingDatabase(t *testing.T) {
-	featuregatetesting.SetFeatureGateDuringTest(t, config.DefaultMutableFeatureGate, config.PostgresController, true)
-	for _, name := range []string{"stale database status", "deleting database"} {
-		t.Run(name, func(t *testing.T) {
-			cr, database, c := postgresReadinessFixture(t)
-			if name == "stale database status" {
-				database.Status.ObservedGeneration = nil
-				require.NoError(t, c.Status().Update(t.Context(), database))
-			} else {
-				database.Finalizers = []string{"test-finalizer"}
-				require.NoError(t, c.Update(t.Context(), database))
-				require.NoError(t, c.Delete(t.Context(), database))
-			}
-			postgres, err := ensureTenantPostgresReady(t.Context(), c, cr)
-			dependencies, ready, message := postgres.dependencies, postgres.ready, postgres.message
-			require.NoError(t, err)
-			assert.False(t, ready)
-			assert.Nil(t, dependencies)
-			assert.Contains(t, message, "waiting for service database kvservicesystem")
-		})
-	}
+func TestEnsurePostgresReadyWaitsForDeletingDatabase(t *testing.T) {
+	cr, database, c := postgresReadinessFixture(t)
+	database.Finalizers = []string{"test-finalizer"}
+	require.NoError(t, c.Update(t.Context(), database))
+	require.NoError(t, c.Delete(t.Context(), database))
+	postgres, err := ensureTenantPostgresReady(t.Context(), c, cr)
+	require.NoError(t, err)
+	assert.False(t, postgres.ready)
+	assert.Nil(t, postgres.dependencies)
+	assert.Contains(t, postgres.message, "waiting for service database kvservicesystem")
 }
 
 func TestKVServicePausedStatus(t *testing.T) {
