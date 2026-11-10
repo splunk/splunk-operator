@@ -105,6 +105,14 @@ type Spec struct {
 	// +optional
 	SchedulerName string `json:"schedulerName,omitempty"`
 
+	// RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which is
+	// used to run the pods created for this resource. If no RuntimeClass resource matches the
+	// named class, the pods will not run. If left unset, the cluster's default runtime handler
+	// is used.
+	// More info: https://kubernetes.io/docs/concepts/containers/runtime-class/
+	// +optional
+	RuntimeClassName *string `json:"runtimeClassName,omitempty"`
+
 	// Kubernetes Affinity rules that control how pods are assigned to particular nodes.
 	Affinity corev1.Affinity `json:"affinity"`
 
