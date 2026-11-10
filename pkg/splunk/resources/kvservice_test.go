@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 )
 
 func TestGetStandardK8sServiceForKVServiceDeployment(t *testing.T) {
@@ -228,4 +229,27 @@ func TestKVServiceTLSProtocolMetadata(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A RuntimeClassName set on the KVService spec must reach the Deployment pod template so
+// kubelet runs the pods under that runtime.
+func TestKVServiceDeploymentSetsRuntimeClassName(t *testing.T) {
+	cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "runtimeclass", Namespace: "test"}}
+	cr.Spec.RuntimeClassName = ptr.To("isolated-sandbox")
+
+	deployment := NewKVServiceDeployment(cr)
+
+	got := deployment.Spec.Template.Spec.RuntimeClassName
+	require.NotNil(t, got, "RuntimeClassName must be set on the pod template")
+	assert.Equal(t, "isolated-sandbox", *got)
+}
+
+// An unset RuntimeClassName must leave the pod template field nil so the cluster's default
+// runtime handler is used.
+func TestKVServiceDeploymentLeavesRuntimeClassNameUnset(t *testing.T) {
+	cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "runtimeclass", Namespace: "test"}}
+
+	deployment := NewKVServiceDeployment(cr)
+
+	assert.Nil(t, deployment.Spec.Template.Spec.RuntimeClassName)
 }

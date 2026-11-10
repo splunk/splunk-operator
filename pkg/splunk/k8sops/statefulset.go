@@ -863,7 +863,9 @@ func GetSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 				Tolerations:               spec.Tolerations,
 				TopologySpreadConstraints: spec.TopologySpreadConstraints,
 				SchedulerName:             spec.SchedulerName,
-				ImagePullSecrets:          spec.ImagePullSecrets,
+				// Nil leaves the pod template field unset so pods use the cluster default runtime handler
+				RuntimeClassName: spec.RuntimeClassName,
+				ImagePullSecrets: spec.ImagePullSecrets,
 				Containers: []corev1.Container{
 					{
 						Image:           spec.Image,

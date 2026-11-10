@@ -208,6 +208,15 @@ func MergePodSpecUpdates(ctx context.Context, current *corev1.PodSpec, revised *
 		result = true
 	}
 
+	// check for changes in RuntimeClassName
+	if splcommon.CompareByMarshall(current.RuntimeClassName, revised.RuntimeClassName) {
+		scopedLog.InfoContext(ctx, "pod RuntimeClassName differs",
+			"current", current.RuntimeClassName,
+			"revised", revised.RuntimeClassName)
+		current.RuntimeClassName = revised.RuntimeClassName
+		result = true
+	}
+
 	// Check for changes in Volumes
 	if splcommon.CompareVolumes(current.Volumes, revised.Volumes) {
 		scopedLog.InfoContext(ctx, "pod Volumes differ",

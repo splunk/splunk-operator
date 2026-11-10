@@ -1898,6 +1898,14 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              runtimeClassName:
+                description: |-
+                  RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which is
+                  used to run the pods created for this resource. If no RuntimeClass resource matches the
+                  named class, the pods will not run. If left unset, the cluster's default runtime handler
+                  is used.
+                  More info: https://kubernetes.io/docs/concepts/containers/runtime-class/
+                type: string
               schedulerName:
                 description: Name of Scheduler to use for pod placement (defaults
                   to “default-scheduler”)
@@ -7364,6 +7372,14 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              runtimeClassName:
+                description: |-
+                  RuntimeClassName refers to a RuntimeClass object in the node.k8s.io group, which is
+                  used to run the pods created for this resource. If no RuntimeClass resource matches the
+                  named class, the pods will not run. If left unset, the cluster's default runtime handler
+                  is used.
+                  More info: https://kubernetes.io/docs/concepts/containers/runtime-class/
+                type: string
               schedulerName:
                 description: Name of Scheduler to use for pod placement (defaults
                   to “default-scheduler”)

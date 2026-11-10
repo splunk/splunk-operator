@@ -135,6 +135,26 @@ func TestMergePodUpdates(t *testing.T) {
 	matcher = func() bool { return current.Spec.SchedulerName == revised.Spec.SchedulerName }
 	podUpdateTester("SchedulerName")
 
+	// check RuntimeClassName set from unset
+	runtimeClassMatcher := func() bool {
+		return reflect.DeepEqual(current.Spec.RuntimeClassName, revised.Spec.RuntimeClassName)
+	}
+	sandbox := "isolated-sandbox"
+	revised.Spec.RuntimeClassName = &sandbox
+	matcher = runtimeClassMatcher
+	podUpdateTester("RuntimeClassName set")
+
+	// check RuntimeClassName changed to a different class
+	otherSandbox := "confidential-sandbox"
+	revised.Spec.RuntimeClassName = &otherSandbox
+	matcher = runtimeClassMatcher
+	podUpdateTester("RuntimeClassName changed")
+
+	// check RuntimeClassName cleared back to the cluster default
+	revised.Spec.RuntimeClassName = nil
+	matcher = runtimeClassMatcher
+	podUpdateTester("RuntimeClassName cleared")
+
 	// check new Volume added
 	revised.Spec.Volumes = []corev1.Volume{{Name: "new-volume-added"}}
 	matcher = func() bool { return reflect.DeepEqual(current.Spec.Volumes, revised.Spec.Volumes) }
