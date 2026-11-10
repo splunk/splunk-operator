@@ -16,6 +16,7 @@ package kvservice
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -23,6 +24,8 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/splunk/splunk-operator/pkg/splunk/k8sops"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestEvaluateTenantOutcomes(t *testing.T) {
@@ -60,4 +63,52 @@ func TestEvaluateTenantOutcomes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildTenantRuntimePreservesServiceDependencies(t *testing.T) {
+	// Spare capacity catches an append that silently overwrites the input's backing array.
+	environment := make([]corev1.EnvVar, 8)
+	environment[0] = corev1.EnvVar{Name: "KVSERVICE_DB_HOST", Value: "postgres.example"}
+	environment[1] = corev1.EnvVar{Name: "sentinel", Value: "unchanged"}
+	beforeEnvironment := slices.Clone(environment)
+	service := &k8sops.KVServicePostgresDependencies{
+		Environment:             environment[:1],
+		Volumes:                 []corev1.Volume{{Name: "service-volume"}},
+		VolumeMounts:            []corev1.VolumeMount{{Name: "service-volume", MountPath: "/service"}},
+		ConfigHash:              "service-config",
+		AdminUserSecretRevision: "service-password-revision",
+	}
+	before := *service
+	cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "kvs", Namespace: "shared"}}
+	keyring := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+		Name: "tenant-verification-keys", UID: "keyring-uid", ResourceVersion: "7",
+	}}
+	databases := []tenantDatabase{{
+		tenant: "alpha",
+		dependencies: &k8sops.KVServicePostgresDependencies{
+			ConfigHash: "tenant-config", AdminUserSecretRevision: "tenant-password-revision",
+		},
+		info: &platformApi.DatabaseInfo{AdminUserSecretRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "alpha-owner"}, Key: "password",
+		}},
+	}}
+	ready := map[string]string{"alpha": "tenant1"}
+	got, err := buildTenantRuntime(cr, ready, databases, keyring, service, "membership")
+	require.NoError(t, err)
+	require.False(t, service == got, "runtime dependencies must be a separate object")
+	require.Equal(t, before, *service)
+	require.Equal(t, beforeEnvironment, environment)
+	require.Equal(t, service.Environment[0], got.Environment[0])
+	require.Len(t, got.Environment, 5)
+	require.Len(t, got.Volumes, 3)
+	require.Len(t, got.VolumeMounts, 3)
+	require.NotEqual(t, service.ConfigHash, got.ConfigHash)
+	require.NotEqual(t, service.AdminUserSecretRevision, got.AdminUserSecretRevision)
+	require.Equal(t, "keyring-uid:7", got.TenantKeyringRevision)
+
+	again, err := buildTenantRuntime(cr, ready, databases, keyring, service, "membership")
+	require.NoError(t, err)
+	require.Equal(t, got, again, "reusing the service snapshot must produce identical dependencies")
+	got.Environment[0].Value = "changed-runtime-host"
+	require.Equal(t, before, *service)
 }

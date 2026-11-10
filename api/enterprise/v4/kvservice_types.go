@@ -81,14 +81,20 @@ const (
 )
 
 // KVServiceTenantStatus reports one selected namespace independently of service readiness.
+// Fields without omitempty retain explicit zero values in status.
 type KVServiceTenantStatus struct {
+	// +optional
 	Name string `json:"name"`
 	// +kubebuilder:validation:Required
-	Namespace    string                `json:"namespace"`
-	Ready        bool                  `json:"ready"`
-	Reason       KVServiceTenantReason `json:"reason"`
-	Message      string                `json:"message,omitempty"`
-	DatabaseName string                `json:"databaseName,omitempty"`
+	Namespace string `json:"namespace"`
+	// +optional
+	Ready bool `json:"ready"`
+	// +optional
+	Reason KVServiceTenantReason `json:"reason"`
+	// +optional
+	Message string `json:"message,omitempty"`
+	// +optional
+	DatabaseName string `json:"databaseName,omitempty"`
 }
 
 // KVServiceStatus defines the observed state of KVService
@@ -100,6 +106,7 @@ type KVServiceStatus struct {
 	Tenants []KVServiceTenantStatus `json:"tenants,omitempty"`
 
 	// current phase of the kvservice instances
+	// +optional
 	Phase Phase `json:"phase"`
 
 	// ObservedGeneration is the most recent generation observed by the controller.
@@ -118,15 +125,19 @@ type KVServiceStatus struct {
 
 	// Replicas is the observed number of KVService pods,
 	// exposed through the scale subresource.
+	// +optional
 	Replicas int32 `json:"replicas"`
 
 	// current number of ready kvservice instances
+	// +optional
 	ReadyReplicas int32 `json:"readyReplicas"`
 
 	// selector for pods, used by HorizontalPodAutoscaler
+	// +optional
 	Selector string `json:"selector"`
 
 	// Resource Revision tracker
+	// +optional
 	ResourceRevMap map[string]string `json:"resourceRevMap"`
 }
 
@@ -148,7 +159,8 @@ type KVService struct {
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
 	// +kubebuilder:validation:Required
-	Spec   KVServiceSpec   `json:"spec"`
+	Spec KVServiceSpec `json:"spec"`
+	// +optional
 	Status KVServiceStatus `json:"status,omitempty,omitzero"`
 }
 

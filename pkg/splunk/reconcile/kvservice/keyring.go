@@ -90,7 +90,12 @@ func validateTenantKeyEntry(tenant string, raw []byte) error {
 // reconcileKVServiceTenantKeys computes one publication from all source snapshots.
 // Missing/unreadable sources retain their last entry; removals always disappear.
 // Malformed retained entries are revoked independently.
-func reconcileKVServiceTenantKeys(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService, mapping map[string]string) (*corev1.Secret, map[string]error, error) {
+func reconcileKVServiceTenantKeys(
+	ctx context.Context,
+	c splcommon.ControllerClient,
+	cr *enterpriseApi.KVService,
+	mapping map[string]string,
+) (*corev1.Secret, map[string]error, error) {
 	keyring := &corev1.Secret{}
 	err := c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: splcommon.KVServiceTenantVerificationKeysName}, keyring)
 	create := apierrors.IsNotFound(err)
@@ -120,7 +125,10 @@ func reconcileKVServiceTenantKeys(ctx context.Context, c splcommon.ControllerCli
 		if err != nil {
 			delete(desired, tenant)
 			failures[tenant] = tenantTerminal(
-				fmt.Sprintf("Tenant %q has an invalid keyring entry in Secret %s/%s. Set the entry to a JSON array with the current key and at most one previous key.", tenant, cr.Namespace, keyring.Name),
+				fmt.Sprintf(
+					"Tenant %q has an invalid keyring entry in Secret %s/%s. Set the entry to a JSON array with the current key and at most one previous key.",
+					tenant, cr.Namespace, keyring.Name,
+				),
 				fmt.Errorf("parse verification-key entry for tenant %q: %w", tenant, err))
 			continue
 		}
@@ -134,7 +142,10 @@ func reconcileKVServiceTenantKeys(ctx context.Context, c splcommon.ControllerCli
 		keys, err = keys.rotate(next)
 		if err != nil {
 			failures[tenant] = tenantTerminal(
-				fmt.Sprintf("Tenant %q has an unretired previous key. Confirm clients use the current key, then remove the previous entry in Secret %s/%s before rotating again.", tenant, cr.Namespace, keyring.Name),
+				fmt.Sprintf(
+					"Tenant %q has an unretired previous key. Confirm clients use the current key, then remove the previous entry in Secret %s/%s before rotating again.",
+					tenant, cr.Namespace, keyring.Name,
+				),
 				fmt.Errorf("rotate verification keys for tenant %q: %w", tenant, err))
 			continue
 		}
@@ -149,7 +160,10 @@ func reconcileKVServiceTenantKeys(ctx context.Context, c splcommon.ControllerCli
 	// healthy tenants' rotations or removals.
 	for tenant, raw := range desired {
 		if err := validateTenantKeyEntry(tenant, raw); err != nil {
-			failures[tenant] = tenantTerminal(fmt.Sprintf("Tenant %q has an invalid keyring entry in Secret %s/%s. Correct it to contain a current key and at most one previous key.", tenant, cr.Namespace, keyring.Name), err)
+			failures[tenant] = tenantTerminal(fmt.Sprintf(
+				"Tenant %q has an invalid keyring entry in Secret %s/%s. Correct it to contain a current key and at most one previous key.",
+				tenant, cr.Namespace, keyring.Name,
+			), err)
 			delete(desired, tenant)
 		}
 	}

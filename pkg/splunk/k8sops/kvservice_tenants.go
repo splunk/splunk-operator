@@ -105,7 +105,10 @@ func ApplyKVServiceTenantConfig(ctx context.Context, c client.Client, cr *enterp
 	}
 	if owner := metav1.GetControllerOf(existing); owner == nil || owner.UID != cr.UID {
 		return nil, splcommon.NewTerminalError(splcommon.EventReasonValidateSpecFailed,
-			fmt.Sprintf("Tenant runtime ConfigMap %s/%s is not owned by KVService %s/%s. Resolve the ConfigMap ownership conflict before retrying.", existing.Namespace, existing.Name, cr.Namespace, cr.Name),
+			fmt.Sprintf(
+				"Tenant runtime ConfigMap %s/%s is not owned by KVService %s/%s. Resolve the ConfigMap ownership conflict before retrying.",
+				existing.Namespace, existing.Name, cr.Namespace, cr.Name,
+			),
 			fmt.Errorf("tenant membership ConfigMap %s/%s has controller owner %v; expected KVService UID %s", existing.Namespace, existing.Name, owner, cr.UID))
 	}
 	if !maps.Equal(existing.Data, desired.Data) {

@@ -4312,8 +4312,9 @@ spec:
                 description: Tenants reports namespace discovery and provisioning
                   independently of pod readiness.
                 items:
-                  description: KVServiceTenantStatus reports one selected namespace
-                    independently of service readiness.
+                  description: |-
+                    KVServiceTenantStatus reports one selected namespace independently of service readiness.
+                    Fields without omitempty retain explicit zero values in status.
                   properties:
                     databaseName:
                       type: string

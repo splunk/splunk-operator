@@ -59,7 +59,10 @@ func validateTenantKeyringOwner(cr *enterpriseApi.KVService, keyring *corev1.Sec
 		return &tenantReservationError{fmt.Sprintf("namespace %q is reserved by KVService %q; waiting for its keyring to be released", cr.Namespace, owner.Name)}
 	}
 	return tenantTerminal(
-		fmt.Sprintf("Keyring Secret %s/%s is not owned by KVService %s/%s. Resolve the Secret ownership conflict before retrying.", cr.Namespace, keyring.Name, cr.Namespace, cr.Name),
+		fmt.Sprintf(
+			"Keyring Secret %s/%s is not owned by KVService %s/%s. Resolve the Secret ownership conflict before retrying.",
+			cr.Namespace, keyring.Name, cr.Namespace, cr.Name,
+		),
 		fmt.Errorf("verification-key Secret %s/%s has controller owner %v; expected KVService UID %s", cr.Namespace, keyring.Name, owner, cr.UID))
 }
 
@@ -77,7 +80,10 @@ func validateTenantSingleton(cr *enterpriseApi.KVService, services []enterpriseA
 	}
 	slices.Sort(conflicts)
 	return tenantTerminal(
-		fmt.Sprintf("Namespace %q contains multiple KVServices. Keep only one KVService and wait for the others to finish deleting; existing serving resources are left unchanged.", cr.Namespace),
+		fmt.Sprintf(
+			"Namespace %q contains multiple KVServices. Keep only one KVService and wait for the others to finish deleting; existing serving resources are left unchanged.",
+			cr.Namespace,
+		),
 		fmt.Errorf("KVService %s/%s conflicts with KVServices %q in its hosting namespace", cr.Namespace, cr.Name, conflicts))
 }
 
@@ -110,7 +116,10 @@ func ensureTenantPostgresReady(ctx context.Context, c splcommon.ControllerClient
 	var result tenantPostgresResult
 	if !config.DefaultMutableFeatureGate.Enabled(config.PostgresController) {
 		return result, tenantTerminal(
-			fmt.Sprintf("Enable the %s feature gate on the Operator (--feature-gates=%s=true) to provision databases for KVService %s/%s.", config.PostgresController, config.PostgresController, cr.Namespace, cr.Name),
+			fmt.Sprintf(
+				"Enable the %s feature gate on the Operator (--feature-gates=%s=true) to provision databases for KVService %s/%s.",
+				config.PostgresController, config.PostgresController, cr.Namespace, cr.Name,
+			),
 			fmt.Errorf("PostgreSQL provisioning is disabled for KVService %s/%s", cr.Namespace, cr.Name))
 	}
 	services, err := k8sops.ListKVServices(ctx, c, client.InNamespace(cr.Namespace))
@@ -280,7 +289,14 @@ type tenantDatabase struct {
 	info         *platformApi.DatabaseInfo
 }
 
-func ensureDatabase(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService, desired *platformApi.PostgresDatabase, databaseName string, services []enterpriseApi.KVService) (*platformApi.PostgresDatabase, bool, error) {
+func ensureDatabase(
+	ctx context.Context,
+	c splcommon.ControllerClient,
+	cr *enterpriseApi.KVService,
+	desired *platformApi.PostgresDatabase,
+	databaseName string,
+	services []enterpriseApi.KVService,
+) (*platformApi.PostgresDatabase, bool, error) {
 	db := &platformApi.PostgresDatabase{}
 	if err := c.Get(ctx, client.ObjectKeyFromObject(desired), db); apierrors.IsNotFound(err) {
 		if err := c.Create(ctx, desired); err != nil && !apierrors.IsAlreadyExists(err) {
@@ -293,21 +309,30 @@ func ensureDatabase(ctx context.Context, c splcommon.ControllerClient, cr *enter
 	if err := reconcileManagedDatabaseOwnership(ctx, c, cr, db, databaseName, services); err != nil {
 		return nil, false, fmt.Errorf("validate PostgresDatabase %s/%s: %w", db.Namespace, db.Name, err)
 	}
-	ready := db.DeletionTimestamp == nil && db.Status.ObservedGeneration != nil && *db.Status.ObservedGeneration == db.Generation && db.Status.Phase != nil && *db.Status.Phase == "Ready"
+	ready := db.DeletionTimestamp == nil &&
+		db.Status.ObservedGeneration != nil &&
+		*db.Status.ObservedGeneration == db.Generation &&
+		db.Status.Phase != nil && *db.Status.Phase == "Ready"
 	return db, ready, nil
 }
 
 // classifyManagedDatabase is pure policy: foreign and incompatible resources are never adopted.
 func classifyManagedDatabase(db *platformApi.PostgresDatabase, cr *enterpriseApi.KVService, databaseName string, services []enterpriseApi.KVService) (bool, error) {
 	subject := fmt.Sprintf("Tenant %q", databaseName)
-	repair := fmt.Sprintf("Correct the tenant Namespace's %s backend assignment if it selects the wrong service; if the database is unrelated, choose a unique %s tenant label.", splcommon.AnnotationKVServiceAddr, splcommon.LabelTenant)
+	repair := fmt.Sprintf(
+		"Correct the tenant Namespace's %s backend assignment if it selects the wrong service; if the database is unrelated, choose a unique %s tenant label.",
+		splcommon.AnnotationKVServiceAddr, splcommon.LabelTenant,
+	)
 	if databaseName == splcommon.KVServiceSystemDatabase {
 		subject = "The KVService system database"
 		repair = "Review the existing system database's management assignment and controller ownership against this KVService."
 	}
 	if owner := metav1.GetControllerOf(db); owner != nil {
 		return false, tenantTerminal(
-			fmt.Sprintf("%s requires PostgresDatabase %s/%s for KVService %s/%s, but that database has a Kubernetes controller reference to %s %q. %s The existing database is left unchanged.", subject, db.Namespace, db.Name, cr.Namespace, cr.Name, owner.Kind, owner.Name, repair),
+			fmt.Sprintf(
+				"%s requires PostgresDatabase %s/%s for KVService %s/%s, but that database has a Kubernetes controller reference to %s %q. %s The existing database is left unchanged.",
+				subject, db.Namespace, db.Name, cr.Namespace, cr.Name, owner.Kind, owner.Name, repair,
+			),
 			fmt.Errorf("PostgresDatabase %s/%s has controller owner %s/%s (UID %s)", db.Namespace, db.Name, owner.Kind, owner.Name, owner.UID))
 	}
 	managed := db.Annotations[splcommon.KVServiceTenantDatabaseOwnerAnnotation] == cr.Namespace+"/"+cr.Name
@@ -325,19 +350,38 @@ func classifyManagedDatabase(db *platformApi.PostgresDatabase, cr *enterpriseApi
 	}
 	if !managed {
 		return false, tenantTerminal(
-			fmt.Sprintf("%s requires PostgresDatabase %s/%s, but it is not managed by KVService %s/%s. %s The existing database is left unchanged.", subject, db.Namespace, db.Name, cr.Namespace, cr.Name, repair),
-			fmt.Errorf("PostgresDatabase %s/%s management annotation is %q; expected %q or a retained assignment whose previous manager is gone", db.Namespace, db.Name, db.Annotations[splcommon.KVServiceTenantDatabaseOwnerAnnotation], cr.Namespace+"/"+cr.Name))
+			fmt.Sprintf(
+				"%s requires PostgresDatabase %s/%s, but it is not managed by KVService %s/%s. %s The existing database is left unchanged.",
+				subject, db.Namespace, db.Name, cr.Namespace, cr.Name, repair,
+			),
+			fmt.Errorf(
+				"PostgresDatabase %s/%s management annotation is %q; expected %q or a retained assignment whose previous manager is gone",
+				db.Namespace, db.Name, db.Annotations[splcommon.KVServiceTenantDatabaseOwnerAnnotation], cr.Namespace+"/"+cr.Name,
+			))
 	}
-	if db.Spec.ClusterRef.Name != cr.Spec.Postgres.ClusterRef.Name || len(db.Spec.Databases) != 1 || db.Spec.Databases[0].Name != databaseName || db.Spec.Databases[0].DeletionPolicy != "Retain" {
+	if db.Spec.ClusterRef.Name != cr.Spec.Postgres.ClusterRef.Name ||
+		len(db.Spec.Databases) != 1 ||
+		db.Spec.Databases[0].Name != databaseName ||
+		db.Spec.Databases[0].DeletionPolicy != "Retain" {
 		return false, tenantTerminal(
-			fmt.Sprintf("%s has incompatible configuration in PostgresDatabase %s/%s. It must reference PostgresCluster %q, contain only database %q, and use deletionPolicy Retain.", subject, db.Namespace, db.Name, cr.Spec.Postgres.ClusterRef.Name, databaseName),
+			fmt.Sprintf(
+				"%s has incompatible configuration in PostgresDatabase %s/%s. It must reference PostgresCluster %q, contain only database %q, and use deletionPolicy Retain.",
+				subject, db.Namespace, db.Name, cr.Spec.Postgres.ClusterRef.Name, databaseName,
+			),
 			fmt.Errorf("PostgresDatabase %s/%s does not match the required cluster, logical database, and Retain policy", db.Namespace, db.Name))
 	}
 
 	return db.Annotations[splcommon.KVServiceTenantDatabaseOwnerAnnotation] != cr.Namespace+"/"+cr.Name, nil
 }
 
-func reconcileManagedDatabaseOwnership(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService, db *platformApi.PostgresDatabase, databaseName string, services []enterpriseApi.KVService) error {
+func reconcileManagedDatabaseOwnership(
+	ctx context.Context,
+	c splcommon.ControllerClient,
+	cr *enterpriseApi.KVService,
+	db *platformApi.PostgresDatabase,
+	databaseName string,
+	services []enterpriseApi.KVService,
+) error {
 	adopt, err := classifyManagedDatabase(db, cr, databaseName, services)
 	if err != nil {
 		return fmt.Errorf("validate managed database assignment: %w", err)
@@ -355,29 +399,38 @@ func reconcileManagedDatabaseOwnership(ctx context.Context, c splcommon.Controll
 	return nil
 }
 
-func buildTenantRuntime(cr *enterpriseApi.KVService, mapping map[string]string, databases []tenantDatabase, keyring *corev1.Secret, dependencies *k8sops.KVServicePostgresDependencies, membership string) (*k8sops.KVServicePostgresDependencies, error) {
+func buildTenantRuntime(
+	cr *enterpriseApi.KVService,
+	ready map[string]string,
+	databases []tenantDatabase,
+	keyring *corev1.Secret,
+	service *k8sops.KVServicePostgresDependencies,
+	membership string,
+) (*k8sops.KVServicePostgresDependencies, error) {
 	var credentials []resources.KVServiceTenantCredential
-	configs := []string{splcommon.KVServiceSystemDatabase + ":" + dependencies.ConfigHash}
-	revisions := []string{dependencies.AdminUserSecretRevision}
+	configs := []string{splcommon.KVServiceSystemDatabase + ":" + service.ConfigHash}
+	revisions := []string{service.AdminUserSecretRevision}
 	for _, entry := range databases {
 		configs = append(configs, entry.tenant+":"+entry.dependencies.ConfigHash)
 		revisions = append(revisions, entry.dependencies.AdminUserSecretRevision)
 		credentials = append(credentials, resources.KVServiceTenantCredential{Tenant: entry.tenant, SecretRef: *entry.info.AdminUserSecretRef})
 	}
 	runtime := resources.NewKVServiceTenantRuntime(membership, keyring.Name, splcommon.KVServiceSystemDatabase, credentials)
+	// Keep the service-database snapshot separate from the Deployment dependencies.
+	dependencies := *service
 	dependencies.Volumes = runtime.Volumes
 	dependencies.VolumeMounts = runtime.VolumeMounts
-	dependencies.Environment = append(dependencies.Environment, runtime.Environment...)
+	dependencies.Environment = append(slices.Clone(service.Environment), runtime.Environment...)
 	hash := func(values []string) string {
 		digest := sha256.Sum256([]byte(strings.Join(values, "\n")))
 		return hex.EncodeToString(digest[:])
 	}
-	mappingJSON, err := json.Marshal(mapping)
+	mappingJSON, err := json.Marshal(ready)
 	if err != nil {
 		return nil, fmt.Errorf("encode tenant membership for KVService %s/%s: %w", cr.Namespace, cr.Name, err)
 	}
 	dependencies.ConfigHash = hash(append(configs, string(mappingJSON)))
 	dependencies.AdminUserSecretRevision = hash(revisions)
 	dependencies.TenantKeyringRevision = fmt.Sprintf("%s:%s", keyring.UID, keyring.ResourceVersion)
-	return dependencies, nil
+	return &dependencies, nil
 }

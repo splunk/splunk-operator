@@ -69,7 +69,9 @@ func Apply(ctx context.Context, c splcommon.ControllerClient, key types.Namespac
 	return ApplyKVService(ctx, c, recorder, cr)
 }
 func setConditions(cr *enterpriseApi.KVService, paused bool, message string) {
-	state := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{Phase: cr.Status.Phase, IsPaused: paused, Message: message, Generation: cr.Generation})
+	state := splcommon.SetPhaseAndConditions(cr.Status.Conditions, splcommon.PhaseConditionInput{
+		Phase: cr.Status.Phase, IsPaused: paused, Message: message, Generation: cr.Generation,
+	})
 	cr.Status.Phase, cr.Status.Conditions = state.Phase, state.Conditions
 	cr.Status.ObservedGeneration = cr.Generation
 }
@@ -217,8 +219,10 @@ func recordTenantEvents(ctx context.Context, publisher *k8sops.K8EventPublisher,
 // evaluated in this reconciliation. Namespace changes do not bump CR generation.
 func setTenantCondition(cr *enterpriseApi.KVService, evaluated bool) {
 	condition := metav1.Condition{
-		Type: "TenantsReady", Status: metav1.ConditionUnknown,
-		Reason: "TenantEvaluationPending", Message: "Tenant prerequisites were not evaluated in this reconciliation; tenant entries are last-known observations",
+		Type:               "TenantsReady",
+		Status:             metav1.ConditionUnknown,
+		Reason:             "TenantEvaluationPending",
+		Message:            "Tenant prerequisites were not evaluated in this reconciliation; tenant entries are last-known observations",
 		ObservedGeneration: cr.Generation,
 	}
 	if evaluated {
