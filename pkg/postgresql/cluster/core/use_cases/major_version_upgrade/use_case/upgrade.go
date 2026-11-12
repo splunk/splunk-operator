@@ -45,6 +45,7 @@ type blueGreenStrategy struct {
 	preparer   bluegreen.Preparer
 	candidate  bluegreen.CandidatePreparer
 	switchover bluegreen.Switchover
+	canceller  bluegreen.Canceller
 }
 
 func (s pgUpgradeStrategy) Advance(ctx context.Context, _ mvutypes.Intent) (mvutypes.Progress, error) {
@@ -55,12 +56,12 @@ func (s pgUpgradeStrategy) Advance(ctx context.Context, _ mvutypes.Intent) (mvut
 func (pgUpgradeStrategy) RequiresPreUpgradeBackup(mvutypes.Intent) bool { return true }
 
 func (s blueGreenStrategy) Advance(ctx context.Context, intent mvutypes.Intent) (mvutypes.Progress, error) {
-	outcome, err := bluegreen.New(s.phase, s.preparer, s.candidate, s.switchover).Advance(ctx, intent)
+	outcome, err := bluegreen.New(s.phase, s.preparer, s.candidate, s.switchover).WithCanceller(s.canceller).Advance(ctx, intent)
 	return mvutypes.Progress{Report: outcome.Report, BlueGreen: outcome.BlueGreen}, err
 }
 
 func (blueGreenStrategy) RequiresPreUpgradeBackup(intent mvutypes.Intent) bool {
-	return !mvutypes.CutoverStageForIntent(intent).OwnsRecovery() && !bluegreen.SourcePreparationComplete(intent)
+	return !mvutypes.CutoverStageForIntent(intent).OwnsRecovery() && !bluegreen.SourcePreparationComplete(intent) && !mvutypes.BlueGreenCancellationApplies(intent)
 }
 
 type upgradeFlow interface {
@@ -74,6 +75,7 @@ type MajorUpgradeUseCase struct {
 	blueGreen           bluegreen.Preparer
 	blueGreenCandidate  bluegreen.CandidatePreparer
 	blueGreenSwitchover bluegreen.Switchover
+	blueGreenCanceller  bluegreen.Canceller
 	notifier            pgupgradeflow.Notifier
 
 	intent mvutypes.Intent
@@ -84,6 +86,12 @@ type MajorUpgradeUseCase struct {
 func NewMajorUpgradeUseCase(store majorUpgradeInfoStore, rollback backupProvider, pgUpgrade pgupgradeflow.PgUpgrade, notifier pgupgradeflow.Notifier, preparer bluegreen.Preparer, candidate bluegreen.CandidatePreparer, switchover bluegreen.Switchover) *MajorUpgradeUseCase {
 	return &MajorUpgradeUseCase{store: store, rollback: rollback, pgUpgrade: pgUpgrade, notifier: notifier,
 		blueGreen: preparer, blueGreenCandidate: candidate, blueGreenSwitchover: switchover}
+}
+
+// WithBlueGreenCanceller enables pre-commit cancellation of blue/green attempts.
+func (h *MajorUpgradeUseCase) WithBlueGreenCanceller(canceller bluegreen.Canceller) *MajorUpgradeUseCase {
+	h.blueGreenCanceller = canceller
+	return h
 }
 
 func (h *MajorUpgradeUseCase) Prerequisites(ctx context.Context) error {
@@ -97,7 +105,7 @@ func (h *MajorUpgradeUseCase) Prerequisites(ctx context.Context) error {
 	if intent.SourcePgVersion == "" {
 		return errors.Join(usecases.ErrPrerequisiteNotReady, errors.New("source PostgreSQL version not yet written to status"))
 	}
-	if intent.Strategy == mvutypes.MajorUpgradeFlowBlueGreen && !blueGreenAttemptStarted(intent) {
+	if intent.Strategy == mvutypes.MajorUpgradeFlowBlueGreen && !blueGreenAttemptStarted(intent) && !mvutypes.BlueGreenCancellationApplies(intent) {
 		ready, err := h.store.ReadyToStart(ctx)
 		if err != nil {
 			return err
@@ -150,9 +158,13 @@ func (h *MajorUpgradeUseCase) Schedule(ctx context.Context) (bool, error) {
 			continue
 		}
 		switch *entry.Phase {
-		case string(mvutypes.Completed):
+		case string(mvutypes.Completed), string(mvutypes.Cancelled):
 			return false, nil
 		case string(mvutypes.Failed):
+			if mvutypes.BlueGreenCancellationApplies(intent) {
+				h.active = true
+				return true, nil
+			}
 			if mvutypes.RetryRequestedAfterTerminalFailure(intent.RetryRequestedAt, entry) {
 				h.active = true
 				return true, nil
@@ -208,8 +220,12 @@ func (h *MajorUpgradeUseCase) Act(ctx context.Context) (reconciliationtypes.Repo
 		return reconciliationtypes.Report{Name: mvutypes.UseCaseName}, nil
 	}
 
-	if err := h.validateIntent(); err != nil {
-		return h.finish(ctx, mvutypes.ReportFromError(err), nil, err)
+	// Cancelling an existing attempt must not reauthorize its original version
+	// jump against a current or unavailable class policy.
+	if !mvutypes.BlueGreenCancellationApplies(h.intent) {
+		if err := h.validateIntent(); err != nil {
+			return h.finish(ctx, mvutypes.ReportFromError(err), nil, err)
+		}
 	}
 
 	// Establish a durable attempt identity before backups or source mutations.
@@ -358,7 +374,7 @@ func (h *MajorUpgradeUseCase) strategyFor(intent mvutypes.Intent) upgradeStrateg
 	case mvutypes.MajorUpgradeFlowPgUpgrade:
 		return pgUpgradeStrategy{flow: pgupgradeflow.NewPgUpgradeFlow(h.pgUpgrade, phaseForIntent(intent.State, intent))}
 	case mvutypes.MajorUpgradeFlowBlueGreen:
-		return blueGreenStrategy{phase: phaseForIntent(intent.State, intent), preparer: h.blueGreen, candidate: h.blueGreenCandidate, switchover: h.blueGreenSwitchover}
+		return blueGreenStrategy{phase: phaseForIntent(intent.State, intent), preparer: h.blueGreen, candidate: h.blueGreenCandidate, switchover: h.blueGreenSwitchover, canceller: h.blueGreenCanceller}
 	default:
 		return nil
 	}
@@ -371,6 +387,9 @@ func phaseForIntent(entries []platformv1alpha1.PostgresMajorUpgradeStatus, inten
 			continue
 		}
 		phase := mvutypes.Status(*entry.Phase)
+		if phase == mvutypes.Failed && mvutypes.BlueGreenCancellationApplies(intent) {
+			return mvutypes.Cancelling
+		}
 		if intent.Strategy == mvutypes.MajorUpgradeFlowBlueGreen && mvutypes.CutoverStageOf(entry).OwnsRecovery() {
 			return mvutypes.Status(mvutypes.NormalizeCutoverProgress(mvutypes.Progress{Report: reconciliationtypes.Report{Phase: string(phase)}, BlueGreen: entry.BlueGreen}).Report.Phase)
 		}
@@ -446,5 +465,9 @@ func (h *MajorUpgradeUseCase) emitPhaseEvent(report reconciliationtypes.Report) 
 		h.notifier.Inform(mvutypes.EventMajorUpgradeCompleted, mvutypes.MessageMajorUpgradeCompleted)
 	case mvutypes.Failed:
 		h.notifier.Warn(mvutypes.EventMajorUpgradeFailed, fmt.Sprintf(mvutypes.MessageMajorUpgradeFailed, report.Message))
+	case mvutypes.Cancelling:
+		h.notifier.Inform(mvutypes.EventMajorUpgradeCancelling, mvutypes.MessageMajorUpgradeCancelling)
+	case mvutypes.Cancelled:
+		h.notifier.Inform(mvutypes.EventMajorUpgradeCancelled, mvutypes.MessageMajorUpgradeCancelled)
 	}
 }

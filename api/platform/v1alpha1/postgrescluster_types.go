@@ -959,9 +959,33 @@ type BlueGreenGateConsumptionStatus struct {
 }
 
 // BlueGreenCancellationStatus records an explicit pre-commit cancellation.
+// Each step is write-once so an interrupted cancellation resumes at the first
+// unrecorded step.
 type BlueGreenCancellationStatus struct {
+	// RequestedAt latches the cancellation. Once recorded, the attempt cannot
+	// resume preparation or switchover, even if the cancel gate is cleared.
 	// +optional
 	RequestedAt *metav1.Time `json:"requestedAt,omitempty"`
+
+	// SourceAccessRestoredAt records verified blue endpoint publication and
+	// blue application access.
+	// +optional
+	SourceAccessRestoredAt *metav1.Time `json:"sourceAccessRestoredAt,omitempty"`
+
+	// ReplicationRemovedAt records verified removal of the attempt's logical
+	// replication resources and source slots.
+	// +optional
+	ReplicationRemovedAt *metav1.Time `json:"replicationRemovedAt,omitempty"`
+
+	// CredentialsRemovedAt records removal of the attempt's temporary roles and
+	// credential Secrets.
+	// +optional
+	CredentialsRemovedAt *metav1.Time `json:"credentialsRemovedAt,omitempty"`
+
+	// GreenFencedAt records verified application fencing of the retained green
+	// candidate.
+	// +optional
+	GreenFencedAt *metav1.Time `json:"greenFencedAt,omitempty"`
 
 	// +optional
 	CompletedAt *metav1.Time `json:"completedAt,omitempty"`

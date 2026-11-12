@@ -129,6 +129,9 @@ func (s *BlueGreenSwitchover) AdvanceSwitchover(ctx context.Context, intent mvut
 	if err != nil {
 		return bluegreen.Outcome{}, err
 	}
+	if !intent.CancelRequested && mvutypes.BlueGreenCancelRequestedInSpec(&parent.Spec) && !mvutypes.BlueGreenCancellationRequested(status) && status.CommitReceipt == nil {
+		return s.pending(status, "A cancellation request arrived; deferring switchover to the next reconcile."), nil
+	}
 	if status.Switchover == nil ||
 		status.Gates == nil || status.Gates.Switchover == nil || status.Gates.Switchover.ConsumedAt == nil || status.Gates.Switchover.Generation <= 0 {
 		return s.pending(status, "Waiting for a durable switchover authorization."), errors.Join(mvutypes.ErrUpgradeFlowFailed, errors.New("switchover authorization or timeout receipt is incomplete"))
@@ -148,10 +151,6 @@ func (s *BlueGreenSwitchover) AdvanceSwitchover(ctx context.Context, intent mvut
 		status.Switchover.TimedOutAt = &now
 		status.Switchover.Failure = new("Switchover exceeded its deadline before endpoint commit.")
 		return s.pending(status, "The switchover timed out; restoring blue access."), nil
-	}
-	if config := parent.Spec.PostgresMajorUpgradeConfig; config != nil && config.BlueGreen != nil && config.BlueGreen.Cancel != nil && *config.BlueGreen.Cancel && status.Switchover.Failure == nil {
-		status.Switchover.Failure = new("Switchover was cancelled before endpoint commit.")
-		return s.pending(status, "Restoring blue access before cancellation can finish."), nil
 	}
 	if status.Switchover.Failure != nil {
 		return s.restoreSource(ctx, intent, status)
@@ -488,33 +487,13 @@ func (s *BlueGreenSwitchover) precommitError(ctx context.Context, intent mvutype
 }
 
 func (s *BlueGreenSwitchover) restoreSource(ctx context.Context, intent mvutypes.Intent, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bluegreen.Outcome, error) {
-	ctx, cancel := context.WithTimeout(ctx, cutoverRecoveryTimeout)
-	defer cancel()
-
-	if err := s.endpoints.RestoreUncommittedCanonical(ctx, s.key, intent.AttemptID); err != nil {
-		return s.pending(status, "Restoring the uncommitted blue endpoint record."), err
+	restored, message, err := s.restoreBlue(ctx, intent.AttemptID, status)
+	// Preparation was cleared in the store; this in-memory status is stale.
+	if err == nil && !restored && status.EndpointPreparation != nil {
+		return s.refreshed(ctx, intent.AttemptID, message)
 	}
-	if status.EndpointPreparation != nil {
-		if err := s.endpoints.CancelPreparation(ctx, s.key, intent.AttemptID, status.EndpointPreparation.Generation); err != nil {
-			return s.pending(status, "Clearing the uncommitted endpoint preparation."), err
-		}
-		return s.refreshed(ctx, intent.AttemptID, "Endpoint preparation is cleared; restoring blue access.")
-	}
-	w := status.Switchover
-	if w.ControlIdentity != nil && w.ControlIdentity.PreparedAt != nil {
-		blue, err := s.environment(ctx, status.Blue)
-		if err != nil {
-			return s.pending(status, "Waiting for blue's recorded environment before restoration."), err
-		}
-		open, err := s.access.RestoreBlue(ctx, blue, status)
-		if err != nil || !open {
-			return s.pending(status, "Verifying source access is restored before ending this window."), err
-		}
-	}
-	// Without a durable PreparedAt receipt no fence operation was authorized;
-	// the control bootstrap never modifies ordinary LOGIN flags or HBA rules.
-	if w.SourceFenceRestoredAt == nil {
-		w.SourceFenceRestoredAt = new(metav1.NewTime(s.now()))
+	if err != nil || !restored {
+		return s.pending(status, message), err
 	}
 	return bluegreen.Outcome{BlueGreen: status, Report: restoredWindowReport(status)}, nil
 }
@@ -531,6 +510,61 @@ func restoredWindowReport(status *platformv1alpha1.PostgresBlueGreenUpgradeStatu
 	}
 	return reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Failed), Reason: reason,
 		Message: "Blue remains authoritative and its access is restored. A newer retry timestamp is required for another interruption."}
+}
+
+// restoreBlue performs one pass of pre-commit restoration: the canonical
+// record, then pending endpoint preparation, then blue access. It records
+// SourceFenceRestoredAt once blue access is verified. Each pass, including a
+// cancellation's, has a fresh recovery timeout.
+func (s *BlueGreenSwitchover) restoreBlue(ctx context.Context, attemptID string, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, string, error) {
+	ctx, cancel := context.WithTimeout(ctx, cutoverRecoveryTimeout)
+	defer cancel()
+
+	if err := s.endpoints.RestoreUncommittedCanonical(ctx, s.key, attemptID); err != nil {
+		return false, "Restoring the uncommitted blue endpoint record.", err
+	}
+	if status.EndpointPreparation != nil {
+		if err := s.endpoints.CancelPreparation(ctx, s.key, attemptID, status.EndpointPreparation.Generation); err != nil {
+			return false, "Clearing the uncommitted endpoint preparation.", err
+		}
+		return false, "Endpoint preparation is cleared; restoring blue access.", nil
+	}
+	w := status.Switchover
+	if w == nil {
+		return true, "", nil
+	}
+	// Without a durable PreparedAt receipt no fence operation was authorized;
+	// the control bootstrap never modifies ordinary LOGIN flags or HBA rules.
+	if w.ControlIdentity != nil && w.ControlIdentity.PreparedAt != nil {
+		blue, err := s.environment(ctx, status.Blue)
+		if err != nil {
+			return false, "Waiting for blue's recorded environment before restoration.", err
+		}
+		open, err := s.access.RestoreBlue(ctx, blue, status)
+		if err != nil || !open {
+			return false, "Verifying source access is restored before ending this window.", err
+		}
+	}
+	if w.SourceFenceRestoredAt == nil {
+		w.SourceFenceRestoredAt = new(metav1.NewTime(s.now()))
+	}
+	return true, "", nil
+}
+
+// CommitObserved reports whether the canonical endpoint record publishes green.
+func (s *BlueGreenSwitchover) CommitObserved(ctx context.Context, attemptID string) (bool, error) {
+	return s.endpoints.ObserveCommit(ctx, s.key, attemptID)
+}
+
+// RestoreForCancellation restores blue before a cancellation proceeds. An
+// attempt that never opened a switchover window or endpoint preparation left
+// blue untouched and needs no restoration.
+func (s *BlueGreenSwitchover) RestoreForCancellation(ctx context.Context, attemptID string, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error) {
+	if status.EndpointPreparation == nil && (status.Switchover == nil || status.Switchover.SourceFenceRestoredAt != nil) {
+		return true, nil
+	}
+	restored, _, err := s.restoreBlue(ctx, attemptID, status)
+	return restored, err
 }
 
 func (s *BlueGreenSwitchover) verifyFrozenConfiguration(ctx context.Context, source *cnpgv1.Cluster, databases []declaredDatabase, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {

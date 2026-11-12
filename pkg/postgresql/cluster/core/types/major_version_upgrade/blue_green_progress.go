@@ -44,6 +44,9 @@ func ValidateBlueGreenProgress(intent Intent, progress Progress) error {
 	if err := validateSourcePreparationReceipt(intent.AttemptID, progress.BlueGreen); err != nil {
 		return err
 	}
+	if err := validateCancellationReceipt(intent.AttemptID, progress.BlueGreen); err != nil {
+		return err
+	}
 
 	for i := len(intent.State) - 1; i >= 0; i-- {
 		current := intent.State[i]
@@ -59,6 +62,61 @@ func validateSourcePreparationReceipt(attemptID string, proposed *platformv1alph
 	if proposed != nil && proposed.SourcePreparation != nil &&
 		(proposed.SourcePreparation.CompletedAt == nil || proposed.SourceConfigurationFingerprint == nil) {
 		return fmt.Errorf("blue/green source-preparation receipt requires completion time and configuration baseline for attempt %q", attemptID)
+	}
+	return nil
+}
+
+// validateCancellationReceipt keeps cancellation steps behind their latch and
+// on the pre-commit side of the endpoint commit.
+func validateCancellationReceipt(attemptID string, proposed *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {
+	if proposed == nil || proposed.Gates == nil || proposed.Gates.Cancellation == nil {
+		return nil
+	}
+	cancellation := proposed.Gates.Cancellation
+	if cancellation.RequestedAt == nil && (cancellation.SourceAccessRestoredAt != nil || cancellation.ReplicationRemovedAt != nil ||
+		cancellation.CredentialsRemovedAt != nil || cancellation.GreenFencedAt != nil || cancellation.CompletedAt != nil) {
+		return fmt.Errorf("blue/green cancellation steps require a latched cancellation request for attempt %q", attemptID)
+	}
+	if cancellation.CompletedAt != nil && CutoverStageOfStatus(proposed).Committed() {
+		return fmt.Errorf("blue/green progress cannot complete cancellation after endpoint commit for attempt %q", attemptID)
+	}
+	return nil
+}
+
+// validateCancellationSteps keeps every cancellation step write-once. A new
+// request may not first appear after the endpoint commit.
+func validateCancellationSteps(attemptID string, current, proposed *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {
+	var previous, next *platformv1alpha1.BlueGreenCancellationStatus
+	if current.Gates != nil {
+		previous = current.Gates.Cancellation
+	}
+	if proposed.Gates != nil {
+		next = proposed.Gates.Cancellation
+	}
+	if previous == nil || previous.RequestedAt == nil {
+		if next != nil && next.RequestedAt != nil && CutoverStageOfStatus(current).Committed() {
+			return fmt.Errorf("blue/green progress cannot request cancellation after endpoint commit for attempt %q", attemptID)
+		}
+		return nil
+	}
+	if next == nil {
+		return fmt.Errorf("blue/green progress cannot remove the cancellation receipt for attempt %q", attemptID)
+	}
+	for _, milestone := range []struct {
+		name string
+		old  *metav1.Time
+		new  *metav1.Time
+	}{
+		{"request time", previous.RequestedAt, next.RequestedAt},
+		{"source access restoration time", previous.SourceAccessRestoredAt, next.SourceAccessRestoredAt},
+		{"replication removal time", previous.ReplicationRemovedAt, next.ReplicationRemovedAt},
+		{"credential removal time", previous.CredentialsRemovedAt, next.CredentialsRemovedAt},
+		{"green fence time", previous.GreenFencedAt, next.GreenFencedAt},
+		{"completion time", previous.CompletedAt, next.CompletedAt},
+	} {
+		if previousTimeSet(milestone.old) && !sameOptionalTime(milestone.old, milestone.new) {
+			return fmt.Errorf("blue/green progress cannot change cancellation %s for attempt %q", milestone.name, attemptID)
+		}
 	}
 	return nil
 }
@@ -84,6 +142,9 @@ func validateExistingBlueGreenProgress(attemptID string, current, proposed *plat
 		return nil
 	}
 	if err := validateRebuildClassification(attemptID, current, proposed); err != nil {
+		return err
+	}
+	if err := validateCancellationSteps(attemptID, current, proposed); err != nil {
 		return err
 	}
 	if previous := current.SourcePreparation; previous != nil && previous.CompletedAt != nil {

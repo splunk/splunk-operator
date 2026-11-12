@@ -28,6 +28,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/logging"
 	mon "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/custom_metrics"
 	pgcconstants "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/constants"
+	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	usecases "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases"
 	tlsport "github.com/splunk/splunk-operator/pkg/postgresql/cluster/ports/tls"
@@ -68,7 +69,8 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	ctx = logging.WithLogger(ctx, logging.FromContext(ctx).With("func", "PostgresClusterService", "postgresCluster", parent.Name))
 	// Mode ownership comes from durable protocol state, not component blocking.
 	stage := cutoverStage(parent)
-	if parent.DeletionTimestamp == nil && stage.OwnsRecovery() {
+	pendingCancellation := len(parent.Status.PostgresMajorUpgradeStatus) > 0 && mvutypes.BlueGreenCancellationPending(&parent.Spec, parent.Status.PostgresMajorUpgradeStatus[len(parent.Status.PostgresMajorUpgradeStatus)-1])
+	if parent.DeletionTimestamp == nil && (stage.OwnsRecovery() || pendingCancellation) {
 		class := new(platformv1alpha1.PostgresClusterClass)
 		configErr := rc.APIReader.Get(ctx, client.ObjectKey{Name: parent.Spec.Class}, class)
 		var merged *MergedConfig

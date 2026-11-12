@@ -294,7 +294,30 @@ func TestMajorUpgradeStateStoreReadsSwitchoverGateAndGeneration(t *testing.T) {
 	require.True(t, enabled)
 	assert.Equal(t, int64(1), intent.Generation)
 	assert.True(t, intent.SwitchoverAuthorized)
+	assert.False(t, intent.CancelRequested)
 	assert.Equal(t, 2*time.Minute, intent.SwitchoverTimeout)
+}
+
+func TestMajorUpgradeStateStoreReadsCancelGate(t *testing.T) {
+	reader := NewMajorUpgradeStateStore(fakeStateStore{
+		spec: &platformv1alpha1.PostgresClusterSpec{
+			PostgresVersion: ptr.To("18"),
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{
+				Allow: ptr.To(false), Strategy: ptr.To(mvutypes.MajorUpgradeFlowBlueGreen),
+				BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeConfig{Cancel: ptr.To(true)},
+			},
+		},
+		entries: []platformv1alpha1.PostgresMajorUpgradeStatus{{
+			Strategy: ptr.To(mvutypes.MajorUpgradeFlowBlueGreen), SourcePgVersion: ptr.To("17"), TargetPgVersion: ptr.To("18"),
+			BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1", Blue: &platformv1alpha1.BlueGreenEnvironmentStatus{}},
+		}},
+		sourcePgVersion: "17",
+	})
+
+	intent, enabled, err := reader.ReadMajorUpgradeIntent(t.Context())
+	require.NoError(t, err)
+	require.True(t, enabled, "an active attempt can be cancelled after allow is cleared")
+	assert.True(t, intent.CancelRequested)
 }
 
 func TestMajorUpgradeInputFromClusterSkipsWhenSourceMajorMatchesTargetMajor(t *testing.T) {
@@ -838,7 +861,8 @@ func TestStateWithProgressReplacesBlueGreenStatusAtomically(t *testing.T) {
 	require.Len(t, next, 1)
 	require.NotNil(t, next[0].BlueGreen)
 	assert.Equal(t, phase, *next[0].Phase)
-	assert.Equal(t, updatedStatus, next[0].BlueGreen)
+	assert.Equal(t, updatedStatus, withoutGateConditions(next[0].BlueGreen))
+	assert.NotEmpty(t, next[0].BlueGreen.Conditions, "every write projects gate availability")
 	assert.NotSame(t, updatedStatus, next[0].BlueGreen)
 	assert.Equal(t, "attempt-2", intent.State[0].BlueGreen.AttemptID)
 
@@ -1379,4 +1403,67 @@ func TestRearmUsesCurrentCASHistory(t *testing.T) {
 	err := NewMajorUpgradeStateStore(store).SaveBlueGreenRearm(t.Context(), intent)
 	require.ErrorContains(t, err, "no longer current")
 	assert.Empty(t, store.saved)
+}
+
+func TestRetainedCancelledAttemptBlocksANewAttempt(t *testing.T) {
+	source, target := "17", "18"
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	entries := []platformv1alpha1.PostgresMajorUpgradeStatus{{
+		Phase: new(string(mvutypes.Cancelled)), Strategy: &strategy, SourcePgVersion: &source, TargetPgVersion: &target,
+		BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1",
+			Blue:  &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: corev1.ObjectReference{Name: "blue"}},
+			Green: &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: corev1.ObjectReference{Name: "green"}}},
+	}}
+	for _, allow := range []bool{true, false} {
+		spec := &platformv1alpha1.PostgresClusterSpec{PostgresVersion: new(target),
+			PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: new(allow), Strategy: &strategy}}
+		intent, enabled, err := MajorUpgradeInputFromParts(spec, entries, nil, source)
+		require.NoError(t, err)
+		require.True(t, enabled)
+		assert.Equal(t, "attempt-1", intent.AttemptID, "the retained attempt keeps its identity until cleanup")
+		assert.False(t, intent.RequiresBlueGreenRearm, "re-arming requires a cleaned attempt")
+	}
+}
+
+func TestCancellationSavedConditionsReplaceFailedAttemptWithoutRetry(t *testing.T) {
+	c, parent, store := initialAttemptStoreFixture(t)
+	now := metav1.NewTime(time.Now().UTC().Truncate(time.Second))
+	bg := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt"}
+	parent.Status.PostgresMajorUpgradeStatus = []platformv1alpha1.PostgresMajorUpgradeStatus{{Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen), SourcePgVersion: new("17"), TargetPgVersion: new("18"), Phase: new(string(mvutypes.Failed)), BlueGreen: bg,
+		Conditions: []metav1.Condition{{Type: mvutypes.ConditionMajorUpgradeTerminalFailure, Status: metav1.ConditionTrue, Reason: "Failed", LastTransitionTime: now}, {Type: mvutypes.ConditionMajorUpgradeProgressing, Status: metav1.ConditionTrue, Reason: "Upgrading", LastTransitionTime: now}},
+	}}
+	require.NoError(t, c.Status().Update(t.Context(), parent))
+	intent, enabled, err := store.ReadMajorUpgradeIntent(t.Context())
+	require.NoError(t, err)
+	require.True(t, enabled)
+	assert.Nil(t, intent.RetryRequestedAt)
+	bg.Gates = &platformv1alpha1.BlueGreenGateStatus{Cancellation: &platformv1alpha1.BlueGreenCancellationStatus{RequestedAt: &now}}
+	for _, stage := range []struct {
+		phase, reason string
+		retry         bool
+		condition     string
+		status        metav1.ConditionStatus
+	}{
+		{string(mvutypes.Cancelling), mvutypes.ReasonCancellationInProgress, true, mvutypes.ConditionMajorUpgradeProgressing, metav1.ConditionTrue},
+		{string(mvutypes.Cancelling), mvutypes.ReasonCancellationBlocked, true, mvutypes.ConditionMajorUpgradeRetryableFailure, metav1.ConditionTrue},
+		{string(mvutypes.Cancelled), mvutypes.ReasonCancelled, false, mvutypes.ConditionMajorUpgradeProgressing, metav1.ConditionFalse},
+	} {
+		if stage.phase == string(mvutypes.Cancelled) {
+			bg.Gates.Cancellation.CompletedAt = &now
+		}
+		_, err := store.SaveMajorUpgradeProgress(t.Context(), intent, mvutypes.Progress{BlueGreen: bg, Report: reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: stage.phase, Reason: stage.reason, Retry: stage.retry}})
+		require.NoError(t, err)
+		fresh := new(platformv1alpha1.PostgresCluster)
+		require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(parent), fresh))
+		conditions := fresh.Status.PostgresMajorUpgradeStatus[0].Conditions
+		assert.Nil(t, meta.FindStatusCondition(conditions, mvutypes.ConditionMajorUpgradeTerminalFailure))
+		condition := meta.FindStatusCondition(conditions, stage.condition)
+		require.NotNil(t, condition)
+		assert.Equal(t, stage.status, condition.Status)
+		assert.Equal(t, stage.reason, condition.Reason)
+		if stage.condition != mvutypes.ConditionMajorUpgradeRetryableFailure {
+			assert.Nil(t, meta.FindStatusCondition(conditions, mvutypes.ConditionMajorUpgradeRetryableFailure))
+		}
+		intent.State = fresh.Status.PostgresMajorUpgradeStatus
+	}
 }

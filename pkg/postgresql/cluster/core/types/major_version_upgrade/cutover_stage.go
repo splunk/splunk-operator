@@ -33,6 +33,9 @@ const (
 	CutoverCommitted
 	CutoverTargetAvailable
 	CutoverHandedOff
+	// CutoverCancelling owns a latched pre-commit cancellation after blue's
+	// interruption window, if any, has been restored.
+	CutoverCancelling
 )
 
 func CutoverStageOf(entry platformv1alpha1.PostgresMajorUpgradeStatus) CutoverStage {
@@ -48,6 +51,12 @@ func CutoverStageOfStatus(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) C
 		return CutoverNone
 	}
 	w := bg.Switchover
+	if BlueGreenCancelling(bg) {
+		if w != nil && w.StartedAt != nil && w.SourceFenceRestoredAt == nil {
+			return CutoverInterrupting
+		}
+		return CutoverCancelling
+	}
 	if bg.CommitReceipt != nil {
 		if pgendpointprotocol.CommitReceiptTargetsGreen(bg) && bg.CommitReceipt.CommittedAt != nil && w != nil && w.TargetAvailableAt != nil {
 			if w.EndpointPublicationEventRef != nil {
@@ -76,7 +85,7 @@ func CutoverStageOfStatus(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) C
 
 func (stage CutoverStage) OwnsRecovery() bool {
 	switch stage {
-	case CutoverAuthorized, CutoverInterrupting, CutoverCommitted, CutoverTargetAvailable, CutoverHandedOff:
+	case CutoverAuthorized, CutoverInterrupting, CutoverCommitted, CutoverTargetAvailable, CutoverHandedOff, CutoverCancelling:
 		return true
 	}
 	return false
@@ -95,7 +104,8 @@ func (stage CutoverStage) Committed() bool {
 // persistence after merging any newer coordinator evidence inside its CAS.
 func NormalizeCutoverProgress(progress Progress) Progress {
 	stage := CutoverStageOfStatus(progress.BlueGreen)
-	if !stage.OwnsRecovery() {
+	// A latched pre-commit cancellation reports its own phase.
+	if !stage.OwnsRecovery() || BlueGreenCancelling(progress.BlueGreen) {
 		return progress
 	}
 	phase := SwitchingOver

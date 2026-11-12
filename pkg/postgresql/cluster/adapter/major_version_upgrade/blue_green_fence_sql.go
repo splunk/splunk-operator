@@ -79,21 +79,45 @@ func (s *postgresSwitchoverSQL) verifyFenceHosts(ctx context.Context, cluster *c
 		if !valid {
 			return false, nil
 		}
-		// Catalog/file inspection cannot prove the HBA was loaded. These fresh
-		// attempts must fail specifically because HBA or LOGIN rejects access.
-		for _, role := range append([]string{"postgres"}, disabledRoles...) {
-			secret, err := s.roleSecret(ctx, cluster, role)
-			if err != nil {
-				return false, err
-			}
-			conn, err = s.connectCluster(ctx, cluster, host, "postgres", cutoverIdentity{Role: role, Password: string(secret.Data["password"]), AttemptID: id.AttemptID})
-			if err == nil {
-				// A successful connection contradicts the fence; retain its close error.
-				return false, conn.Close(ctx)
-			}
-			if !intentionalFenceDenial(err) {
-				return false, fmt.Errorf("verifying denied login for %q: %w", role, err)
-			}
+		if denied, err := s.verifyLoginsDenied(ctx, cluster, host, id.AttemptID, append([]string{"postgres"}, disabledRoles...)); err != nil || !denied {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+// VerifyCandidateFence probes every addressable instance of a cancelled
+// green. Unreachable instances have no denial proof and must be retried.
+func (s *postgresSwitchoverSQL) VerifyCandidateFence(ctx context.Context, green *cnpgv1.Cluster, attemptID string, roles []string) (bool, error) {
+	targets, err := retainedSourceHosts(ctx, s.client, green)
+	if err != nil {
+		return false, err
+	}
+	for _, target := range targets {
+		denied, err := s.verifyLoginsDenied(ctx, green, target.address, attemptID, roles)
+		if err != nil || !denied {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+// verifyLoginsDenied makes a fresh login per role. Catalog/file inspection
+// cannot prove the HBA was loaded, so each must fail because HBA or LOGIN
+// rejects access.
+func (s *postgresSwitchoverSQL) verifyLoginsDenied(ctx context.Context, cluster *cnpgv1.Cluster, host, attemptID string, roles []string) (bool, error) {
+	for _, role := range roles {
+		secret, err := s.roleSecret(ctx, cluster, role)
+		if err != nil {
+			return false, err
+		}
+		conn, err := s.connectCluster(ctx, cluster, host, "postgres", cutoverIdentity{Role: role, Password: string(secret.Data["password"]), AttemptID: attemptID})
+		if err == nil {
+			// A successful connection contradicts the fence; retain its close error.
+			return false, conn.Close(ctx)
+		}
+		if !intentionalFenceDenial(err) {
+			return false, fmt.Errorf("verifying denied login for %q on %q: %w", role, host, err)
 		}
 	}
 	return true, nil

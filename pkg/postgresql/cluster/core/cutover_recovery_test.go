@@ -412,3 +412,52 @@ func TestAvailableCutoverClearsReadinessWhenSafetyEvidenceFails(t *testing.T) {
 		})
 	}
 }
+
+func TestLatchedCancellationTakesRecoveryPriority(t *testing.T) {
+	now := metav1.Now()
+	latched := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt",
+		Gates: &platformv1alpha1.BlueGreenGateStatus{Cancellation: &platformv1alpha1.BlueGreenCancellationStatus{RequestedAt: &now}}}
+	parent := func(phase mvutypes.Status, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) *platformv1alpha1.PostgresCluster {
+		return &platformv1alpha1.PostgresCluster{Status: platformv1alpha1.PostgresClusterStatus{PostgresMajorUpgradeStatus: []platformv1alpha1.PostgresMajorUpgradeStatus{{
+			Phase: new(string(phase)), BlueGreen: status}}}}
+	}
+	assert.True(t, cutoverStage(parent(mvutypes.Cancelling, latched)).OwnsRecovery(), "a latched cancellation must finish without its class")
+	assert.False(t, cutoverStage(parent(mvutypes.Cancelled, latched)).OwnsRecovery())
+	assert.False(t, cutoverStage(parent(mvutypes.Upgrading, &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt"})).OwnsRecovery())
+}
+
+func TestCancelledSourceReconcilesOrdinaryComponentsWithAllowCleared(t *testing.T) {
+	parent, blue, c := convergedClusterFixture(t)
+	parent.Spec.PostgresVersion = new("18")
+	parent.Spec.PostgresMajorUpgradeConfig.Strategy = new(mvutypes.MajorUpgradeFlowBlueGreen)
+	parent.Spec.PostgresMajorUpgradeConfig.Allow = new(false)
+	parent.Status.Phase = new(string(configuringClusterPhase))
+	now := metav1.Now()
+	parent.Status.PostgresMajorUpgradeStatus = []platformv1alpha1.PostgresMajorUpgradeStatus{{
+		Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen), SourcePgVersion: new("17"), TargetPgVersion: new("18"), Phase: new(string(mvutypes.Cancelled)),
+		BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt", Blue: &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: *parent.Status.ProvisionerRef.DeepCopy()},
+			Gates: &platformv1alpha1.BlueGreenGateStatus{Cancellation: &platformv1alpha1.BlueGreenCancellationStatus{RequestedAt: &now, SourceAccessRestoredAt: &now, ReplicationRemovedAt: &now, CredentialsRemovedAt: &now, GreenFencedAt: &now, CompletedAt: &now}}},
+	}}
+	status := parent.Status.DeepCopy()
+	require.NoError(t, c.Update(t.Context(), parent))
+	parent.Status = *status
+	require.NoError(t, c.Status().Update(t.Context(), parent))
+	metrics := &availableMetricsFixture{ready: true}
+	rc := &ReconcileContext{Client: c, APIReader: c, Scheme: c.Scheme(), Recorder: record.NewFakeRecorder(30), ClusterCardResolver: identityadapter.NewIdentityResolver(), ClusterInputFactory: identityadapter.ClusterInputFromPostgresCluster, EnvironmentNamer: identityadapter.NewIdentityResolver()}
+	for range 2 {
+		_, err := PostgresClusterService(t.Context(), rc, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(parent)}, nil, noopBackupBackend{}, func(string, monitoring.Target) (*custommetrics.Model, error) {
+			return custommetrics.NewModel(metrics, metrics, metrics, metrics, metrics), nil
+		}, nil)
+		require.NoError(t, err)
+	}
+	fresh := new(platformv1alpha1.PostgresCluster)
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(parent), fresh))
+	assert.True(t, meta.IsStatusConditionTrue(fresh.Status.Conditions, "Ready"))
+	assert.Equal(t, string(readyClusterPhase), *fresh.Status.Phase)
+	assert.Equal(t, "17", fresh.Status.CurrentPgVersion)
+	require.NotNil(t, fresh.Status.Resources.ConfigMapRef, "downstream connection metadata must reconcile")
+	current := new(cnpgv1.Cluster)
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(blue), current))
+	assert.Equal(t, blue.Spec.ImageName, current.Spec.ImageName)
+	assert.Equal(t, blue.Spec.StorageConfiguration.Size, current.Spec.StorageConfiguration.Size)
+}

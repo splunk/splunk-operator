@@ -24,6 +24,8 @@ const (
 	EventMajorUpgradeRetryPending = "MajorUpgradeRetryPending"
 	EventPreUpgradeBackupStarted  = "PreUpgradeBackupStarted"
 	EventPostUpgradeBackupStarted = "PostUpgradeBackupStarted"
+	EventMajorUpgradeCancelling   = "MajorUpgradeCancelling"
+	EventMajorUpgradeCancelled    = "MajorUpgradeCancelled"
 )
 
 const (
@@ -33,4 +35,6 @@ const (
 	MessageMajorUpgradeFailed       = "Major version upgrade failed: %s"
 	MessagePreUpgradeBackupStarted  = "Pre-upgrade backup started"
 	MessagePostUpgradeBackupStarted = "Post-upgrade backup started"
+	MessageMajorUpgradeCancelling   = "Major version upgrade cancellation started"
+	MessageMajorUpgradeCancelled    = "Major version upgrade cancelled; the fenced green candidate is retained until cleanup"
 )
