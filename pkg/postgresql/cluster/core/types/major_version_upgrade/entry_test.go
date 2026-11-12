@@ -18,9 +18,11 @@ package majorversionupgradetypes
 
 import (
 	"testing"
+	"time"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestHasActiveBlueGreenAttemptRequiresSourceOwnership(t *testing.T) {
@@ -36,4 +38,29 @@ func TestHasActiveBlueGreenAttemptRequiresSourceOwnership(t *testing.T) {
 
 	assert.False(t, HasActiveBlueGreenAttempt([]platformv1alpha1.PostgresMajorUpgradeStatus{placeholder}))
 	assert.True(t, HasActiveBlueGreenAttempt([]platformv1alpha1.PostgresMajorUpgradeStatus{placeholder, owned}))
+}
+
+func TestRetryMustBeNewerThanConsumedValue(t *testing.T) {
+	consumed := time.Date(2026, 11, 12, 12, 0, 5, 123, time.UTC)
+	for _, test := range []struct {
+		name    string
+		request time.Time
+		receipt string
+		allowed bool
+	}{
+		{"same value", consumed, consumed.Format(time.RFC3339Nano), false},
+		{"same instant in another zone", consumed.In(time.FixedZone("ahead", 3600)), consumed.Format(time.RFC3339Nano), false},
+		{"older value", consumed.Add(-time.Nanosecond), consumed.Format(time.RFC3339Nano), false},
+		{"newer value", consumed.Add(time.Nanosecond), consumed.Format(time.RFC3339Nano), true},
+		{"unreadable receipt", consumed.Add(time.Second), "malformed", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			entry := platformv1alpha1.PostgresMajorUpgradeStatus{Conditions: []metav1.Condition{
+				{Type: ConditionMajorUpgradeTerminalFailure, LastTransitionTime: metav1.NewTime(consumed.Add(-time.Minute))},
+				{Type: ConditionMajorUpgradeRetryConsumed, Status: metav1.ConditionTrue, Message: test.receipt},
+			}}
+			request := metav1.NewTime(test.request)
+			assert.Equal(t, test.allowed, RetryRequestedAfterTerminalFailure(&request, entry))
+		})
+	}
 }

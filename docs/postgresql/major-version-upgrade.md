@@ -195,6 +195,7 @@ Each status entry may contain conditions:
 | `MajorUpgradeProgressing` | upgrade is actively making forward progress (image patch applied, upgrade job running, verification in progress) |
 | `MajorUpgradeRetryableFailure` | a dependency is not ready — pre-upgrade backup pending, backup storage full, state temporarily unavailable — the operator will keep retrying automatically |
 | `MajorUpgradeTerminalFailure` | operator will not retry automatically; manual action is required before requesting retry |
+| `MajorUpgradeRetryConsumed` | the message records the latest consumed retry timestamp; reusing that value cannot authorize another retry |
 | `MajorUpgradeCompleted` | matching upgrade intent completed |
 
 `MajorUpgradeProgressing` and `MajorUpgradeRetryableFailure` are both set with `Retry: true` and both require no user action. The distinction is intent: `Progressing` means the upgrade is moving forward normally; `RetryableFailure` means the operator is blocked on a prerequisite and waiting for it to resolve. If `MajorUpgradeRetryableFailure` persists for an extended period, inspect the condition message to identify the blocked dependency (for example, a backup that cannot complete due to storage pressure).
@@ -213,9 +214,9 @@ kubectl annotate postgrescluster $CLUSTER \
 
 Use this only after the cause of the terminal failure has been corrected. Retryable failures such as temporary backup unavailability do not require this annotation.
 
-The annotation value must be an RFC3339 UTC timestamp. The operator compares this value with the `MajorUpgradeTerminalFailure` condition timestamp in status. If the annotation timestamp is newer, the matching failed upgrade attempt may be scheduled again. If it is absent, invalid, or older than the failure timestamp, the failed attempt remains stopped.
+The annotation value must be an RFC3339 UTC timestamp. It must be newer than both the `MajorUpgradeTerminalFailure` condition timestamp and the latest retry value consumed by the matching attempt. The operator records the consumed value in the message of its `MajorUpgradeRetryConsumed` condition, preserving subsecond precision across status reloads. If the annotation is absent, invalid, or not newer than either timestamp, the failed attempt remains stopped.
 
-This makes retry edge-triggered. Reapplying the same annotation value does not retry a newer failure. To retry again after another terminal failure, overwrite the annotation with a new current timestamp.
+This makes retry edge-triggered. Reapplying the same annotation value does not retry a newer failure, including when the client clock is ahead of the controller clock. To retry again after another terminal failure, overwrite the annotation with a newer current timestamp.
 
 Kubernetes annotations are string key-value metadata stored under `metadata.annotations`. They are not part of the desired spec and they are not used for resource identity or selection. Updating an annotation still changes the Kubernetes object, so the operator receives a watch event and reconciles the cluster.
 

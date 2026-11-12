@@ -17,6 +17,8 @@ limitations under the License.
 package majorversionupgradetypes
 
 import (
+	"time"
+
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -120,6 +122,16 @@ func HasBlueGreenConfigurationFreeze(entries []platformv1alpha1.PostgresMajorUpg
 func RetryRequestedAfterTerminalFailure(retryRequestedAt *metav1.Time, entry platformv1alpha1.PostgresMajorUpgradeStatus) bool {
 	if retryRequestedAt == nil {
 		return false
+	}
+	// The receipt stores the accepted annotation value, not the controller's
+	// clock. Keep nanoseconds in Message because metav1.Time JSON drops them.
+	for _, condition := range entry.Conditions {
+		if condition.Type == ConditionMajorUpgradeRetryConsumed {
+			consumedAt, err := time.Parse(time.RFC3339Nano, condition.Message)
+			if err != nil || !retryRequestedAt.After(consumedAt) {
+				return false
+			}
+		}
 	}
 
 	for _, condition := range entry.Conditions {

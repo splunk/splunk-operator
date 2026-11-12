@@ -152,7 +152,11 @@ func (r *PostgresClusterReconciler) useCaseRegistry(key types.NamespacedName, cl
 func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedName, cluster *platformv1alpha1.PostgresCluster, mergedConfig *clustercore.MergedConfig) usecases.Factory {
 	return func() (usecases.UseCase, error) {
 		targetImage, err := clustercore.EffectivePostgresImage(mergedConfig)
-		if err != nil && !activeCutoverStage(cluster).OwnsRecovery() {
+		recovery := activeCutoverStage(cluster).OwnsRecovery()
+		if cluster != nil && len(cluster.Status.PostgresMajorUpgradeStatus) > 0 {
+			recovery = recovery || majorversionupgradetypes.BlueGreenCancellationPending(&cluster.Spec, cluster.Status.PostgresMajorUpgradeStatus[len(cluster.Status.PostgresMajorUpgradeStatus)-1])
+		}
+		if err != nil && !recovery {
 			return nil, fmt.Errorf("resolve major-upgrade target image: %w", err)
 		}
 		targetVersion := ""

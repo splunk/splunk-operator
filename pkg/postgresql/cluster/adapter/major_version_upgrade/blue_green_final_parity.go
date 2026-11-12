@@ -56,14 +56,6 @@ func (s *postgresSwitchoverSQL) VerifyFinalParity(ctx context.Context, source, t
 	if !sourceReadyForFailover(source) || !sourceReadyForFailover(target) {
 		return false, nil
 	}
-	if len(databases) != len(status.DatabaseReplication) {
-		return false, fmt.Errorf("%w: final parity database roster changed", mvutypes.ErrCandidateInvalid)
-	}
-	v := s.verifier(id)
-	instances, pods, err := v.healthySourcePods(ctx, source)
-	if err != nil {
-		return false, err
-	}
 	for _, environment := range []struct {
 		cluster *cnpgv1.Cluster
 		side    environmentSide
@@ -72,36 +64,70 @@ func (s *postgresSwitchoverSQL) VerifyFinalParity(ctx context.Context, source, t
 		if err != nil || !fenced {
 			return false, err
 		}
-		if err := s.verifyFrozenCatalogs(ctx, environment.cluster, databases, status, id, environment.side); err != nil {
-			return false, err
-		}
 	}
-
-	ready := true
-	for i := range status.DatabaseReplication {
-		r := &status.DatabaseReplication[i]
-		subscription, copyComplete, err := v.subscriptionState(ctx, target, r.DatabaseName, *status.Switchover.FinalBlueLSN)
-		if err != nil {
-			return false, err
-		}
-		slots, slotReady, err := v.slotState(ctx, source, r.DatabaseName, *status.Switchover.FinalBlueLSN, instances, pods)
-		if err != nil {
-			return false, err
-		}
-		r.SubscriptionHealthy = new(subscription)
-		r.InitialCopyComplete = new(copyComplete)
-		r.SlotHealthy = new(slotReady)
-		r.ReplicaSlots = slots
-		ready = ready && subscription && copyComplete && slotReady
-	}
-	inventory, err := v.verifySourceSlotInventory(ctx, source, databases)
-	if err != nil || !ready || !inventory {
+	caughtUp, err := s.verifyStreamAt(ctx, source, target, databases, status, id, *status.Switchover.FinalBlueLSN)
+	if err != nil || !caughtUp {
 		return false, err
 	}
 	if receipt := status.Switchover.SequenceSynchronization; receipt != nil && receipt.VerifiedAt != nil {
 		return s.VerifySequenceParity(ctx, source, target, databases, id)
 	}
 	return true, nil
+}
+
+// VerifyCandidateCatchUp checks a fenced green against a sampled blue LSN.
+// The next window re-establishes sequence parity.
+func (s *postgresSwitchoverSQL) VerifyCandidateCatchUp(ctx context.Context, source, target *cnpgv1.Cluster, databases []declaredDatabase, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus, id cutoverIdentity) (bool, error) {
+	if !sourceReadyForFailover(source) || !sourceReadyForFailover(target) {
+		return false, nil
+	}
+	fenced, err := s.VerifyFence(ctx, target, id, roleNames(accessOriginalRoles(status, sideGreen)))
+	if err != nil || !fenced {
+		return false, err
+	}
+	lsn, err := s.SourceLSN(ctx, source, id)
+	if err != nil {
+		return false, err
+	}
+	return s.verifyStreamAt(ctx, source, target, databases, status, id, lsn)
+}
+
+// verifyStreamAt proves green has applied blue's logical stream through lsn
+// with frozen catalogs on both sides and healthy source slots. It records the
+// per-database replication state.
+func (s *postgresSwitchoverSQL) verifyStreamAt(ctx context.Context, source, target *cnpgv1.Cluster, databases []declaredDatabase, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus, id cutoverIdentity, lsn string) (bool, error) {
+	if len(databases) != len(status.DatabaseReplication) {
+		return false, fmt.Errorf("%w: candidate database roster changed", mvutypes.ErrCandidateInvalid)
+	}
+	for _, environment := range []struct {
+		cluster *cnpgv1.Cluster
+		side    environmentSide
+	}{{source, sideBlue}, {target, sideGreen}} {
+		if err := s.verifyFrozenCatalogs(ctx, environment.cluster, databases, status, id, environment.side); err != nil {
+			return false, err
+		}
+	}
+	v := s.verifier(id)
+	instances, pods, err := v.healthySourcePods(ctx, source)
+	if err != nil {
+		return false, err
+	}
+	ready := true
+	for i := range status.DatabaseReplication {
+		r := &status.DatabaseReplication[i]
+		subscription, copyComplete, err := v.subscriptionState(ctx, target, r.DatabaseName, lsn)
+		if err != nil {
+			return false, err
+		}
+		slots, slotReady, err := v.slotState(ctx, source, r.DatabaseName, lsn, instances, pods)
+		if err != nil {
+			return false, err
+		}
+		r.SubscriptionHealthy, r.InitialCopyComplete, r.SlotHealthy, r.ReplicaSlots = new(subscription), new(copyComplete), new(slotReady), slots
+		ready = ready && subscription && copyComplete && slotReady
+	}
+	inventory, err := v.verifySourceSlotInventory(ctx, source, databases)
+	return err == nil && ready && inventory, err
 }
 
 func (s *postgresSwitchoverSQL) verifyFrozenCatalogs(ctx context.Context, cluster *cnpgv1.Cluster, databases []declaredDatabase, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus, id cutoverIdentity, side environmentSide) error {
