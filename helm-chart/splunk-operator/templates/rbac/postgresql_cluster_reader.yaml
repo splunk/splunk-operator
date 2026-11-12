@@ -1,0 +1,27 @@
+{{- if and (not .Values.splunkOperator.clusterWideAccess) (include "splunk-operator.postgresEnabled" .) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-postgres-reader.{{ include "splunk-operator.namespace" . }}
+rules:
+{{ include "splunk-operator.postgresClusterRules" . }}
+- apiGroups: [apiextensions.k8s.io]
+  resources: [customresourcedefinitions]
+  verbs: [get, list]
+- apiGroups: [cert-manager.io]
+  resources: [clusterissuers]
+  verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "splunk-operator.operator.fullname" . }}-postgres-reader.{{ include "splunk-operator.namespace" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "splunk-operator.operator.fullname" . }}-postgres-reader.{{ include "splunk-operator.namespace" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "splunk-operator.operator.serviceAccountName" . }}
+  namespace: {{ include "splunk-operator.namespace" . }}
+{{- end }}

@@ -1,0 +1,14 @@
+# One run per disposable cluster: cert-manager, SOK CRDs, default StorageClass;
+# no CNPG/Barman CRDs. Cleanup retains backend CRDs; rerun on a fresh cluster.
+# Run make helm-package, then make helm-kuttl-test KUTTL_CONFIG=<this file>.
+# Export absolute HELM_REPO_PATH, KUTTL_SPLUNK_OPERATOR_IMAGE and accepted
+# SPLUNK_GENERAL_TERMS (docs/README.md). Make supplies the release manifest.
+# CI: PIPELINE_HELM_TEST_DIRS=./kuttl/tests/helm-postgresql, PIPELINE_HELM_TEST_TIMEOUT=2400.
+apiVersion: kuttl.dev/v1beta1
+kind: TestSuite
+testDirs:
+  - ./kuttl/tests/helm-postgresql
+parallel: 1
+timeout: 2400
+startKIND: false
+artifactsDir: kuttl-artifacts

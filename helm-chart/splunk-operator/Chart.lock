@@ -2,5 +2,11 @@ dependencies:
 - name: cert-manager
   repository: https://charts.jetstack.io
   version: v1.21.3
-digest: sha256:727e4ddb7ba53752e084e5c05bd0e55874a1f8f745c86ac8a2bb382c39f8b226
-generated: "2026-10-23T23:33:52.799222539Z"
+- name: postgresok-helm-cloudnative-pg
+  repository: oci://registry-1.docker.io/splunk
+  version: 0.29.1-splunk.1.p43368666.ga1b7ebc9e8ad
+- name: postgresok-helm-plugin-barman-cloud
+  repository: oci://registry-1.docker.io/splunk
+  version: 0.8.1-splunk.1.p43368666.ga1b7ebc9e8ad
+digest: sha256:7ffb1c373849eac0430ed7a32cb2d8d4396ddcf3316c318782ee2bedfc9182fa
+generated: "2026-11-09T14:59:48.315776+01:00"

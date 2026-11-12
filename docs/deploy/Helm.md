@@ -90,6 +90,68 @@ Then pass the file to Helm:
 helm upgrade -f new_values.yaml <RELEASE_NAME> splunk/splunk-operator -n <RELEASE_NAMESPACE>
 ```
 
+### PostgreSQL backend controllers
+
+CNPG and Barman dependencies are **disabled by default**. Enable them with the
+alpha PostgreSQL controller gate:
+
+```yaml
+splunkOperator:
+  featureGates:
+    PostgresController: true
+cloudnative-pg: {enabled: true}
+plugin-barman-cloud: {enabled: true}
+```
+
+Pinned subcharts supply their tested image tags/digests; SOK overrides only public
+repositories/registries, including CNPG's bootstrap and Barman's sidecar. See
+[public artifacts](../postgresql/public-artifacts.md) for versions and verification.
+Install SOK CRDs and cert-manager first when enabling the bundle; Barman requires
+cert-manager even when SOK uses another webhook certificate mechanism.
+
+PostgreSQL RBAC follows the gate in both access modes. Bundling creates no databases or
+backup policy; use the [PostgreSQL quickstart](../postgresql/quickstart.md).
+PG17/PG18/PgBouncer runtime compatibility remains subject to installation validation.
+
+For existing compatible controllers, leave their dependencies disabled and enable
+only the PostgreSQL gate. Enterprise-only installs need no backend overrides.
+
+Avoid overlapping CNPG controllers; Helm cannot adopt another release's resources.
+Restart SOK if Barman is installed later, so its ObjectStore watch registers.
+
+For image mirrors, retain the pinned tags/digests and copy identical image bytes:
+
+```yaml
+cloudnative-pg:
+  image:
+    repository: mirror.example.com/postgresql/cnpg
+  imagePullSecrets: [{name: controller-registry-reader}]
+plugin-barman-cloud:
+  image:
+    registry: mirror.example.com
+    repository: postgresql/barman
+  sidecarImage:
+    registry: mirror.example.com
+    repository: postgresql/barman-sidecar
+  imagePullSecrets: [{name: controller-registry-reader}]
+```
+
+Override both Barman images. Controller pull Secrets belong in the release
+namespace; workload credentials use `PostgresCluster.spec.images.imagePullSecrets`
+in the workload namespace. SOK's own pull Secrets are separate. Packages contain
+both dependencies; image overrides do not redirect chart downloads. Private chart
+mirrors require build-time dependency configuration and `helm registry login`.
+Nest these values under `splunk-operator:` when using the Enterprise chart.
+`make helm-dependencies` verifies archive hashes against the release manifest.
+It requires jq and `sha256sum` (or `shasum`) and uses temporary repository
+configuration/cache. Helm tests check public image references; the live suite also
+needs yq v4.
+
+Helm updates templated backend CRDs on upgrade and retains them on disable/uninstall
+(`helm.sh/resource-policy: keep`). Removing a controller stops its management of
+existing databases. Coordinate ownership before reinstalling; do not delete CRDs
+to resolve conflicts. Dependency switches provide no data-retention/recovery policy.
+
 ### Configuring Splunk Operator deployments
 
 **Note: The `SPLUNK_GENERAL_TERMS` environment variable is set to an empty string by default. This will need to be manually updated to the required value. See [SplunkGeneralTermsMigration.md](../reference/SplunkGeneralTermsMigration.md) for instructions on how to set the variable using helm commands with both the splunk/splunk-operator and splunk/splunk-enterprise charts.**

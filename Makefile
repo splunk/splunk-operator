@@ -185,11 +185,26 @@ docs-preview: ## Preview documentation locally with Jekyll (requires Ruby and bu
 HELM_OPERATOR_CHART = helm-chart/splunk-operator
 HELM_UF_CHART = helm-chart/splunk-universalforwarder
 HELM_ENTERPRISE_CHART = helm-chart/splunk-enterprise
+POSTGRES_RELEASE_MANIFEST ?= docs/postgresql/releases/postgresok-2026-11-06/release-manifest.json
+
+.PHONY: helm-dependencies
+helm-dependencies: ## Build and verify locked operator chart dependencies
+	@set -e; helm_repo_dir=$$(mktemp -d); \
+	trap 'rm -rf "$$helm_repo_dir"' EXIT; \
+	export HELM_REPOSITORY_CONFIG="$$helm_repo_dir/repositories.yaml" HELM_REPOSITORY_CACHE="$$helm_repo_dir/cache"; \
+	helm repo add jetstack https://charts.jetstack.io; \
+	helm dependency build "$(HELM_OPERATOR_CHART)" --skip-refresh; \
+	jq -er --arg charts "$(abspath $(HELM_OPERATOR_CHART))/charts" \
+	  '.artifacts[] | select(.kind == "chart") | "\(.package_sha256)  \($$charts)/\(.public.reference | split("/")[-1] | split(":")[0])-\(.version).tgz"' \
+	  "$(POSTGRES_RELEASE_MANIFEST)" > "$$helm_repo_dir/checksums"; \
+	if command -v sha256sum >/dev/null 2>&1; then \
+	  sha256sum -c "$$helm_repo_dir/checksums"; \
+	else \
+	  shasum -a 256 -c "$$helm_repo_dir/checksums"; \
+	fi
 
 .PHONY: helm-lint
-helm-lint: ## Lint Helm charts
-	helm repo add jetstack https://charts.jetstack.io --force-update
-	helm dependency build $(HELM_OPERATOR_CHART)
+helm-lint: helm-dependencies ## Lint Helm charts
 	helm lint $(HELM_OPERATOR_CHART)
 	helm lint $(HELM_UF_CHART) --set splunkConfig.forwardServer=indexer:9997 --set splunkConfig.password=Test1234! --set splunkConfig.splunkGeneralTerms=$(SPLUNK_GENERAL_TERMS)
 	@mkdir -p $(HELM_ENTERPRISE_CHART)/charts
@@ -199,7 +214,7 @@ helm-lint: ## Lint Helm charts
 	helm lint $(HELM_ENTERPRISE_CHART)
 
 .PHONY: helm-test
-helm-test: setup/helm-unittest ## Run Helm chart unit tests
+helm-test: setup/helm-unittest helm-dependencies ## Run Helm chart unit tests
 	helm unittest $(HELM_OPERATOR_CHART)
 	helm unittest $(HELM_UF_CHART)
 
@@ -615,9 +630,7 @@ test-shc-detention: setup/ginkgo ## Run SHC detention timeout e2e tests. Require
 	  -splunk-upgrade-image=$(SPLUNK_UPGRADE_IMG)
 
 .PHONY: helm-package
-helm-package:
-	@helm repo add jetstack https://charts.jetstack.io --force-update
-	@helm dependency build helm-chart/splunk-operator
+helm-package: helm-dependencies
 	@mkdir -p helm-chart/splunk-enterprise/charts
 	@rm -f helm-chart/splunk-enterprise/charts/splunk-operator-*.tgz
 	@helm package helm-chart/splunk-operator --destination .
@@ -632,7 +645,7 @@ helm-kuttl-test:
 		echo "Error: KUTTL_CONFIG is required"; \
 		exit 1; \
 	fi
-	@kubectl kuttl test --config "${KUTTL_CONFIG}" --report xml
+	@POSTGRES_RELEASE_MANIFEST="$(abspath $(POSTGRES_RELEASE_MANIFEST))" kubectl kuttl test --config "${KUTTL_CONFIG}" --report xml
 
 lang:
 	@echo Running bias language linter

@@ -241,3 +241,40 @@ its configuration and webhook Service independently.
 {{- end -}}
 {{- end -}}
 
+{{/* PostgreSQL RBAC follows its gate, independent of bundling. */}}
+{{- define "splunk-operator.postgresEnabled" -}}
+{{- include "splunk-operator.featureGateEnabled" (dict "ctx" . "gate" "PostgresController" "stage" "Alpha" "default" false) -}}
+{{- end }}
+
+{{- define "splunk-operator.postgresNamespacedRules" -}}
+- apiGroups: [platform.splunk.com]
+  resources: [postgresclusters, postgresdatabases]
+  verbs: [get, list, watch, create, update, patch, delete]
+- apiGroups: [platform.splunk.com]
+  resources: [postgresclusters/status]
+  verbs: [get, update, patch]
+- apiGroups: [platform.splunk.com]
+  resources: [postgresdatabases/status]
+  verbs: [get, list, watch, update, patch]
+- apiGroups: [platform.splunk.com]
+  resources: [postgresclusters/finalizers, postgresdatabases/finalizers]
+  verbs: [update]
+- apiGroups: [postgresql.cnpg.io]
+  resources: [clusters, databases, poolers, backups, scheduledbackups, publications, subscriptions]
+  verbs: [get, list, watch, create, update, patch, delete]
+- apiGroups: [postgresql.cnpg.io]
+  resources: [clusters/status, poolers/status, backups/status, scheduledbackups/status, publications/status, subscriptions/status]
+  verbs: [get]
+- apiGroups: [barmancloud.cnpg.io]
+  resources: [objectstores]
+  verbs: [get, list, watch, create, update, patch, delete]
+- apiGroups: [networking.k8s.io]
+  resources: [networkpolicies]
+  verbs: [get, list, watch]
+{{- end }}
+
+{{- define "splunk-operator.postgresClusterRules" -}}
+- apiGroups: [platform.splunk.com]
+  resources: [postgresclusterclasses]
+  verbs: [get, list, watch]
+{{- end }}

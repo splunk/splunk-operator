@@ -1,0 +1,113 @@
+suite: bundled PostgreSQL controllers
+templates:
+  - charts/cloudnative-pg/templates/*.yaml
+  - charts/plugin-barman-cloud/templates/*.yaml
+tests:
+  - it: uses public CNPG for the controller and bootstrap when enabled
+    template: charts/cloudnative-pg/templates/deployment.yaml
+    set: &bundledBackends
+      cloudnative-pg.enabled: true
+      plugin-barman-cloud.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: &cnpgImage registry-1.docker.io/splunk/postgresok-cnpg:v1-30-1-splunk.1-ci.a1b7ebc9e8ad@sha256:942ba5ac9def0ce28078dd9427ef000cc9f3daf956f947b256e57987a6d2ad7f
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OPERATOR_IMAGE_NAME
+            value: *cnpgImage
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: cloudnative-pg
+  - it: uses the public Barman controller when enabled
+    template: charts/plugin-barman-cloud/templates/deployment.yaml
+    set: *bundledBackends
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry-1.docker.io/splunk/postgresok-plugin-barman-cloud:v0-15-1-splunk.1-ci.a1b7ebc9e8ad@sha256:4666ed27c5a86b45f6d69b12644e1840b73610adf8bf325343fe609159d372ba
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: plugin-barman-cloud
+  - it: uses the distinct public Barman sidecar when enabled
+    template: charts/plugin-barman-cloud/templates/configmap.yaml
+    set: *bundledBackends
+    asserts:
+      - equal:
+          path: data.SIDECAR_IMAGE
+          value: registry-1.docker.io/splunk/postgresok-plugin-barman-cloud-sidecar:v0-15-1-splunk.1-ci.a1b7ebc9e8ad@sha256:288674a51fb4a574dbb778a2b9f125fe81614f00e429617c963401296d588b66
+  - it: passes CNPG mirror credentials and bootstrap reference together
+    template: charts/cloudnative-pg/templates/deployment.yaml
+    set:
+      <<: *bundledBackends
+      cloudnative-pg.image.repository: mirror.example.com/backend/cnpg
+      cloudnative-pg.imagePullSecrets: [{name: cnpg-reader}]
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value: [{name: cnpg-reader}]
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: &cnpgMirrorImage mirror.example.com/backend/cnpg:v1-30-1-splunk.1-ci.a1b7ebc9e8ad@sha256:942ba5ac9def0ce28078dd9427ef000cc9f3daf956f947b256e57987a6d2ad7f
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OPERATOR_IMAGE_NAME
+            value: *cnpgMirrorImage
+  - it: passes independent Barman controller mirror credentials
+    template: charts/plugin-barman-cloud/templates/deployment.yaml
+    set:
+      <<: *bundledBackends
+      plugin-barman-cloud.image.registry: mirror.example.com
+      plugin-barman-cloud.image.repository: backend/barman
+      plugin-barman-cloud.imagePullSecrets: [{name: barman-reader}]
+    asserts:
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value: [{name: barman-reader}]
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: mirror.example.com/backend/barman:v0-15-1-splunk.1-ci.a1b7ebc9e8ad@sha256:4666ed27c5a86b45f6d69b12644e1840b73610adf8bf325343fe609159d372ba
+  - it: passes an independent Barman sidecar mirror
+    template: charts/plugin-barman-cloud/templates/configmap.yaml
+    set:
+      <<: *bundledBackends
+      plugin-barman-cloud.sidecarImage.registry: workloads.example.com
+      plugin-barman-cloud.sidecarImage.repository: backend/sidecar
+    asserts:
+      - equal:
+          path: data.SIDECAR_IMAGE
+          value: workloads.example.com/backend/sidecar:v0-15-1-splunk.1-ci.a1b7ebc9e8ad@sha256:288674a51fb4a574dbb778a2b9f125fe81614f00e429617c963401296d588b66
+  - it: omits both controllers and CRDs by default
+    asserts:
+      - hasDocuments:
+          count: 0
+  - it: enables CNPG independently
+    template: charts/cloudnative-pg/templates/deployment.yaml
+    set:
+      cloudnative-pg.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+  - it: enables Barman independently
+    template: charts/plugin-barman-cloud/templates/deployment.yaml
+    set:
+      plugin-barman-cloud.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+  - it: retains CNPG CRDs on uninstall
+    template: charts/cloudnative-pg/templates/crds/crds.yaml
+    set: *bundledBackends
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+  - it: retains Barman CRDs on uninstall
+    template: charts/plugin-barman-cloud/templates/crds/crds.yaml
+    set: *bundledBackends
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep

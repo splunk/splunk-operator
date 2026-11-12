@@ -16,6 +16,21 @@ cert-manager:
   crds:
     enabled: true
 
+# Enable with PostgresController for bundled Splunk-built public backends.
+cloudnative-pg:
+  enabled: false
+  image:
+    repository: registry-1.docker.io/splunk/postgresok-cnpg
+
+plugin-barman-cloud:
+  enabled: false
+  image:
+    registry: registry-1.docker.io
+    repository: splunk/postgresok-plugin-barman-cloud
+  sidecarImage:
+    registry: registry-1.docker.io
+    repository: splunk/postgresok-plugin-barman-cloud-sidecar
+
 # Splunk Operator configurations
 splunkOperator:
 
