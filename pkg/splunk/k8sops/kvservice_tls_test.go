@@ -25,6 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -42,7 +43,7 @@ func TestApplyKVServiceDeploymentTLSChanges(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			scheme := runtime.NewScheme()
 			require.NoError(t, appsv1.AddToScheme(scheme))
-			cr := &enterpriseApi.KVService{Name: "kv", Namespace: "test", Spec: enterpriseApi.KVServiceSpec{Replicas: 1}}
+			cr := &enterpriseApi.KVService{Name: "kv", Namespace: "test", Spec: enterpriseApi.KVServiceSpec{Replicas: ptr.To(int32(1))}}
 			certs := []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "serving-cert"}, Role: enterpriseApi.CertRoleServer}}
 			if tt.currentTLS {
 				cr.Spec.Certs = certs

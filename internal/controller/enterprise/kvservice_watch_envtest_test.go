@@ -170,7 +170,7 @@ func newKVServiceWatchFixture(ctx context.Context, invalidTenant, missingKey boo
 				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{
 					Image: "kvstore/kvservice:watch-test", ImagePullPolicy: "IfNotPresent",
 				}},
-				Replicas: 1,
+				Replicas: ptr.To(int32(1)),
 				Postgres: enterpriseApi.KVServicePostgresSpec{ClusterRef: corev1.LocalObjectReference{Name: "watch-postgres"}},
 			},
 		},

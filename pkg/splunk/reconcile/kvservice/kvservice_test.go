@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -36,8 +37,117 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestKVServiceAutoscalingReconciliation(t *testing.T) {
+	// Existing unit-test fixture value; this test only uses a fake Kubernetes client.
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := t.Context()
+	cr, _, c := postgresReadinessFixture(t)
+	cr.Spec.Replicas = ptr.To(int32(2))
+	cr.Spec.Autoscaling = &enterpriseApi.KVServiceAutoscalingSpec{
+		MinReplicas: ptr.To(int32(2)), MaxReplicas: ptr.To(int32(10)), TargetAverageUtilizationCPU: ptr.To(int32(60)), TargetAverageUtilizationMemory: ptr.To(int32(60)),
+	}
+	require.NoError(t, c.Update(ctx, cr))
+	key := types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}
+	recorder := events.NewFakeRecorder(100)
+	_, err := Apply(ctx, c, key, recorder)
+	assert.NoError(t, err)
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{}
+	hpaKey := types.NamespacedName{Namespace: cr.Namespace, Name: "splunk-" + cr.Name + "-kvservice-hpa"}
+	require.NoError(t, c.Get(ctx, hpaKey, hpa))
+	assert.Equal(t, "KVService", hpa.Spec.ScaleTargetRef.Kind)
+	assert.Equal(t, cr.Name, hpa.Spec.ScaleTargetRef.Name)
+	if assert.NotNil(t, hpa.Spec.MinReplicas) {
+		assert.Equal(t, int32(2), *hpa.Spec.MinReplicas)
+	}
+	assert.Equal(t, int32(10), hpa.Spec.MaxReplicas)
+
+	// The HPA writes spec.replicas through /scale. Reconciliation must use that value.
+	require.NoError(t, c.Get(ctx, key, cr))
+	cr.Spec.Replicas = ptr.To(int32(4))
+	require.NoError(t, c.Update(ctx, cr))
+	_, err = Apply(ctx, c, key, recorder)
+	assert.NoError(t, err)
+	deployment := &appsv1.Deployment{}
+	deploymentKey := types.NamespacedName{Namespace: cr.Namespace, Name: "splunk-" + cr.Name + "-kvservice"}
+	require.NoError(t, c.Get(ctx, deploymentKey, deployment))
+	if assert.NotNil(t, deployment.Spec.Replicas) {
+		assert.Equal(t, int32(4), *deployment.Spec.Replicas)
+	}
+	require.NoError(t, c.Get(ctx, key, cr))
+	assert.Equal(t, int32(4), cr.Status.Replicas)
+
+	cr.Spec.Autoscaling = nil
+	require.NoError(t, c.Update(ctx, cr))
+	_, err = Apply(ctx, c, key, recorder)
+	assert.NoError(t, err)
+	assert.True(t, apierrors.IsNotFound(c.Get(ctx, hpaKey, hpa)))
+	require.NoError(t, c.Get(ctx, key, cr))
+	assert.Equal(t, ptr.To(int32(4)), cr.Spec.Replicas, "disabling autoscaling retains the last selected replica count")
+
+	// An HPA ownership conflict must prevent a Ready status.
+	foreign := &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{Name: hpaKey.Name, Namespace: hpaKey.Namespace}}
+	require.NoError(t, c.Create(ctx, foreign))
+	cr.Spec.Autoscaling = &enterpriseApi.KVServiceAutoscalingSpec{
+		MinReplicas: ptr.To(int32(2)), MaxReplicas: ptr.To(int32(10)), TargetAverageUtilizationCPU: ptr.To(int32(60)), TargetAverageUtilizationMemory: ptr.To(int32(60)),
+	}
+	require.NoError(t, c.Update(ctx, cr))
+	_, err = Apply(ctx, c, key, recorder)
+	assert.ErrorContains(t, err, "not controlled by KVService")
+	require.NoError(t, c.Get(ctx, key, cr))
+	assert.Equal(t, enterpriseApi.PhaseError, cr.Status.Phase)
+	ready := meta.FindStatusCondition(cr.Status.Conditions, string(enterpriseApi.ConditionReady))
+	if assert.NotNil(t, ready) {
+		assert.Equal(t, metav1.ConditionFalse, ready.Status)
+	}
+}
+
+func TestKVServiceDisablesAutoscalingWhileServiceDatabaseIsUnready(t *testing.T) {
+	// Existing unit-test fixture value; this test only uses a fake Kubernetes client.
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	ctx := t.Context()
+	cr, database, c := postgresReadinessFixture(t)
+	cr.Spec.Replicas = ptr.To(int32(4))
+	cr.Spec.Autoscaling = &enterpriseApi.KVServiceAutoscalingSpec{
+		MinReplicas: ptr.To(int32(2)), MaxReplicas: ptr.To(int32(10)), TargetAverageUtilizationCPU: ptr.To(int32(60)), TargetAverageUtilizationMemory: ptr.To(int32(60)),
+	}
+	require.NoError(t, c.Update(ctx, cr))
+	key := types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}
+	recorder := events.NewFakeRecorder(100)
+	_, err := Apply(ctx, c, key, recorder)
+	assert.NoError(t, err)
+	hpaKey := types.NamespacedName{Namespace: cr.Namespace, Name: "splunk-" + cr.Name + "-kvservice-hpa"}
+	require.NoError(t, c.Get(ctx, hpaKey, &autoscalingv2.HorizontalPodAutoscaler{}))
+	deploymentKey := types.NamespacedName{Namespace: cr.Namespace, Name: "splunk-" + cr.Name + "-kvservice"}
+	deployment := &appsv1.Deployment{}
+	require.NoError(t, c.Get(ctx, deploymentKey, deployment))
+	before := deployment.DeepCopy()
+
+	// Database readiness must still gate workload changes, but not HPA removal.
+	database.Status.Phase = nil
+	require.NoError(t, c.Status().Update(ctx, database))
+	require.NoError(t, c.Get(ctx, key, cr))
+	cr.Spec.Autoscaling = nil
+	cr.Spec.Replicas = ptr.To(int32(3))
+	require.NoError(t, c.Update(ctx, cr))
+	result, err := Apply(ctx, c, key, recorder)
+	assert.NoError(t, err)
+	assert.True(t, apierrors.IsNotFound(c.Get(ctx, hpaKey, &autoscalingv2.HorizontalPodAutoscaler{})), "disabling autoscaling must delete the owned HPA while the service database is unready")
+	assert.NotZero(t, result.RequeueAfter, "an unready service database must still be retried")
+	require.NoError(t, c.Get(ctx, key, cr))
+	assert.Equal(t, ptr.To(int32(3)), cr.Spec.Replicas, "cleanup must preserve the manually selected replica count")
+	assert.Equal(t, enterpriseApi.PhasePending, cr.Status.Phase)
+	ready := meta.FindStatusCondition(cr.Status.Conditions, string(enterpriseApi.ConditionReady))
+	if assert.NotNil(t, ready) {
+		assert.Equal(t, metav1.ConditionFalse, ready.Status)
+		assert.Contains(t, ready.Message, "waiting for service database kvservicesystem")
+	}
+	require.NoError(t, c.Get(ctx, deploymentKey, deployment))
+	assert.Equal(t, before.Spec, deployment.Spec, "an unready database must still block Deployment updates")
+}
 
 func TestKVServiceReadinessAndConfigurationFailure(t *testing.T) {
 	// Existing unit-test fixture value; this test only uses a fake Kubernetes client.
@@ -88,7 +198,7 @@ func TestKVServiceReadinessAndConfigurationFailure(t *testing.T) {
 	deployment.Spec.Template.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "legacy-splunk-secret", MountPath: "/mnt/splunk-secrets"}}
 	require.NoError(t, c.Update(ctx, deployment))
 	_, err = Apply(ctx, c, key, recorder)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	require.NoError(t, c.Get(ctx, deploymentKey, deployment))
 	assert.Equal(t, splcommon.KVServiceSystemDatabase, envValue(deployment.Spec.Template.Spec.Containers[0].Env, "KVSERVICE_CMPK_SERVICE_DATABASE"))
 	assert.Empty(t, envValue(deployment.Spec.Template.Spec.Containers[0].Env, "SPLUNK_HOME"))
@@ -137,7 +247,7 @@ func TestKVServiceReadinessAndConfigurationFailure(t *testing.T) {
 			}
 			result, err := Apply(ctx, c, key, recorder)
 			if err != nil {
-				t.Fatalf("pause reconciliation failed: %v", err)
+				t.Errorf("pause reconciliation failed: %v", err)
 			}
 			if result.RequeueAfter != splcommon.PauseRetryDelay {
 				t.Errorf("true annotation did not pause reconciliation: result=%+v", result)
@@ -204,7 +314,7 @@ func TestKVServicePostgresPreservesTenantPendingMessage(t *testing.T) {
 	cr, c := pendingPostgresFixture(t)
 	ctx := t.Context()
 	result, err := Apply(ctx, c, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, events.NewFakeRecorder(10))
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	assert.NotZero(t, result.RequeueAfter, "KVService waiting for tenant databases should be retried")
 	secret := &corev1.Secret{}
 	secretKey := types.NamespacedName{Namespace: cr.Namespace, Name: splcommon.GetNamespaceScopedSecretName(cr.Namespace)}
@@ -218,9 +328,10 @@ func TestKVServicePostgresPreservesTenantPendingMessage(t *testing.T) {
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, current))
 	assert.Equal(t, enterpriseApi.PhasePending, current.Status.Phase)
 	ready := meta.FindStatusCondition(current.Status.Conditions, string(enterpriseApi.ConditionReady))
-	require.NotNil(t, ready)
-	assert.Equal(t, metav1.ConditionFalse, ready.Status)
-	assert.Equal(t, "waiting for service database kvservicesystem and its connection credentials", ready.Message)
+	if assert.NotNil(t, ready) {
+		assert.Equal(t, metav1.ConditionFalse, ready.Status)
+		assert.Equal(t, "waiting for service database kvservicesystem and its connection credentials", ready.Message)
+	}
 	t.Run("PostgreSQL reconciliation lifecycle", testKVServicePostgresReconciliationLifecycle)
 	t.Run("PostgreSQL with TLS", testKVServicePostgresTLSReconciliation)
 }
@@ -267,7 +378,7 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 	previous := config.DefaultMutableFeatureGate.Enabled(config.CertManagement)
 	require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): true}))
 	t.Cleanup(func() {
-		require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): previous}))
+		assert.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): previous}))
 	})
 	cr, _, c := postgresReadinessFixture(t)
 	ctx := t.Context()
@@ -280,7 +391,7 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 	require.NoError(t, c.Create(ctx, secret))
 	key := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 	_, err := Apply(ctx, c, key, nil)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	deploymentKey := types.NamespacedName{Namespace: cr.Namespace,
 		Name: splutil.GetSplunkDeploymentName(splcommon.SplunkKVService, cr.Name)}
 	deployment := &appsv1.Deployment{}
@@ -291,7 +402,7 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 			certVolume = volume.Name
 		}
 	}
-	require.NotEmpty(t, certVolume, "certificate Secret must be mounted")
+	assert.NotEmpty(t, certVolume, "certificate Secret must be mounted")
 	found := false
 	for _, mount := range deployment.Spec.Template.Spec.Containers[0].VolumeMounts {
 		if mount.Name == certVolume {
@@ -304,8 +415,9 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 	before := deployment.Spec.Template.DeepCopy()
 
 	requests := certs.CertSecretMapper(c, &enterpriseApi.KVServiceList{})(ctx, secret)
-	require.Len(t, requests, 1, "certificate Secret updates must enqueue KVService")
-	assert.Equal(t, key, requests[0].NamespacedName)
+	if assert.Len(t, requests, 1, "certificate Secret updates must enqueue KVService") {
+		assert.Equal(t, key, requests[0].NamespacedName)
+	}
 	assert.Equal(t, []string{splcommon.GetServiceFQDN(cr.Namespace,
 		splcommon.GetSplunkServiceName(splcommon.SplunkKVService, cr.Name, false))},
 		certs.AutoDNSNames(splcommon.SplunkKVService, cr.Name, cr.Namespace, 3))
@@ -314,7 +426,7 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 	secret.Data["tls.crt"] = []byte("test-cert-v2")
 	require.NoError(t, c.Update(ctx, secret))
 	_, err = Apply(ctx, c, key, nil)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	require.NoError(t, c.Get(ctx, deploymentKey, deployment))
 	assert.NotEqual(t, before.Annotations, deployment.Spec.Template.Annotations,
 		"certificate rotation must change the pod template to trigger a rollout")
@@ -331,7 +443,7 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 			secret.Data = invalid.data
 			require.NoError(t, c.Update(ctx, secret))
 			_, err = Apply(ctx, c, key, nil)
-			require.ErrorContains(t, err, invalid.missingKey)
+			assert.ErrorContains(t, err, invalid.missingKey)
 			require.NoError(t, c.Get(ctx, deploymentKey, deployment))
 			assert.Equal(t, before, &deployment.Spec.Template, "invalid certificates must preserve the working Deployment")
 		})

@@ -21,6 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/utils/ptr"
 )
 
 func TestCommonWorkloadSpecSerialization(t *testing.T) {
@@ -77,6 +78,39 @@ func TestCommonWorkloadSpecSerialization(t *testing.T) {
 	assert.Equal(t, "postgres", enterprise.ExtraEnv[0].ValueFrom.SecretKeyRef.Name)
 	assert.Equal(t, "registry", enterprise.ImagePullSecrets[0].Name)
 	assert.Equal(t, "kv.example.com", enterprise.Certs[0].DNSNames[0])
+}
+
+func TestKVServiceOptionalNumericFieldsSerialization(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value *int32
+		want  string
+	}{
+		{name: "omitted"},
+		{name: "explicit zero", value: ptr.To(int32(0)), want: "0"},
+		{name: "explicit value", value: ptr.To(int32(3)), want: "3"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := KVServiceSpec{
+				Replicas: tc.value,
+				Autoscaling: &KVServiceAutoscalingSpec{
+					MinReplicas: tc.value, MaxReplicas: tc.value,
+					TargetAverageUtilizationCPU: tc.value, TargetAverageUtilizationMemory: tc.value,
+				},
+			}
+			encoded, err := json.Marshal(spec)
+			require.NoError(t, err)
+			var actual struct {
+				Replicas    json.RawMessage            `json:"replicas"`
+				Autoscaling map[string]json.RawMessage `json:"autoscaling"`
+			}
+			require.NoError(t, json.Unmarshal(encoded, &actual))
+			assert.Equal(t, tc.want, string(actual.Replicas), "replicas")
+			for _, field := range []string{"minReplicas", "maxReplicas", "targetAverageUtilizationCPU", "targetAverageUtilizationMemory"} {
+				assert.Equal(t, tc.want, string(actual.Autoscaling[field]), field)
+			}
+		})
+	}
 }
 
 func TestKVServiceSpecExcludesEnterpriseSettings(t *testing.T) {

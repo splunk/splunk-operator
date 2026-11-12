@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -46,7 +47,7 @@ func pendingPostgresFixture(t *testing.T) (*enterpriseApi.KVService, client.With
 	t.Helper()
 	ctx, cr, source := tenantFixture(t)
 	cr.Generation = 1
-	cr.Spec.Replicas = 1
+	cr.Spec.Replicas = ptr.To(int32(1))
 	cr.Spec.Image = "kvstore/kvservice:test"
 	cr.Spec.ImagePullPolicy = string(corev1.PullIfNotPresent)
 	builder := fake.NewClientBuilder().WithScheme(source.Scheme()).

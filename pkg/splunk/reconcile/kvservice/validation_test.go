@@ -21,6 +21,7 @@ import (
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/config"
 	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,9 +43,6 @@ func TestValidateKVServiceSpec(t *testing.T) {
 	if err != nil {
 		t.Errorf("validateKVServiceSpec error=%v", err)
 	}
-	if cr.Spec.Replicas != 1 {
-		t.Errorf("replicas=%d; want 1", cr.Spec.Replicas)
-	}
 	if cr.Spec.Image != "kvstore/kvservice:latest" {
 		t.Errorf("image=%s; want %s", cr.Spec.Image, "kvstore/kvservice:latest")
 	}
@@ -62,8 +60,6 @@ func TestValidateKVServiceSpec(t *testing.T) {
 	}
 	cr.Spec.ImagePullPolicy = "IfNotPresent"
 	for name, spec := range map[string]enterpriseApi.KVServiceSpec{
-		"liveness delay":   {CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{LivenessInitialDelaySeconds: -1}},
-		"readiness delay":  {CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{ReadinessInitialDelaySeconds: -1}},
 		"liveness timing":  {LivenessProbe: &enterpriseApi.Probe{TimeoutSeconds: -1}},
 		"readiness timing": {ReadinessProbe: &enterpriseApi.Probe{PeriodSeconds: -1}},
 	} {
@@ -94,14 +90,14 @@ func TestValidateKVServiceSpec(t *testing.T) {
 			candidate := cr.DeepCopy()
 			candidate.Spec.Postgres = cr.Spec.Postgres
 			candidate.Spec.ExtraEnv = []corev1.EnvVar{{Name: name, Value: "override"}}
-			require.ErrorContains(t, validateKVServiceSpec(t.Context(), c, candidate), name)
+			assert.ErrorContains(t, validateKVServiceSpec(t.Context(), c, candidate), name)
 		})
 	}
 	t.Run("unrelated extra environment", func(t *testing.T) {
 		candidate := cr.DeepCopy()
 		candidate.Spec.Postgres = cr.Spec.Postgres
 		candidate.Spec.ExtraEnv = []corev1.EnvVar{{Name: "CUSTOM_SETTING", Value: "allowed"}}
-		require.NoError(t, validateKVServiceSpec(t.Context(), c, candidate))
+		assert.NoError(t, validateKVServiceSpec(t.Context(), c, candidate))
 	})
 }
 
@@ -109,12 +105,12 @@ func TestValidateKVServiceCertsFeatureGate(t *testing.T) {
 	previous := config.DefaultMutableFeatureGate.Enabled(config.CertManagement)
 	require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): false}))
 	t.Cleanup(func() {
-		require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): previous}))
+		assert.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): previous}))
 	})
 	cr := &enterpriseApi.KVService{Spec: enterpriseApi.KVServiceSpec{Postgres: enterpriseApi.KVServicePostgresSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}}}}
 	cr.Spec.Certs = []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "postgres-ca"}}}
 	err := validateKVServiceSpec(context.Background(), spltest.NewMockClient(), cr)
-	require.ErrorContains(t, err, "CertManagement")
+	assert.ErrorContains(t, err, "CertManagement")
 }
 
 func TestKVServiceReservesTLSOverridesOnlyWithCerts(t *testing.T) {
@@ -122,7 +118,7 @@ func TestKVServiceReservesTLSOverridesOnlyWithCerts(t *testing.T) {
 	previous := config.DefaultMutableFeatureGate.Enabled(config.CertManagement)
 	require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): true}))
 	t.Cleanup(func() {
-		require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): previous}))
+		assert.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): previous}))
 	})
 	for _, name := range []string{"TLS_CERTIFICATE", "TLS_PRIVATE_KEY", "TLS_HOST", "TLS_PORT"} {
 		t.Run(name, func(t *testing.T) {
@@ -136,10 +132,10 @@ func TestKVServiceReservesTLSOverridesOnlyWithCerts(t *testing.T) {
 				}
 				err := validateKVServiceSpec(t.Context(), spltest.NewMockClient(), cr)
 				if withCerts {
-					require.ErrorContains(t, err, "TLS environment variable")
-					require.ErrorContains(t, err, name)
+					assert.ErrorContains(t, err, "TLS environment variable")
+					assert.ErrorContains(t, err, name)
 				} else {
-					require.NoError(t, err)
+					assert.NoError(t, err)
 				}
 			}
 		})

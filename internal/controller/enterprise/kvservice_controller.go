@@ -30,6 +30,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/reconcile/kvservice"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -64,6 +65,7 @@ type KVServiceReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;delete
 
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=kvservices,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=enterprise.splunk.com,resources=kvservices/status,verbs=get;update;patch
@@ -142,6 +144,7 @@ func (r *KVServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&enterpriseApi.KVService{}).
+		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
 		Watches(&enterpriseApi.KVService{}, handler.EnqueueRequestsFromMapFunc(r.mapKVServicePeers),
 			ctrlbuilder.WithPredicates(kvServicePeerChangedPredicate())).
 		WithEventFilter(predicate.Or(

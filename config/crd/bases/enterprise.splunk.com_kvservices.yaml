@@ -971,6 +971,43 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
+              autoscaling:
+                description: |-
+                  Autoscaling configures an operator-managed HorizontalPodAutoscaler.
+                  When omitted, replicas are managed directly through spec.replicas.
+                properties:
+                  maxReplicas:
+                    default: 10
+                    description: Maximum number of KVService pods.
+                    format: int32
+                    maximum: 10
+                    minimum: 2
+                    type: integer
+                  minReplicas:
+                    default: 2
+                    description: Minimum number of KVService pods.
+                    format: int32
+                    maximum: 10
+                    minimum: 2
+                    type: integer
+                  targetAverageUtilizationCPU:
+                    default: 60
+                    description: Target average CPU utilization percentage.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  targetAverageUtilizationMemory:
+                    default: 60
+                    description: Target average memory utilization percentage.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                type: object
+                x-kubernetes-validations:
+                - message: minReplicas must be less than or equal to maxReplicas
+                  rule: self.minReplicas <= self.maxReplicas
               certs:
                 description: |-
                   Certs lists TLS certificates to mount into Splunk pods.
@@ -1399,9 +1436,9 @@ spec:
                     type: integer
                 type: object
               replicas:
-                default: 1
+                default: 2
                 description: Replicas is the desired number of KVService pods. Defaults
-                  to 1 when omitted.
+                  to 2 when omitted.
                 format: int32
                 maximum: 100
                 minimum: 1

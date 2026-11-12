@@ -54,12 +54,17 @@ type KVServiceSpec struct {
 	// +kubebuilder:default:={"timeoutSeconds":1,"periodSeconds":5,"failureThreshold":3}
 	ReadinessProbe *Probe `json:"readinessProbe,omitempty"`
 
-	// Replicas is the desired number of KVService pods. Defaults to 1 when omitted.
+	// Replicas is the desired number of KVService pods. Defaults to 2 when omitted.
 	// +optional
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=100
-	// +kubebuilder:default=1
-	Replicas int32 `json:"replicas,omitempty"`
+	// +kubebuilder:default=2
+	Replicas *int32 `json:"replicas,omitempty"`
+
+	// Autoscaling configures an operator-managed HorizontalPodAutoscaler.
+	// When omitted, replicas are managed directly through spec.replicas.
+	// +optional
+	Autoscaling *KVServiceAutoscalingSpec `json:"autoscaling,omitempty"`
 
 	// Postgres configures the required PostgresCluster connection for KVService.
 	// +kubebuilder:validation:Required
@@ -95,6 +100,39 @@ type KVServiceTenantStatus struct {
 	Message string `json:"message,omitempty"`
 	// +optional
 	DatabaseName string `json:"databaseName,omitempty"`
+}
+
+// KVServiceAutoscalingSpec defines CPU- and memory-based horizontal autoscaling.
+// The defaults bound KVService to two through ten replicas.
+// +kubebuilder:validation:XValidation:rule="self.minReplicas <= self.maxReplicas",message="minReplicas must be less than or equal to maxReplicas"
+type KVServiceAutoscalingSpec struct {
+	// Minimum number of KVService pods.
+	// +optional
+	// +kubebuilder:validation:Minimum=2
+	// +kubebuilder:validation:Maximum=10
+	// +kubebuilder:default=2
+	MinReplicas *int32 `json:"minReplicas,omitempty"`
+
+	// Maximum number of KVService pods.
+	// +optional
+	// +kubebuilder:validation:Minimum=2
+	// +kubebuilder:validation:Maximum=10
+	// +kubebuilder:default=10
+	MaxReplicas *int32 `json:"maxReplicas,omitempty"`
+
+	// Target average CPU utilization percentage.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=60
+	TargetAverageUtilizationCPU *int32 `json:"targetAverageUtilizationCPU,omitempty"`
+
+	// Target average memory utilization percentage.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=60
+	TargetAverageUtilizationMemory *int32 `json:"targetAverageUtilizationMemory,omitempty"`
 }
 
 // KVServiceStatus defines the observed state of KVService

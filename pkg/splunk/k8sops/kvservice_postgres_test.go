@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -42,7 +43,7 @@ func postgresDeploymentFixture(t *testing.T, custom bool) (*enterpriseApi.KVServ
 	cr := &enterpriseApi.KVService{
 		TypeMeta:   metav1.TypeMeta{APIVersion: enterpriseApi.GroupVersion.String(), Kind: "KVService"},
 		ObjectMeta: metav1.ObjectMeta{Name: "kv", Namespace: "test", UID: types.UID("kv-id")},
-		Spec:       enterpriseApi.KVServiceSpec{Replicas: 1, Postgres: enterpriseApi.KVServicePostgresSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}}},
+		Spec:       enterpriseApi.KVServiceSpec{Replicas: ptr.To(int32(1)), Postgres: enterpriseApi.KVServicePostgresSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}}},
 	}
 	cr.Spec.Image = "kvstore/kvservice:test"
 	cr.Spec.ImagePullPolicy = "IfNotPresent"

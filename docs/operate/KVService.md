@@ -218,3 +218,98 @@ Removing it or using another value resumes reconciliation. An initially paused
 resource reports `Pending` and `Paused=True`; an existing phase is preserved.
 
 For implementation details, see [KVService reconciliation](../develop/Architecture.md#kvservice-reconciliation).
+
+## Horizontal autoscaling
+
+Set `spec.autoscaling` to have the operator create and manage a Kubernetes
+`autoscaling/v2` HorizontalPodAutoscaler (HPA). When `spec.autoscaling` is
+omitted, the operator does not create an HPA and `spec.replicas` remains the
+manually managed replica count.
+
+```yaml
+apiVersion: enterprise.splunk.com/v4
+kind: KVService
+metadata:
+  name: kvservice-sample
+spec:
+  postgres:
+    clusterRef:
+      name: postgresql-cluster-dev
+  replicas: 2
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 10
+    targetAverageUtilizationCPU: 60
+    targetAverageUtilizationMemory: 60
+  resources:
+    requests:
+      cpu: "4"
+      memory: 4Gi
+    limits:
+      cpu: "8"
+      memory: 16Gi
+```
+
+The utilization targets are percentages of the container resource requests,
+not percentages of node capacity. Define both CPU and memory requests when
+using autoscaling. The operator supplies the resource defaults described above
+when they are omitted. If `spec.disableResourceDefaults` is enabled, provide both
+requests explicitly. Select production requests from measured KVService usage.
+
+The default autoscaling configuration uses the following replica bounds and
+scaling rate limits:
+
+| Setting | Default |
+| --- | --- |
+| Minimum replicas | 2 |
+| Maximum replicas | 10 |
+| Average CPU utilization | 60% |
+| Average memory utilization | 60% |
+| Scale-up stabilization window | 60 seconds |
+| Scale-down stabilization window | 600 seconds |
+
+The scale-up and scale-down stabilization windows are fixed by the operator at
+60 and 600 seconds, respectively. They are not configurable through
+`spec.autoscaling`.
+
+Both `minReplicas` and `maxReplicas` must be between 2 and 10, inclusive, with
+`minReplicas` less than or equal to `maxReplicas`.
+
+Scale-up is limited to 2 pods or 25% per minute, whichever permits the larger
+change. Scale-down is limited to 1 pod or 25% per minute, with the longer
+stabilization window protecting against rapid oscillation.
+
+The HPA targets the KVService custom resource rather than its generated
+Deployment. This is important because the HPA writes the replica count through
+the KVService `scale` subresource and the KVService controller remains the sole
+owner of the Deployment.
+
+The reconciliation flow is:
+
+1. Metrics Server reports CPU and memory usage for KVService pods.
+2. The HPA calculates a desired replica count from both metrics and uses the
+   larger recommendation.
+3. The HPA updates `KVService.spec.replicas` through the `scale` subresource.
+4. The KVService controller updates the generated Deployment.
+5. The Deployment creates or removes pods.
+6. The KVService controller reports desired and ready replicas in status.
+
+Inspect the resources with:
+
+```bash
+kubectl get kvs,deploy,hpa,pods
+kubectl describe hpa splunk-kvservice-sample-kvservice-hpa
+```
+
+The cluster must expose the `metrics.k8s.io` API, commonly provided by
+Kubernetes Metrics Server. If metrics are unavailable, the HPA reports an
+`AbleToScale` or `ScalingActive` condition explaining why it cannot calculate a
+replica count.
+
+Removing `spec.autoscaling` deletes the operator-owned HPA and returns replica
+management to `spec.replicas`. That field retains the HPA's last selected value,
+so set it explicitly when disabling autoscaling if a different fixed count is
+required. During active reconciliation, HPA removal does not wait for the service
+database or workload dependencies to become ready.
+
+`spec.replicas` defaults to 2 when omitted, including when autoscaling is disabled.
