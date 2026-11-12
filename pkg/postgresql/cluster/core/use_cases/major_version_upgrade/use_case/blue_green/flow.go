@@ -62,6 +62,7 @@ type Flow struct {
 	preparer   Preparer
 	candidate  CandidatePreparer
 	switchover Switchover
+	canceller  Canceller
 }
 
 func New(phase mvutypes.Status, preparer Preparer, candidate CandidatePreparer, switchover Switchover) Flow {
@@ -120,6 +121,10 @@ func (f Flow) advance(ctx context.Context, intent mvutypes.Intent) (Outcome, err
 		return Outcome{}, errors.Join(mvutypes.ErrInvalidUpgradeIntent, errors.New("blue/green attempt ID is required"))
 	}
 	status := latestBlueGreenStatus(intent)
+	// Cancellation takes priority over every unconsumed gate before commit.
+	if mvutypes.BlueGreenCancellationApplies(intent) {
+		return f.advanceCancellation(ctx, intent, status)
+	}
 	if mvutypes.CutoverStageOfStatus(status).OwnsRecovery() {
 		return f.advanceSwitchover(ctx, intent, status)
 	}

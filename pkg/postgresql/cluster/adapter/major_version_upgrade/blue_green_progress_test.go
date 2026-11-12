@@ -25,6 +25,7 @@ import (
 	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -61,13 +62,13 @@ func TestReportOnlyProgressPreservesDurableCutoverState(t *testing.T) {
 			}
 			require.Equal(t, string(phase), *store.saved[0].Phase)
 			require.Contains(t, store.saved[0].Conditions[0].Message, cause.Error())
-			require.Equal(t, original, store.saved[0].BlueGreen)
+			require.Equal(t, original, withoutGateConditions(store.saved[0].BlueGreen))
 			require.Equal(t, original, intent.State[0].BlueGreen)
 			store.saved = nil
 			replacementErr := progressError(adapter.SaveMajorUpgradeProgress(t.Context(), intent, mvutypes.Progress{BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: intent.AttemptID}}))
 			if test.bg.CommitReceipt != nil {
 				require.NoError(t, replacementErr, "coordinator-owned state always comes from the fresh snapshot")
-				require.Equal(t, original, store.saved[0].BlueGreen)
+				require.Equal(t, original, withoutGateConditions(store.saved[0].BlueGreen))
 			} else {
 				require.Error(t, replacementErr, "runtime-owned durable state cannot be discarded")
 				require.Empty(t, store.saved)
@@ -75,4 +76,17 @@ func TestReportOnlyProgressPreservesDurableCutoverState(t *testing.T) {
 
 		})
 	}
+}
+
+// withoutGateConditions removes the derived gate-availability projection so a
+// test can compare the durable attempt record alone.
+func withoutGateConditions(status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) *platformv1alpha1.PostgresBlueGreenUpgradeStatus {
+	status = status.DeepCopy()
+	for _, condition := range mvutypes.BlueGreenGateConditions(platformv1alpha1.PostgresMajorUpgradeStatus{BlueGreen: status}) {
+		meta.RemoveStatusCondition(&status.Conditions, condition.Type)
+	}
+	if len(status.Conditions) == 0 {
+		status.Conditions = nil
+	}
+	return status
 }

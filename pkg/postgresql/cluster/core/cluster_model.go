@@ -147,7 +147,7 @@ func (p *clusterModel) reconcileExistingCNPGCluster(ctx context.Context, existin
 
 	if health, blocked := p.majorVersionDriftBlock(p.cnpgCluster); blocked {
 		config := p.cluster.Spec.PostgresMajorUpgradeConfig
-		if config == nil || config.Strategy == nil || *config.Strategy != mvutypes.MajorUpgradeFlowBlueGreen || health.Reason != reasonMajorUpgradePending {
+		if config == nil || config.Strategy == nil || *config.Strategy != mvutypes.MajorUpgradeFlowBlueGreen || health.Reason != reasonMajorUpgradePending && !p.cancelledSource(existingCNPG) {
 			p.blockedHealth = &health
 			return nil
 		}
@@ -362,6 +362,24 @@ func (p *clusterModel) computeHealth(reconcileErr error) (componentHealth, error
 		return newProvisioningHealth(clusterReady, reasonCNPGProvisioning, "waiting for CNPG server TLS adoption"), nil
 	}
 	return health, convergeErr
+}
+
+// cancelledSource binds ordinary reconciliation to the completed cancellation's
+// exact blue identity and versions even when allow was cleared during the attempt.
+func (p *clusterModel) cancelledSource(source *cnpgv1.Cluster) bool {
+	entries := p.cluster.Status.PostgresMajorUpgradeStatus
+	if len(entries) == 0 {
+		return false
+	}
+	entry := entries[len(entries)-1]
+	bg := entry.BlueGreen
+	return entry.Phase != nil && *entry.Phase == string(mvutypes.Cancelled) &&
+		entry.Strategy != nil && *entry.Strategy == mvutypes.MajorUpgradeFlowBlueGreen &&
+		mvutypes.BlueGreenCancelling(bg) && bg.Gates.Cancellation.CompletedAt != nil &&
+		bg.Blue != nil && bg.Blue.Ref.UID != "" && bg.Blue.Ref.UID == source.UID && bg.Blue.Ref.Name == source.Name &&
+		(bg.Blue.Ref.Namespace == "" || bg.Blue.Ref.Namespace == source.Namespace) &&
+		entry.SourcePgVersion != nil && leadingMajor(*entry.SourcePgVersion) == leadingMajor(postgresVersionFromImageName(source.Spec.ImageName)) &&
+		entry.TargetPgVersion != nil && leadingMajor(*entry.TargetPgVersion) == leadingMajor(*p.mergedConfig.Spec.PostgresVersion)
 }
 
 func (p *clusterModel) majorVersionDriftBlock(existingCNPG *cnpgv1.Cluster) (componentHealth, bool) {

@@ -38,6 +38,7 @@ var retryableFailureReasons = map[string]struct{}{
 	ReasonPreUpgradeBackupNotReady:  {},
 	ReasonPostUpgradeBackupNotReady: {},
 	ReasonUnknownMajorUpgradeError:  {},
+	ReasonCancellationBlocked:       {},
 }
 
 // IsRetryableFailureReason reports whether a retryable report's reason

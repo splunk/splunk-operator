@@ -343,6 +343,40 @@ func TestValidatePostgresClusterUpdateFreezesActiveBlueGreenAttempt(t *testing.T
 	}
 }
 
+func TestValidatePostgresClusterUpdateRejectsCancelAfterCommit(t *testing.T) {
+	strategy := mvutypes.MajorUpgradeFlowBlueGreen
+	oldObj := &platformApi.PostgresCluster{
+		Spec: platformApi.PostgresClusterSpec{Images: pgtestfixture.Images(), Class: "dev",
+			PostgresMajorUpgradeConfig: &platformApi.PostgresMajorUpgradeConfig{Allow: new(true), Strategy: &strategy,
+				BlueGreen: &platformApi.PostgresBlueGreenUpgradeConfig{}}},
+		Status: platformApi.PostgresClusterStatus{PostgresMajorUpgradeStatus: []platformApi.PostgresMajorUpgradeStatus{{
+			Strategy: &strategy, Phase: new(string(mvutypes.Upgrading)),
+			BlueGreen: &platformApi.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1", Blue: &platformApi.BlueGreenEnvironmentStatus{}},
+		}}},
+	}
+	cancel := func(obj *platformApi.PostgresCluster) *platformApi.PostgresCluster {
+		obj = obj.DeepCopy()
+		obj.Spec.PostgresMajorUpgradeConfig.BlueGreen.Cancel = new(true)
+		return obj
+	}
+
+	assert.Empty(t, webhook.ValidatePostgresClusterUpdate(t.Context(), cancel(oldObj), oldObj, nil), "cancellation is available before commit")
+
+	committed := oldObj.DeepCopy()
+	committed.Status.PostgresMajorUpgradeStatus[0].BlueGreen.CommitReceipt = &platformApi.BlueGreenCommitReceiptStatus{Sequence: 1}
+	errs := webhook.ValidatePostgresClusterUpdate(t.Context(), cancel(committed), committed, nil)
+	require.NotEmpty(t, errs)
+	assert.Contains(t, errs.ToAggregate().Error(), "spec.postgresMajorUpgradeConfig.blueGreen.cancel")
+
+	alreadyRequested := cancel(committed)
+	alreadyRequested.Spec.Class = "dev"
+	assert.Empty(t, webhook.ValidatePostgresClusterUpdate(t.Context(), alreadyRequested, cancel(committed), nil),
+		"a cancel set before the commit does not block later updates")
+	cleared := committed.DeepCopy()
+	cleared.Spec.PostgresMajorUpgradeConfig.BlueGreen.Cancel = new(false)
+	assert.Empty(t, webhook.ValidatePostgresClusterUpdate(t.Context(), cleared, cancel(committed), nil))
+}
+
 func TestValidatePostgresClusterUpdateSkipsActiveBlueGreenFreezeForMetadataAndDeletion(t *testing.T) {
 	strategy := mvutypes.MajorUpgradeFlowBlueGreen
 	oldObj := &platformApi.PostgresCluster{

@@ -19,6 +19,7 @@ package majorversionupgradetypes
 import (
 	"encoding/json" // Exercise the serializer used by Kubernetes clients.
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -134,4 +135,26 @@ func TestEndpointOwnerGroupingPreservesWireAndDeepCopy(t *testing.T) {
 	copy.CommitReceipt.Target.UID = "changed"
 	assert.Equal(t, int64(4), bg.EndpointPreparation.Generation)
 	assert.Equal(t, corev1.ObjectReference{Name: "green", UID: "green-uid"}, *bg.CommitReceipt.Target)
+}
+
+func TestLatchedCancellationOwnsItsPhaseBeforeCommit(t *testing.T) {
+	now := metav1.Now()
+	cancellation := &platformv1alpha1.BlueGreenGateStatus{Cancellation: &platformv1alpha1.BlueGreenCancellationStatus{RequestedAt: &now}}
+	restored := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{Gates: cancellation}
+	interrupting := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{Gates: cancellation, Switchover: &platformv1alpha1.BlueGreenSwitchoverStatus{Sequence: 1, StartedAt: &now}}
+	committed := interrupting.DeepCopy()
+	committed.CommitReceipt = &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 1}
+
+	assert.Equal(t, CutoverCancelling, CutoverStageOfStatus(restored))
+	assert.True(t, CutoverCancelling.OwnsRecovery(), "a latched cancellation finishes without its class")
+	assert.Equal(t, CutoverInterrupting, CutoverStageOfStatus(interrupting), "blue stays fenced until restored")
+	assert.Equal(t, CutoverCommitted, CutoverStageOfStatus(committed))
+
+	for _, status := range []*platformv1alpha1.PostgresBlueGreenUpgradeStatus{restored, interrupting} {
+		progress := NormalizeCutoverProgress(Progress{Report: reconciliationtypes.Report{Phase: string(Cancelling)}, BlueGreen: status})
+		assert.Equal(t, string(Cancelling), progress.Report.Phase)
+	}
+	progress := NormalizeCutoverProgress(Progress{Report: reconciliationtypes.Report{Phase: string(Cancelling)}, BlueGreen: committed})
+	assert.Equal(t, string(SwitchingOver), progress.Report.Phase, "a committed attempt always fails forward")
+	assert.Equal(t, CutoverNone, CutoverStageOf(platformv1alpha1.PostgresMajorUpgradeStatus{Phase: new(string(Cancelled)), BlueGreen: restored}))
 }

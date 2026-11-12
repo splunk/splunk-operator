@@ -182,19 +182,23 @@ func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedN
 		if err != nil {
 			return nil, fmt.Errorf("construct blue/green switchover: %w", err)
 		}
+		cancellation, err := majorupgradeadapter.NewBlueGreenCancellation(r.Client, reader, key, cluster, switchover)
+		if err != nil {
+			return nil, fmt.Errorf("construct blue/green cancellation: %w", err)
+		}
 		var notifier *majorupgradeadapter.UpgradeNotifier
 		if cluster != nil {
 			notifier = majorupgradeadapter.NewUpgradeNotifier(&recorderEventEmitter{r.Recorder}, cluster)
 		}
+		preparer := majorupgradeadapter.NewBlueGreenPreparer(r.Client, key, cluster, r.IdentityResolver, blueGreenPlan)
+		candidate := majorupgradeadapter.NewBlueGreenCandidatePreparerWithReader(r.Client, reader, key, cluster, blueGreenCandidatePlan)
 		if !providerConfigured {
-			return majorversionupgrade.NewMajorUpgradeUseCase(infoStore, nil, driver, notifier,
-				majorupgradeadapter.NewBlueGreenPreparer(r.Client, key, cluster, r.IdentityResolver, blueGreenPlan),
-				majorupgradeadapter.NewBlueGreenCandidatePreparerWithReader(r.Client, reader, key, cluster, blueGreenCandidatePlan), switchover), nil
+			return majorversionupgrade.NewMajorUpgradeUseCase(infoStore, nil, driver, notifier, preparer, candidate, switchover).
+				WithBlueGreenCanceller(cancellation), nil
 		}
 		rollback := majorupgradeadapter.NewRollbackCapabilityAdapter(r.Client, r.Scheme, key, backupMethod, backupPluginName)
-		return majorversionupgrade.NewMajorUpgradeUseCase(infoStore, rollback, driver, notifier,
-			majorupgradeadapter.NewBlueGreenPreparer(r.Client, key, cluster, r.IdentityResolver, blueGreenPlan),
-			majorupgradeadapter.NewBlueGreenCandidatePreparerWithReader(r.Client, reader, key, cluster, blueGreenCandidatePlan), switchover), nil
+		return majorversionupgrade.NewMajorUpgradeUseCase(infoStore, rollback, driver, notifier, preparer, candidate, switchover).
+			WithBlueGreenCanceller(cancellation), nil
 	}
 }
 

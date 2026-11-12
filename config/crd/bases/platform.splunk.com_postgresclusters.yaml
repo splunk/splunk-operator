@@ -1659,7 +1659,34 @@ spec:
                                 completedAt:
                                   format: date-time
                                   type: string
+                                credentialsRemovedAt:
+                                  description: |-
+                                    CredentialsRemovedAt records removal of the attempt's temporary roles and
+                                    credential Secrets.
+                                  format: date-time
+                                  type: string
+                                greenFencedAt:
+                                  description: |-
+                                    GreenFencedAt records verified application fencing of the retained green
+                                    candidate.
+                                  format: date-time
+                                  type: string
+                                replicationRemovedAt:
+                                  description: |-
+                                    ReplicationRemovedAt records verified removal of the attempt's logical
+                                    replication resources and source slots.
+                                  format: date-time
+                                  type: string
                                 requestedAt:
+                                  description: |-
+                                    RequestedAt latches the cancellation. Once recorded, the attempt cannot
+                                    resume preparation or switchover, even if the cancel gate is cleared.
+                                  format: date-time
+                                  type: string
+                                sourceAccessRestoredAt:
+                                  description: |-
+                                    SourceAccessRestoredAt records verified blue endpoint publication and
+                                    blue application access.
                                   format: date-time
                                   type: string
                               type: object

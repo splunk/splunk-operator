@@ -77,7 +77,7 @@ func (r *majorUpgradeInfoStoreAdapter) ReadMajorUpgradeIntent(ctx context.Contex
 	if len(entries) > 0 {
 		entry := entries[len(entries)-1]
 		stage := mvutypes.CutoverStageOf(entry)
-		if stage.OwnsRecovery() {
+		if stage.OwnsRecovery() || mvutypes.BlueGreenCancellationPending(spec, entry) {
 			intent, err := intentFromDurableAttempt(entry, entries)
 			if err != nil {
 				return mvutypes.Intent{}, false, err
@@ -121,6 +121,7 @@ func (r *majorUpgradeInfoStoreAdapter) withCurrentCutoverPolicy(ctx context.Cont
 	if spec != nil && spec.PostgresMajorUpgradeConfig != nil && spec.PostgresMajorUpgradeConfig.BlueGreen != nil {
 		config := spec.PostgresMajorUpgradeConfig.BlueGreen
 		intent.SwitchoverAuthorized = config.Switchover != nil && *config.Switchover
+		intent.CancelRequested = config.Cancel != nil && *config.Cancel
 		intent.SwitchoverTimeout = config.EffectiveSwitchoverTimeout()
 	}
 	return intent, true, nil
@@ -320,6 +321,7 @@ func stateWithProgress(intent mvutypes.Intent, progress mvutypes.Progress) []pla
 	applyBaseline(&current, progress.Report, progress.Baseline)
 	applyBlueGreenProgress(&current, intent, progress)
 	applyConditions(&current, intent, progress.Report)
+	applyBlueGreenGateConditions(&current)
 	return stateWithCurrentEntry(intent.State, intent, current)
 }
 
@@ -361,7 +363,7 @@ func applyBaseline(current *platformv1alpha1.PostgresMajorUpgradeStatus, report 
 }
 
 func applyConditions(current *platformv1alpha1.PostgresMajorUpgradeStatus, intent mvutypes.Intent, report reconciliationtypes.Report) {
-	if mvutypes.RetryRequestedAfterTerminalFailure(intent.RetryRequestedAt, *current) && report.Phase != string(mvutypes.Failed) {
+	if (mvutypes.RetryRequestedAfterTerminalFailure(intent.RetryRequestedAt, *current) || mvutypes.BlueGreenCancellationRequested(current.BlueGreen)) && report.Phase != string(mvutypes.Failed) {
 		current.Conditions = removeCondition(current.Conditions, mvutypes.ConditionMajorUpgradeTerminalFailure)
 	}
 	condition := conditionFromReport(report)
@@ -370,7 +372,21 @@ func applyConditions(current *platformv1alpha1.PostgresMajorUpgradeStatus, inten
 	if condition.Type != mvutypes.ConditionMajorUpgradeRetryableFailure {
 		current.Conditions = removeCondition(current.Conditions, mvutypes.ConditionMajorUpgradeRetryableFailure)
 	}
+	if condition.Type != mvutypes.ConditionMajorUpgradeProgressing {
+		current.Conditions = removeCondition(current.Conditions, mvutypes.ConditionMajorUpgradeProgressing)
+	}
 	meta.SetStatusCondition(&current.Conditions, condition)
+}
+
+// applyBlueGreenGateConditions projects gate availability from the entry's
+// final durable state. SetStatusCondition keeps unchanged transition times.
+func applyBlueGreenGateConditions(current *platformv1alpha1.PostgresMajorUpgradeStatus) {
+	if current.BlueGreen == nil {
+		return
+	}
+	for _, condition := range mvutypes.BlueGreenGateConditions(*current) {
+		meta.SetStatusCondition(&current.BlueGreen.Conditions, condition)
+	}
 }
 
 func currentOrNewEntry(entries []platformv1alpha1.PostgresMajorUpgradeStatus, intent mvutypes.Intent) platformv1alpha1.PostgresMajorUpgradeStatus {
@@ -412,6 +428,8 @@ func conditionFromReport(report reconciliationtypes.Report) metav1.Condition {
 	switch {
 	case report.Phase == string(mvutypes.Completed):
 		conditionType = mvutypes.ConditionMajorUpgradeCompleted
+	case report.Phase == string(mvutypes.Cancelled):
+		status = metav1.ConditionFalse
 	case report.Phase == string(mvutypes.Failed):
 		conditionType = mvutypes.ConditionMajorUpgradeTerminalFailure
 	case report.Retry && mvutypes.IsRetryableFailureReason(report.Reason):

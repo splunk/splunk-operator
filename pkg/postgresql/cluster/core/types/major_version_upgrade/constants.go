@@ -52,6 +52,45 @@ const (
 	ReasonUpgradeUnrecoverablePostConversion = "UpgradeUnrecoverablePostConversion"
 )
 
+// Reasons for the blue/green gate-availability conditions.
+const (
+	ReasonAttemptTerminal              = "AttemptTerminal"
+	ReasonBeforeEndpointCommit         = "BeforeEndpointCommit"
+	ReasonCancellationBlocked          = "CancellationBlocked"
+	ReasonCancellationInProgress       = "CancellationInProgress"
+	ReasonCancellationRequested        = "CancellationRequested"
+	ReasonCancelled                    = "Cancelled"
+	ReasonCancelledEnvironmentRetained = "CancelledEnvironmentRetained"
+	ReasonCleaned                      = "Cleaned"
+	ReasonCleanupNotReady              = "CleanupNotReady"
+	ReasonCommittedFailForward         = "CommittedFailForward"
+	ReasonCompletedEnvironmentRetained = "CompletedEnvironmentRetained"
+	ReasonEnvironmentRetained          = "EnvironmentRetained"
+	ReasonNoRetainedEnvironment        = "NoRetainedEnvironment"
+	ReasonNoTerminalFailure            = "NoTerminalFailure"
+	ReasonRetryAnnotationRequired      = "RetryAnnotationRequired"
+)
+
+const (
+	messageAttemptTerminal              = "The attempt has reached a terminal production state."
+	messageCancellationAvailable        = "The attempt can be cancelled until the endpoint commit."
+	messageCancellationRequested        = "Cancellation is latched for this attempt and cannot be reversed."
+	messageCancelledEnvironmentRetained = "The attempt is cancelled; the fenced green candidate is retained until cleanup."
+	messageCleaned                      = "The attempt's retained environment has been cleaned up."
+	messageCleanupNotReady              = "Cleanup requires a Completed attempt with verified recoverability or a Cancelled attempt."
+	messageCommittedFailForward         = "The endpoint commit happened; recovery can only continue toward green."
+	messageCompletedEnvironmentRetained = "The attempt is complete; the fenced blue environment is retained until cleanup."
+	messageEnvironmentRetained          = "A retained environment blocks another major upgrade until cleanup completes."
+	messageNoRetainedEnvironment        = "The attempt retains no environment that requires cleanup."
+	messageNoTerminalFailure            = "The attempt has no terminal failure to retry."
+	messageRetryAvailable               = "Set a newer platform.splunk.com/major-upgrade-retry-at timestamp to retry once."
+)
+
+const (
+	MessageCancellationInProgress = "Cancelling the attempt: restoring blue access, removing replication and temporary credentials, then fencing green."
+	MessageCancelled              = "The attempt is cancelled. Blue is authoritative; the fenced green candidate is retained until cleanup."
+)
+
 const (
 	UseCaseName = "MajorVersionUpgrade"
 )
@@ -70,6 +109,7 @@ const (
 	ConditionCancellationAvailable        = "CancellationAvailable"
 	ConditionRetryAvailable               = "RetryAvailable"
 	ConditionCleanupAvailable             = "CleanupAvailable"
+	ConditionCleanupRequired              = "CleanupRequired"
 )
 
 const (

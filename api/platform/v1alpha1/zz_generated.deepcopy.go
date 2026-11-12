@@ -83,6 +83,22 @@ func (in *BlueGreenCancellationStatus) DeepCopyInto(out *BlueGreenCancellationSt
 		in, out := &in.RequestedAt, &out.RequestedAt
 		*out = (*in).DeepCopy()
 	}
+	if in.SourceAccessRestoredAt != nil {
+		in, out := &in.SourceAccessRestoredAt, &out.SourceAccessRestoredAt
+		*out = (*in).DeepCopy()
+	}
+	if in.ReplicationRemovedAt != nil {
+		in, out := &in.ReplicationRemovedAt, &out.ReplicationRemovedAt
+		*out = (*in).DeepCopy()
+	}
+	if in.CredentialsRemovedAt != nil {
+		in, out := &in.CredentialsRemovedAt, &out.CredentialsRemovedAt
+		*out = (*in).DeepCopy()
+	}
+	if in.GreenFencedAt != nil {
+		in, out := &in.GreenFencedAt, &out.GreenFencedAt
+		*out = (*in).DeepCopy()
+	}
 	if in.CompletedAt != nil {
 		in, out := &in.CompletedAt, &out.CompletedAt
 		*out = (*in).DeepCopy()

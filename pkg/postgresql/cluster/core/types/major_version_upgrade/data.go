@@ -41,6 +41,9 @@ type Intent struct {
 	// later clears the gate.
 	SwitchoverAuthorized bool
 	SwitchoverTimeout    time.Duration
+	// CancelRequested reflects the current blue/green cancel gate. The flow
+	// latches it into status; a later false value does not resume the attempt.
+	CancelRequested bool
 	// RequiresBlueGreenRearm identifies the one-step, controller-owned action
 	// that records a false allow gate after a cleaned blue/green attempt. It is
 	// an execution directive only: Schedule may discover it but must not
