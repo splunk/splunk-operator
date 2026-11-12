@@ -275,11 +275,9 @@ checks establish byte integrity, not the publisher's signing identity.
 
 ## Use with Splunk Operator
 
-The intended installation path installs CNPG and Barman as dependencies of the
-Splunk Operator Helm chart. That chart integration will be delivered separately
-from this artifact release. This guide covers artifact download and verification;
-installation through the integrated SOK chart will be documented with that
-integration.
+Install CNPG and Barman through the
+[Splunk Operator Helm chart](../deploy/Helm.md#postgresql-backend-controllers).
+Those instructions cover prerequisites, feature gates, and existing backends.
 
 The backend chart packages preserve their qualified image defaults. The SOK
 chart integration must configure their public controller and Barman sidecar image

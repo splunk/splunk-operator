@@ -31,6 +31,9 @@ cluster. Do not use it unchanged for a workload that stores data you need to ret
 For choosing a production, shared-cluster, or pooled-connection configuration after the first
 connection works, see [Integration & Onboarding Guide](integration-patterns.md).
 
+For Helm, follow [SOK backend setup](../deploy/Helm.md#postgresql-backend-controllers)
+and skip the standalone backend installation below.
+
 ## Setup and prerequisites
 
 This guide starts with an existing Kubernetes cluster; creating the cluster itself is outside its

@@ -1,0 +1,146 @@
+suite: PostgreSQL permissions follow the effective feature gate
+templates:
+  - templates/rbac/clusterrole.yaml
+  - templates/rbac/role.yaml
+  - templates/rbac/postgresql_cluster_reader.yaml
+release:
+  namespace: team-a
+tests:
+  - it: omits PostgreSQL permissions by default
+    template: templates/rbac/clusterrole.yaml
+    asserts:
+      - notContains:
+          path: rules
+          content: &classReads
+            apiGroups: [platform.splunk.com]
+            resources: [postgresclusterclasses]
+            verbs: [get, list, watch]
+      - notContains:
+          path: rules
+          content: &networkPolicyReads
+            apiGroups: [networking.k8s.io]
+            resources: [networkpolicies]
+            verbs: [get, list, watch]
+  - it: grants existing controller operations even with external backends
+    template: templates/rbac/clusterrole.yaml
+    set:
+      splunkOperator.featureGates.PostgresController: true
+    asserts:
+      - contains:
+          path: rules
+          content: *classReads
+      - contains:
+          path: rules
+          content:
+            apiGroups: [platform.splunk.com]
+            resources: [postgresclusters/finalizers, postgresdatabases/finalizers]
+            verbs: [update]
+      - contains:
+          path: rules
+          content:
+            apiGroups: [platform.splunk.com]
+            resources: [postgresclusters/status]
+            verbs: [get, update, patch]
+      - contains:
+          path: rules
+          content:
+            apiGroups: [postgresql.cnpg.io]
+            resources: [clusters, databases, poolers, backups, scheduledbackups, publications, subscriptions]
+            verbs: [get, list, watch, create, update, patch, delete]
+      - contains:
+          path: rules
+          content:
+            apiGroups: [barmancloud.cnpg.io]
+            resources: [objectstores]
+            verbs: [get, list, watch, create, update, patch, delete]
+      - contains:
+          path: rules
+          content: *networkPolicyReads
+  - it: limits namespaced reconciliation to the existing Role
+    template: templates/rbac/role.yaml
+    set: &namespacePostgres
+      splunkOperator.clusterWideAccess: false
+      splunkOperator.featureGates.PostgresController: true
+    asserts:
+      - isKind:
+          of: Role
+      - contains:
+          path: rules
+          content:
+            apiGroups: [platform.splunk.com]
+            resources: [postgresclusters, postgresdatabases]
+            verbs: [get, list, watch, create, update, patch, delete]
+      - notContains:
+          path: rules
+          content: *classReads
+      - contains:
+          path: rules
+          content: *networkPolicyReads
+  - it: grants only class and issuer reads plus CRD discovery outside the namespace
+    template: templates/rbac/postgresql_cluster_reader.yaml
+    documentIndex: 0
+    set: *namespacePostgres
+    asserts:
+      - equal:
+          path: rules
+          value:
+            - *classReads
+            - apiGroups: [apiextensions.k8s.io]
+              resources: [customresourcedefinitions]
+              verbs: [get, list]
+            - apiGroups: [cert-manager.io]
+              resources: [clusterissuers]
+              verbs: [get, list, watch]
+      - equal:
+          path: metadata.name
+          value: splunk-operator-postgres-reader.team-a
+  - it: binds cluster reads to this install's service account
+    template: templates/rbac/postgresql_cluster_reader.yaml
+    documentIndex: 1
+    set: *namespacePostgres
+    asserts:
+      - equal:
+          path: roleRef
+          value:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: splunk-operator-postgres-reader.team-a
+      - equal:
+          path: subjects
+          value:
+            - kind: ServiceAccount
+              name: splunk-operator-controller-manager
+              namespace: team-a
+  - it: honors AllAlpha from the environment
+    template: templates/rbac/postgresql_cluster_reader.yaml
+    set:
+      splunkOperator.clusterWideAccess: false
+      extraEnvs: [{name: FEATURE_GATES, value: AllAlpha=true}]
+    asserts:
+      - hasDocuments:
+          count: 2
+  - it: honors an explicit flag over environment AllAlpha
+    template: templates/rbac/postgresql_cluster_reader.yaml
+    set:
+      splunkOperator.clusterWideAccess: false
+      extraEnvs: [{name: FEATURE_GATES, value: AllAlpha=true}]
+      splunkOperator.featureGates.PostgresController: false
+    asserts:
+      - hasDocuments:
+          count: 0
+  - it: preserves an explicit environment gate over a later AllAlpha flag
+    template: templates/rbac/postgresql_cluster_reader.yaml
+    set:
+      splunkOperator.clusterWideAccess: false
+      extraEnvs: [{name: FEATURE_GATES, value: PostgresController=false}]
+      splunkOperator.featureGates.AllAlpha: true
+    asserts:
+      - hasDocuments:
+          count: 0
+  - it: does not add another class reader in cluster-wide mode
+    template: templates/rbac/postgresql_cluster_reader.yaml
+    set:
+      splunkOperator.featureGates.PostgresController: true
+    asserts:
+      - hasDocuments:
+          count: 0

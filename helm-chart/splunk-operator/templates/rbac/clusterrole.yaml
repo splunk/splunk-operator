@@ -538,4 +538,8 @@ rules:
   - get
   - patch
   - update
+{{- if include "splunk-operator.postgresEnabled" . }}
+{{ include "splunk-operator.postgresNamespacedRules" . }}
+{{ include "splunk-operator.postgresClusterRules" . }}
+{{- end }}
 {{- end }}

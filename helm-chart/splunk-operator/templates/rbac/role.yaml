@@ -525,4 +525,7 @@ rules:
   - get
   - patch
   - update
+{{- if include "splunk-operator.postgresEnabled" . }}
+{{ include "splunk-operator.postgresNamespacedRules" . }}
+{{- end }}
 {{- end }}
