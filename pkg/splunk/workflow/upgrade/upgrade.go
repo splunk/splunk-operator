@@ -35,6 +35,7 @@ type State struct {
 	ClusterManager                *ResourceState
 	PreviousIndexer               *ResourceState
 	SearchHeadCluster             *ResourceState
+	SearchHeadClusters            []ResourceState // all SHCs on the IndexerCluster's ClusterManager; set only during an indexer image change
 	MonitoringConsoleDependencies []ResourceState
 	ClusterInfo                   *splclient.ClusterInfo
 }
@@ -95,6 +96,12 @@ func Validate(state State) (Result, error) {
 	}
 
 	if state.Kind == "IndexerCluster" && state.ValidateIndexerCluster {
+		// Documented upgrade order is ClusterManager -> SearchHeadCluster -> IndexerCluster.
+		for _, searchHead := range state.SearchHeadClusters {
+			if searchHead.Phase != phaseReady || searchHead.Image != state.Image {
+				return waitResult(), nil
+			}
+		}
 		if state.ClusterInfo != nil && state.ClusterInfo.MultiSite == "true" && state.PreviousIndexer != nil {
 			if state.PreviousIndexer.Phase != phaseReady || state.PreviousIndexer.Image != state.Image {
 				return waitResult(), nil

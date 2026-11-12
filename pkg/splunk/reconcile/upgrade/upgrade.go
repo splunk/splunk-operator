@@ -148,6 +148,17 @@ func validateIndexerCluster(ctx context.Context, c splcommon.ControllerClient, c
 		return false, fmt.Errorf("could not get cluster info from cluster manager")
 	}
 	state.ClusterInfo = clusterInfo
+	// Only hold indexers for the search-head tier while they are changing image,
+	// so routine indexer scaling and recovery are not blocked by a SHC outage.
+	if imageChanging, err := indexerImageChanging(ctx, c, cr, spec.Image); imageChanging || err != nil {
+		if err != nil {
+			return false, fmt.Errorf("check if indexer image is changing: %w", err)
+		}
+		state.SearchHeadClusters, err = searchHeadClusterStates(ctx, c, cr, spec.ClusterManagerRef, eventPublisher, logging.FromContext(ctx))
+		if err != nil {
+			return false, fmt.Errorf("collect SearchHeadCluster state for ClusterManager %q: %w", spec.ClusterManagerRef.Name, err)
+		}
+	}
 	if clusterInfo.MultiSite == "true" {
 		state.PreviousIndexer, err = previousIndexerState(ctx, c, cr, spec.ClusterManagerRef)
 		if err != nil {
@@ -202,16 +213,45 @@ func previousIndexerState(ctx context.Context, c splcommon.ControllerClient, cr 
 	return nil, nil
 }
 
+// indexerImageChanging reports whether the IndexerCluster's StatefulSet is on a
+// different image than the CR. A missing StatefulSet is not an upgrade.
+func indexerImageChanging(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, targetImage string) (bool, error) {
+	currentImage, err := k8sops.GetStatefulSetImage(ctx, c, cr, splcommon.SplunkIndexer)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("get StatefulSet image for IndexerCluster %s/%s: %w", cr.GetNamespace(), cr.GetName(), err)
+	}
+	return currentImage != targetImage, nil
+}
+
+// searchHeadClusterState returns the first SearchHeadCluster that references managerRef.
 func searchHeadClusterState(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, managerRef corev1.ObjectReference, eventPublisher *k8sops.K8EventPublisher, logger interface {
 	ErrorContext(context.Context, string, ...any)
 }) (*workflowupgrade.ResourceState, error) {
+	searchHeads, err := searchHeadClusterStates(ctx, c, cr, managerRef, eventPublisher, logger)
+	if err != nil {
+		return nil, err
+	}
+	if len(searchHeads) == 0 {
+		return nil, nil
+	}
+	return &searchHeads[0], nil
+}
+
+// searchHeadClusterStates returns every SearchHeadCluster that references managerRef.
+func searchHeadClusterStates(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, managerRef corev1.ObjectReference, eventPublisher *k8sops.K8EventPublisher, logger interface {
+	ErrorContext(context.Context, string, ...any)
+}) ([]workflowupgrade.ResourceState, error) {
 	searchHeadList := &enterpriseApi.SearchHeadClusterList{}
 	if err := c.List(ctx, searchHeadList, runtime.InNamespace(cr.GetNamespace())); err != nil {
 		if k8serrors.IsNotFound(err) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("list SearchHeadClusters in namespace %s: %w", cr.GetNamespace(), err)
 	}
+	var states []workflowupgrade.ResourceState
 	for i := range searchHeadList.Items {
 		searchHead := &searchHeadList.Items[i]
 		if searchHead.Spec.ClusterManagerRef.Name != managerRef.Name {
@@ -221,11 +261,11 @@ func searchHeadClusterState(ctx context.Context, c splcommon.ControllerClient, c
 		if err != nil {
 			eventPublisher.Warning(ctx, splcommon.EventReasonUpgradeCheckFailed, "Could not get the Search Head Cluster image — check operator logs for details")
 			logger.ErrorContext(ctx, "unable to get SearchHeadCluster current image", "error", err)
-			return nil, err
+			return nil, fmt.Errorf("get StatefulSet image for SearchHeadCluster %s/%s: %w", searchHead.Namespace, searchHead.Name, err)
 		}
-		return &workflowupgrade.ResourceState{Type: "search head", Name: searchHead.Name, Image: searchHeadImage, Phase: string(searchHead.Status.Phase)}, nil
+		states = append(states, workflowupgrade.ResourceState{Type: "search head", Name: searchHead.Name, Image: searchHeadImage, Phase: string(searchHead.Status.Phase)})
 	}
-	return nil, nil
+	return states, nil
 }
 
 func monitoringConsoleDependencies(ctx context.Context, c splcommon.ControllerClient, cr splcommon.MetaObject, eventPublisher *k8sops.K8EventPublisher, logger interface {
