@@ -32,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -79,7 +80,7 @@ func setConditions(cr *enterpriseApi.KVService, paused bool, message string) {
 // ApplyKVService reconciles config and workloads and records status for every outcome.
 func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder events.EventRecorder, cr *enterpriseApi.KVService) (result reconcile.Result, err error) {
 	logger := logging.FromContext(ctx).With("func", "ApplyKVService")
-	logger.DebugContext(ctx, "reconciling KVService", "generation", cr.Generation, "replicas", cr.Spec.Replicas)
+	logger.DebugContext(ctx, "reconciling KVService", "generation", cr.Generation, "replicas", ptr.Deref(cr.Spec.Replicas, 0))
 	previousPhase := cr.Status.Phase
 	previousConditions := slices.Clone(cr.Status.Conditions)
 	previousTenants := slices.Clone(cr.Status.Tenants)
@@ -154,6 +155,13 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 		publisher.Warning(ctx, splcommon.EventReasonValidateSpecFailed, "KVService spec validation failed")
 		return result, fmt.Errorf("validate KVService spec: %w", err)
 	}
+	// Stop autoscaling even when PostgreSQL or workload dependencies are unavailable.
+	if cr.Spec.Autoscaling == nil {
+		if err = reconcileAutoscaler(ctx, c, cr); err != nil {
+			publisher.Warning(ctx, splcommon.EventReasonAutoscalerFailed, "KVService autoscaler reconciliation failed")
+			return result, fmt.Errorf("reconcile KVService autoscaler: %w", err)
+		}
+	}
 	postgres, postgresErr := ensureTenantPostgresReady(ctx, c, cr)
 	statusMessage = postgres.message
 	tenantsEvaluated = postgres.tenantsEvaluated
@@ -163,7 +171,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	if !postgres.ready {
 		return result, nil
 	}
-	cr.Status.Replicas = cr.Spec.Replicas
+	cr.Status.Replicas = ptr.Deref(cr.Spec.Replicas, 0)
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-kvservice", cr.Name)
 	if err = k8sops.ApplyService(ctx, c, resources.GetKVServiceService(cr, &cr.Spec)); err != nil {
 		publisher.Warning(ctx, splcommon.EventReasonApplyServiceFailed, "KVService Service reconciliation failed")
@@ -184,6 +192,12 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 		return result, fmt.Errorf("apply KVService Deployment: %w", err)
 	}
 	cr.Status.ReadyReplicas = deployment.Status.ReadyReplicas
+	if cr.Spec.Autoscaling != nil {
+		if err = reconcileAutoscaler(ctx, c, cr); err != nil {
+			publisher.Warning(ctx, splcommon.EventReasonAutoscalerFailed, "KVService autoscaler reconciliation failed")
+			return result, fmt.Errorf("reconcile KVService autoscaler: %w", err)
+		}
+	}
 	cr.Status.Phase = phase
 	if phase == enterpriseApi.PhaseReady {
 		result.RequeueAfter = 0

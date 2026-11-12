@@ -6,6 +6,19 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: kvservice-sample
 spec:
+  replicas: 2
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 10
+    targetAverageUtilizationCPU: 60
+    targetAverageUtilizationMemory: 60
+  resources:
+    requests:
+      cpu: "4"
+      memory: 4Gi
+    limits:
+      cpu: "8"
+      memory: 16Gi
   postgres:
     clusterRef:
       # The PostgreSQL controller provisions a database for each discovered tenant.

@@ -108,7 +108,30 @@ metadata:
             },
             "name": "kvservice-sample"
           },
-          "spec": {}
+          "spec": {
+            "autoscaling": {
+              "maxReplicas": 10,
+              "minReplicas": 2,
+              "targetAverageUtilizationCPU": 60,
+              "targetAverageUtilizationMemory": 60
+            },
+            "postgres": {
+              "clusterRef": {
+                "name": "postgresql-cluster-dev"
+              }
+            },
+            "replicas": 2,
+            "resources": {
+              "limits": {
+                "cpu": "8",
+                "memory": "16Gi"
+              },
+              "requests": {
+                "cpu": "4",
+                "memory": "4Gi"
+              }
+            }
+          }
         },
         {
           "apiVersion": "enterprise.splunk.com/v4",
@@ -538,6 +561,17 @@ spec:
           - get
           - list
           - patch
+          - update
+          - watch
+        - apiGroups:
+          - autoscaling
+          resources:
+          - horizontalpodautoscalers
+          verbs:
+          - create
+          - delete
+          - get
+          - list
           - update
           - watch
         - apiGroups:

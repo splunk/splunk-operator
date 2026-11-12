@@ -27,6 +27,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -36,7 +37,7 @@ func reconcileKVServiceCertificates(ctx context.Context, c client.Client, cr *en
 	}
 	entries := reconcileutil.ToCertEntries(
 		cr.Spec.Certs,
-		certs.AutoDNSNames(splcommon.SplunkKVService, cr.Name, cr.Namespace, cr.Spec.Replicas),
+		certs.AutoDNSNames(splcommon.SplunkKVService, cr.Name, cr.Namespace, ptr.Deref(cr.Spec.Replicas, 0)),
 	)
 	mounts, err := certs.ReconcileCerts(ctx, c, cr, entries)
 	if err != nil {

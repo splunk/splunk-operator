@@ -67,7 +67,6 @@ func GetKVServiceService(cr splcommon.MetaObject, spec *enterpriseApi.KVServiceS
 func NewKVServiceDeployment(cr *enterpriseApi.KVService) *appsv1.Deployment {
 	spec := cr.Spec.DeepCopy()
 	instanceType := splcommon.SplunkKVService
-	replicas := spec.Replicas
 
 	ports := splcommon.SortContainerPorts([]corev1.ContainerPort{getKVServiceContainerPort(spec)})
 	annotations := splcommon.GetIstioAnnotations(ports)
@@ -88,7 +87,7 @@ func NewKVServiceDeployment(cr *enterpriseApi.KVService) *appsv1.Deployment {
 		Selector: &metav1.LabelSelector{
 			MatchLabels: selectLabels,
 		},
-		Replicas: &replicas,
+		Replicas: spec.Replicas,
 		Strategy: appsv1.DeploymentStrategy{
 			Type: appsv1.RollingUpdateDeploymentStrategyType,
 		},

@@ -24,6 +24,7 @@ type EventReason = string
 const (
 	EventReasonReady            EventReason = "Ready"
 	EventReasonDeploymentFailed EventReason = "DeploymentFailed"
+	EventReasonAutoscalerFailed EventReason = "AutoscalerFailed"
 
 	// Normal event reasons
 	EventReasonScaledUp              EventReason = "ScaledUp"

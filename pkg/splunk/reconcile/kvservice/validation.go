@@ -30,9 +30,6 @@ import (
 )
 
 func validateKVServiceSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService) error {
-	if cr.Spec.Replicas == 0 {
-		cr.Spec.Replicas = 1
-	}
 	spec := &cr.Spec
 	spec.Image = splutil.GetKVServiceImage(spec.Image)
 	for name, probe := range map[string]*enterpriseApi.Probe{"Liveness": spec.LivenessProbe, "Readiness": spec.ReadinessProbe} {
@@ -41,9 +38,6 @@ func validateKVServiceSpec(ctx context.Context, c splcommon.ControllerClient, cr
 				return fmt.Errorf("validate KVService %s probe: %w", name, err)
 			}
 		}
-	}
-	if spec.LivenessInitialDelaySeconds < 0 || spec.ReadinessInitialDelaySeconds < 0 {
-		return fmt.Errorf("probe initial delay must not be negative")
 	}
 	if len(spec.Certs) > 0 && !config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
 		return fmt.Errorf("spec.certs requires the CertManagement feature gate")

@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	enterprisev4 "github.com/splunk/splunk-operator/api/enterprise/v4"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -73,7 +74,7 @@ var _ = Describe("KVService Controller", func() {
 					CommonWorkloadSpec: enterprisev4.CommonWorkloadSpec{
 						Spec: enterprisev4.Spec{ImagePullPolicy: "IfNotPresent"},
 					},
-					Replicas: 1,
+					Replicas: ptr.To(int32(1)),
 					Postgres: enterprisev4.KVServicePostgresSpec{
 						ClusterRef: corev1.LocalObjectReference{Name: "paused-postgres"},
 					},
@@ -161,7 +162,7 @@ var _ = Describe("KVService Controller", func() {
 						LivenessInitialDelaySeconds: 90,
 					},
 					ReadinessProbe: &enterprisev4.Probe{TimeoutSeconds: 7},
-					Replicas:       1,
+					Replicas:       ptr.To(int32(1)),
 					Postgres: enterprisev4.KVServicePostgresSpec{
 						ClusterRef: corev1.LocalObjectReference{Name: clusterName},
 					},

@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -66,7 +67,7 @@ func TestGetKVServiceDeployment(t *testing.T) {
 	cr.Spec.Image = "kvstore/kvservice:test"
 	cr.Spec.ImagePullPolicy = "IfNotPresent"
 	cr.Spec.ServiceAccount = "kvservice-sa"
-	cr.Spec.Replicas = 1
+	cr.Spec.Replicas = ptr.To(int32(1))
 
 	deployment, err := GetKVServiceDeploymentWithPostgresDependencies(ctx, c, cr, &KVServicePostgresDependencies{}, nil)
 	if err != nil {

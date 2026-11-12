@@ -27,11 +27,12 @@ import (
 func TestKVServicePackagedOperatorPermissions(t *testing.T) {
 	root := filepath.Join("..", "..", "..")
 	required := map[string][]string{
-		"events":                {"create", "patch"},
-		"deployments":           {"create", "delete", "get", "list", "patch", "update", "watch"},
-		"kvservices":            {"create", "delete", "get", "list", "patch", "update", "watch"},
-		"kvservices/status":     {"get", "patch", "update"},
-		"kvservices/finalizers": {"update"},
+		"events":                   {"create", "patch"},
+		"horizontalpodautoscalers": {"create", "delete", "get", "list", "update", "watch"},
+		"deployments":              {"create", "delete", "get", "list", "patch", "update", "watch"},
+		"kvservices":               {"create", "delete", "get", "list", "patch", "update", "watch"},
+		"kvservices/status":        {"get", "patch", "update"},
+		"kvservices/finalizers":    {"update"},
 	}
 	check := func(t *testing.T, rules []rbacv1.PolicyRule) {
 		t.Helper()
@@ -39,6 +40,8 @@ func TestKVServicePackagedOperatorPermissions(t *testing.T) {
 			group := "enterprise.splunk.com"
 			if resource == "deployments" {
 				group = "apps"
+			} else if resource == "horizontalpodautoscalers" {
+				group = "autoscaling"
 			} else if resource == "events" {
 				group = "events.k8s.io"
 			}
