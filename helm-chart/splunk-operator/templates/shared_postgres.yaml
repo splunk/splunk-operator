@@ -3,25 +3,25 @@
 {{- $cfg := .Values.sharedPostgres -}}
 {{- $name := include "splunk-operator.sharedPostgresName" . -}}
 {{- $namespace := include "splunk-operator.namespace" . -}}
-# Helm sorts List before PostgresCluster and flattens its items before creation.
-apiVersion: v1
-kind: List
+{{/* Keep retained classes outside ordinary release manifests on every revision. */}}
+{{- if not (lookup "platform.splunk.com/v1alpha1" "PostgresClusterClass" "" $name) }}
+apiVersion: platform.splunk.com/v1alpha1
+kind: PostgresClusterClass
 metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "splunk-operator.labels" . | nindent 4 }}
   annotations:
     helm.sh/resource-policy: keep
-items:
-  - apiVersion: platform.splunk.com/v1alpha1
-    kind: PostgresClusterClass
-    metadata:
-      name: {{ $name }}
-      labels:
-        {{- include "splunk-operator.labels" . | nindent 8 }}
-      annotations:
-        helm.sh/resource-policy: keep
-        platform.splunk.com/helm-class-policy: {{ include "splunk-operator.sharedPostgresClassPolicy" . | quote }}
-    spec:
-      {{- include "splunk-operator.sharedPostgresClassSpec" . | nindent 6 }}
+    meta.helm.sh/release-name: {{ .Release.Name | quote }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace | quote }}
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-failed
+    platform.splunk.com/helm-class-policy: {{ include "splunk-operator.sharedPostgresClassPolicy" . | quote }}
+spec:
+  {{- include "splunk-operator.sharedPostgresClassSpec" . | nindent 2 }}
 ---
+{{- end }}
 apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:

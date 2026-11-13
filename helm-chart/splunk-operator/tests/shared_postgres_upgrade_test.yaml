@@ -19,10 +19,10 @@ tests:
       splunkOperator.featureGates.ValidationWebhook: true
     documentIndex: 0
     asserts:
-      - isKind: {of: List}
-      - equal: {path: 'items[0].kind', value: PostgresClusterClass}
-      - equal: {path: 'metadata.annotations["helm.sh/resource-policy"]', value: keep}
-      - equal: {path: 'items[0].metadata.annotations["helm.sh/resource-policy"]', value: keep}
+      - equal: {path: 'metadata.annotations["helm.sh/hook"]', value: 'pre-install,pre-upgrade'}
+      - equal: {path: 'metadata.annotations["helm.sh/hook-delete-policy"]', value: hook-failed}
+      - equal: {path: 'metadata.annotations["meta.helm.sh/release-name"]', value: backend}
+      - equal: {path: 'metadata.annotations["meta.helm.sh/release-namespace"]', value: backend}
   - it: rejects a changed default major version against an existing cluster
     kubernetesProvider:
       objects:
@@ -98,11 +98,11 @@ tests:
               meta.helm.sh/release-name: backend
               meta.helm.sh/release-namespace: backend
               platform.splunk.com/helm-class-policy: 5f517e5f53d6a680370471e07cac0b3951081c40e4e776dd682d7b74517f60b0
-    documentIndex: 1
+    documentIndex: 0
     asserts:
       - equal: {path: spec.storage, value: 200Gi}
       - equal: {path: spec.instances, value: 4}
       - equal: {path: spec.resources.requests.cpu, value: "4"}
       - equal: {path: spec.class, value: backend-pg-aefaf86bf0}
-      - notExists: {path: 'items[0].metadata.annotations["helm.sh/hook"]'}
-        documentIndex: 0
+      - hasDocuments: {count: 1}
+      - isKind: {of: PostgresCluster}

@@ -20,10 +20,11 @@ From source, run `make helm-package` before installing.
 
 ## Installation
 
-The class is wrapped in a retained Kubernetes List so Helm creates it before
-cluster admission. It remains an ordinary Helm-managed resource through upgrades
-and rollbacks. If validation is already active, enable PostgresController and
-wait for the operator to become ready before enabling shared provisioning.
+A missing class is created before cluster admission by a pre-install/pre-upgrade
+hook and retained independently of later release manifests. Existing classes are
+checked for ownership and policy but never recreated or updated. With validation
+already active, enable PostgresController and wait for operator readiness before
+enabling shared provisioning.
 
 Create a protected `shared-values.yaml`:
 
