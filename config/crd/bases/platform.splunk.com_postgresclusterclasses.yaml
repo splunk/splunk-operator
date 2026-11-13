@@ -68,22 +68,34 @@ spec:
                   affinity:
                     description: |-
                       Affinity configures database pod placement. Omission preserves the provider's
-                      existing placement. Pooler pods use their independent provider defaults.
+                      existing placement; an explicit empty object applies anti-affinity defaults
+                      and clears the class-owned node selector and tolerations. Pooler pods use
+                      their independent provider defaults.
                     properties:
                       enablePodAntiAffinity:
                         default: true
+                        description: EnablePodAntiAffinity separates database pods;
+                          defaults to true.
                         type: boolean
                       nodeSelector:
                         additionalProperties:
                           type: string
+                        description: |-
+                          NodeSelector restricts eligible nodes using Kubernetes label keys and values.
+                          An empty selector clears existing class-owned selection when affinity is set.
                         type: object
                       podAntiAffinityType:
                         default: preferred
+                        description: PodAntiAffinityType selects preferred or required
+                          separation; defaults to preferred.
                         enum:
                         - preferred
                         - required
                         type: string
                       tolerations:
+                        description: |-
+                          Tolerations allow database pods onto tainted nodes using CNPG's toleration rules.
+                          An empty list clears existing class-owned tolerations when affinity is set.
                         items:
                           description: |-
                             The pod this Toleration is attached to tolerates any taint that matches
@@ -125,6 +137,8 @@ spec:
                         x-kubernetes-list-type: atomic
                       topologyKey:
                         default: kubernetes.io/hostname
+                        description: TopologyKey is the node label used for separation;
+                          defaults to kubernetes.io/hostname.
                         minLength: 1
                         type: string
                     type: object
@@ -337,8 +351,8 @@ spec:
                   storageClass:
                     description: |-
                       StorageClass selects the storage provisioner for newly created database PVCs.
-                      Omission preserves CNPG's existing storage class selection. Changing this
-                      field does not migrate existing volumes.
+                      Omission preserves CNPG's existing storage class selection. An explicit empty
+                      string disables default-class selection. Changes do not migrate existing PVCs.
                     type: string
                 type: object
               config:

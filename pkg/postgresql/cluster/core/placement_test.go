@@ -38,7 +38,7 @@ func TestClassPlacementConvergesWithoutOverwritingIndependentAffinity(t *testing
 		Affinity: &platformv1alpha1.CNPGAffinityConfig{
 			EnablePodAntiAffinity: new(true), PodAntiAffinityType: "required",
 			TopologyKey: "kubernetes.io/hostname", NodeSelector: map[string]string{"pool": "database"},
-			Tolerations: []corev1.Toleration{{Key: "database", Operator: corev1.TolerationOpExists, TolerationSeconds: new(int64(60))}},
+			Tolerations: []corev1.Toleration{{Key: "database", Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoExecute, TolerationSeconds: new(int64(60))}},
 		},
 	}
 	live := cnpgv1.ClusterSpec{}
@@ -64,13 +64,51 @@ func TestClassPlacementConvergesWithoutOverwritingIndependentAffinity(t *testing
 }
 
 func TestOmittedClassPlacementPreservesExistingDedicatedCluster(t *testing.T) {
+	for _, cnpg := range []*platformv1alpha1.CNPGConfig{nil, {}} {
+		class := &platformv1alpha1.PostgresClusterClass{Spec: platformv1alpha1.PostgresClusterClassSpec{
+			CNPG: cnpg, Config: &platformv1alpha1.PostgresClusterClassConfig{
+				Instances: new(int32(3)), PostgresVersion: new("17"), Storage: new(resource.MustParse("100Gi")),
+			},
+		}}
+		cluster := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{Images: pgtestfixture.Images()}}
+		cfg := GetMergedConfig(class, cluster)
+		live := cnpgv1.ClusterSpec{}
+		live.StorageConfiguration.StorageClass = new("existing-storage")
+		live.StorageConfiguration.ResizeInUseVolumes = new(false)
+		live.StorageConfiguration.PersistentVolumeClaimTemplate = &corev1.PersistentVolumeClaimSpec{AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}}
+		live.Affinity.NodeSelector = map[string]string{"pool": "existing"}
+		live.Affinity.NodeAffinity = &corev1.NodeAffinity{}
+		live.Affinity.Tolerations = []corev1.Toleration{{Key: "database", Operator: corev1.TolerationOpExists}}
+		before := live.DeepCopy()
+		first := mustBuildCNPGClusterSpec(t, live, cfg, "existing", "superuser", true)
+		before.StorageConfiguration.Size = cfg.Spec.Storage.String()
+		assert.Equal(t, before.StorageConfiguration, first.StorageConfiguration)
+		assert.Equal(t, before.Affinity, first.Affinity)
+		// CNPG defaults must not trigger another update after the first build.
+		first.Affinity.EnablePodAntiAffinity = new(true)
+		first.Affinity.PodAntiAffinityType = "preferred"
+		first.Affinity.TopologyKey = "kubernetes.io/hostname"
+		second := mustBuildCNPGClusterSpec(t, *first.DeepCopy(), cfg, "existing", "superuser", true)
+		assert.Equal(t, first, second)
+		assert.False(t, isAnyClusterSpecDrift(normalizeCNPGClusterSpec(first), normalizeCNPGClusterSpec(second)))
+	}
+}
+
+func TestExplicitEmptyClassPlacementClearsOwnedFields(t *testing.T) {
 	live := cnpgv1.ClusterSpec{}
-	live.StorageConfiguration.StorageClass = new("existing-storage")
+	live.StorageConfiguration.StorageClass = new("existing")
 	live.Affinity.NodeSelector = map[string]string{"pool": "existing"}
-	before := live.DeepCopy()
-	applyCNPGPlacement(&live, nil)
-	applyCNPGPlacement(&live, &platformv1alpha1.CNPGConfig{})
-	assert.Equal(t, *before, live)
+	live.Affinity.Tolerations = []corev1.Toleration{{Operator: corev1.TolerationOpExists}}
+	live.Affinity.NodeAffinity = &corev1.NodeAffinity{}
+	applyCNPGPlacement(&live, &platformv1alpha1.CNPGConfig{StorageClass: new(""), Affinity: &platformv1alpha1.CNPGAffinityConfig{}})
+	require.NotNil(t, live.StorageConfiguration.StorageClass)
+	assert.Empty(t, *live.StorageConfiguration.StorageClass)
+	assert.Empty(t, live.Affinity.NodeSelector)
+	assert.Empty(t, live.Affinity.Tolerations)
+	assert.NotNil(t, live.Affinity.NodeAffinity)
+	assert.True(t, *live.Affinity.EnablePodAntiAffinity)
+	assert.Equal(t, "preferred", live.Affinity.PodAntiAffinityType)
+	assert.Equal(t, "kubernetes.io/hostname", live.Affinity.TopologyKey)
 }
 
 func TestCNPGPlacementDefaultsDoNotCauseRepeatedDrift(t *testing.T) {
