@@ -67,6 +67,83 @@ spec:
                   Only used when Provisioner is "postgresql.cnpg.io"
                   These settings CANNOT be overridden in PostgresCluster CR (platform policy).
                 properties:
+                  affinity:
+                    description: |-
+                      Affinity configures database pod placement. Omission preserves the provider's
+                      existing placement; an explicit empty object applies anti-affinity defaults
+                      and clears the class-owned node selector and tolerations. Pooler pods use
+                      their independent provider defaults.
+                    properties:
+                      enablePodAntiAffinity:
+                        default: true
+                        description: EnablePodAntiAffinity separates database pods;
+                          defaults to true.
+                        type: boolean
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          NodeSelector restricts eligible nodes using Kubernetes label keys and values.
+                          An empty selector clears existing class-owned selection when affinity is set.
+                        type: object
+                      podAntiAffinityType:
+                        default: preferred
+                        description: PodAntiAffinityType selects preferred or required
+                          separation; defaults to preferred.
+                        enum:
+                        - preferred
+                        - required
+                        type: string
+                      tolerations:
+                        description: |-
+                          Tolerations allow database pods onto tainted nodes using CNPG's toleration rules.
+                          An empty list clears existing class-owned tolerations when affinity is set.
+                        items:
+                          description: |-
+                            The pod this Toleration is attached to tolerates any taint that matches
+                            the triple <key,value,effect> using the matching operator <operator>.
+                          properties:
+                            effect:
+                              description: |-
+                                Effect indicates the taint effect to match. Empty means match all taint effects.
+                                When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                              type: string
+                            key:
+                              description: |-
+                                Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                                If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                              type: string
+                            operator:
+                              description: |-
+                                Operator represents a key's relationship to the value.
+                                Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+                                Exists is equivalent to wildcard for value, so that a pod can
+                                tolerate all taints of a particular category.
+                                Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
+                              type: string
+                            tolerationSeconds:
+                              description: |-
+                                TolerationSeconds represents the period of time the toleration (which must be
+                                of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                                it is not set, which means tolerate the taint forever (do not evict). Zero and
+                                negative values will be treated as 0 (evict immediately) by the system.
+                              format: int64
+                              type: integer
+                            value:
+                              description: |-
+                                Value is the taint value the toleration matches to.
+                                If the operator is Exists, the value should be empty, otherwise just a regular string.
+                              type: string
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      topologyKey:
+                        default: kubernetes.io/hostname
+                        description: TopologyKey is the node label used for separation;
+                          defaults to kubernetes.io/hostname.
+                        minLength: 1
+                        type: string
+                    type: object
                   backup:
                     description: |-
                       Backup contains CNPG-specific backup configuration.
@@ -101,8 +178,7 @@ spec:
                               The referenced Secret must exist in the same namespace as the PostgresCluster.
                             properties:
                               accessKeyId:
-                                description: AccessKeyId references the Secret key
-                                  containing the AWS access key ID.
+                                description: AccessKeyID selects the Secret key.
                                 properties:
                                   key:
                                     description: The key of the secret to select from.  Must
@@ -273,6 +349,12 @@ spec:
                     enum:
                     - restart
                     - switchover
+                    type: string
+                  storageClass:
+                    description: |-
+                      StorageClass selects the storage provisioner for newly created database PVCs.
+                      Omission preserves CNPG's existing storage class selection. An explicit empty
+                      string disables default-class selection. Changes do not migrate existing PVCs.
                     type: string
                 type: object
               config:

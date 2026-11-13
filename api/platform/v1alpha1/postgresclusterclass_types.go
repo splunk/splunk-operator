@@ -270,6 +270,19 @@ type ConnectionPoolerConfig struct {
 // These fields control CNPG operator behavior and enforce platform policies.
 // Cannot be overridden in Cluster CR.
 type CNPGConfig struct {
+	// StorageClass selects the storage provisioner for newly created database PVCs.
+	// Omission preserves CNPG's existing storage class selection. An explicit empty
+	// string disables default-class selection. Changes do not migrate existing PVCs.
+	// +optional
+	StorageClass *string `json:"storageClass,omitempty"`
+
+	// Affinity configures database pod placement. Omission preserves the provider's
+	// existing placement; an explicit empty object applies anti-affinity defaults
+	// and clears the class-owned node selector and tolerations. Pooler pods use
+	// their independent provider defaults.
+	// +optional
+	Affinity *CNPGAffinityConfig `json:"affinity,omitempty"`
+
 	// PrimaryUpdateMethod determines how the primary instance is updated.
 	// "restart" - tolerate brief downtime (suitable for development)
 	// "switchover" - minimal downtime via automated failover (production-grade)
@@ -290,6 +303,33 @@ type CNPGConfig struct {
 	// Cannot be overridden in PostgresCluster CR (platform policy).
 	// +optional
 	Backup *CNPGBackupConfig `json:"backup,omitempty"`
+}
+
+// CNPGAffinityConfig selects nodes and separation for database instances.
+type CNPGAffinityConfig struct {
+	// EnablePodAntiAffinity separates database pods; defaults to true.
+	// +optional
+	// +kubebuilder:default=true
+	EnablePodAntiAffinity *bool `json:"enablePodAntiAffinity,omitempty"`
+	// PodAntiAffinityType selects preferred or required separation; defaults to preferred.
+	// +optional
+	// +kubebuilder:default="preferred"
+	// +kubebuilder:validation:Enum=preferred;required
+	PodAntiAffinityType string `json:"podAntiAffinityType,omitempty"`
+	// TopologyKey is the node label used for separation; defaults to kubernetes.io/hostname.
+	// +optional
+	// +kubebuilder:default="kubernetes.io/hostname"
+	// +kubebuilder:validation:MinLength=1
+	TopologyKey string `json:"topologyKey,omitempty"`
+	// NodeSelector restricts eligible nodes using Kubernetes label keys and values.
+	// An empty selector clears existing class-owned selection when affinity is set.
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// Tolerations allow database pods onto tainted nodes using CNPG's toleration rules.
+	// An empty list clears existing class-owned tolerations when affinity is set.
+	// +optional
+	// +listType=atomic
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 }
 
 // BackupConfig contains provider-agnostic backup settings.

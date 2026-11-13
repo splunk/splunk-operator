@@ -798,9 +798,8 @@ func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, cluste
 	live.SuperuserSecret = &cnpgv1.LocalObjectReference{Name: secretName}
 	live.EnableSuperuserAccess = new(true)
 	live.Bootstrap = buildBootstrapConfiguration(specCfg, secretName)
-	live.StorageConfiguration = cnpgv1.StorageConfiguration{
-		Size: specCfg.Spec.Storage.String(),
-	}
+	live.StorageConfiguration.Size = specCfg.Spec.Storage.String()
+	applyCNPGPlacement(&live, specCfg.CNPG)
 	live.Resources = *specCfg.Spec.Resources
 	if specCfg.CNPG != nil && specCfg.CNPG.PrimaryUpdateMethod != nil {
 		live.PrimaryUpdateMethod = cnpgv1.PrimaryUpdateMethod(*specCfg.CNPG.PrimaryUpdateMethod)
@@ -840,6 +839,29 @@ func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, cluste
 	}
 	live.ExternalClusters = append(filteredExt, buildRecoveryExternalClusters(specCfg, clusterName)...)
 	return live, nil
+}
+
+// applyCNPGPlacement owns only the class-exposed placement fields. Existing
+// dedicated clusters keep provider defaults and independently managed affinity.
+func applyCNPGPlacement(spec *cnpgv1.ClusterSpec, config *platformv1alpha1.CNPGConfig) {
+	if config == nil {
+		return
+	}
+	if config.StorageClass != nil {
+		spec.StorageConfiguration.StorageClass = new(*config.StorageClass)
+	}
+	if config.Affinity == nil {
+		return
+	}
+	placement := config.Affinity
+	spec.Affinity.EnablePodAntiAffinity = cmp.Or(placement.EnablePodAntiAffinity, new(true))
+	spec.Affinity.PodAntiAffinityType = cmp.Or(placement.PodAntiAffinityType, "preferred")
+	spec.Affinity.TopologyKey = cmp.Or(placement.TopologyKey, "kubernetes.io/hostname")
+	spec.Affinity.NodeSelector = maps.Clone(placement.NodeSelector)
+	spec.Affinity.Tolerations = make([]corev1.Toleration, len(placement.Tolerations))
+	for i := range placement.Tolerations {
+		placement.Tolerations[i].DeepCopyInto(&spec.Affinity.Tolerations[i])
+	}
 }
 
 // EffectivePostgresImage resolves the configured major without any registry fallback.
@@ -1092,6 +1114,8 @@ func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec) normalizedCNPGClusterSpec
 		Instances:           spec.Instances,
 		PrimaryUpdateMethod: string(spec.PrimaryUpdateMethod),
 		StorageSize:         spec.StorageConfiguration.Size,
+		StorageClass:        spec.StorageConfiguration.StorageClass,
+		Affinity:            normalizedAffinity(spec.Affinity),
 		Resources:           spec.Resources,
 	}
 	if len(spec.PostgresConfiguration.PgHBA) > 0 {
@@ -1145,6 +1169,27 @@ func normalizeCNPGClusterSpec(spec cnpgv1.ClusterSpec) normalizedCNPGClusterSpec
 		normalized.Plugins = append(normalized.Plugins, np)
 	}
 	return normalized
+}
+
+func normalizedAffinity(affinity cnpgv1.AffinityConfiguration) cnpgv1.AffinityConfiguration {
+	// Treat provider defaults like omitted values, without adding defaulted
+	// fields to the projection for existing dedicated clusters.
+	if affinity.EnablePodAntiAffinity != nil && *affinity.EnablePodAntiAffinity {
+		affinity.EnablePodAntiAffinity = nil
+	}
+	if affinity.PodAntiAffinityType == "preferred" {
+		affinity.PodAntiAffinityType = ""
+	}
+	if affinity.TopologyKey == "kubernetes.io/hostname" {
+		affinity.TopologyKey = ""
+	}
+	if len(affinity.NodeSelector) == 0 {
+		affinity.NodeSelector = nil
+	}
+	if len(affinity.Tolerations) == 0 {
+		affinity.Tolerations = nil
+	}
+	return affinity
 }
 
 // NormalizeBlueGreenSourceCNPGSpec captures actual blue configuration without

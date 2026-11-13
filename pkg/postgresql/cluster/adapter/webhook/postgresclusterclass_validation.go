@@ -74,6 +74,7 @@ func ValidatePostgresClusterClassCreateWithContext(ctx context.Context, obj *pla
 		}
 	}
 	allErrs = append(allErrs, validateCertificateConfig(ctx, obj, reader)...)
+	allErrs = append(allErrs, validateClassPlacement(obj.Spec.CNPG)...)
 
 	return allErrs
 }
