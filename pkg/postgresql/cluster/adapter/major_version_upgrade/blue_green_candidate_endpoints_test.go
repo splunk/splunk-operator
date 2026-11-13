@@ -30,8 +30,33 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func createCandidateDirectServices(t *testing.T, c client.Client, green *cnpgv1.Cluster) *corev1.Service {
+	t.Helper()
+	var direct *corev1.Service
+	for _, side := range []string{"rw", "r", "ro"} {
+		selector := map[string]string{"cnpg.io/cluster": green.Name}
+		switch side {
+		case "rw":
+			selector["cnpg.io/instanceRole"] = "primary"
+		case "ro":
+			selector["cnpg.io/instanceRole"] = "replica"
+		default:
+			selector["cnpg.io/podRole"] = "instance"
+		}
+		service := &corev1.Service{Name: green.Name + "-" + side, Namespace: green.Namespace, UID: types.UID(green.Name + "-" + side + "-uid"),
+			Spec: corev1.ServiceSpec{Selector: selector, Ports: []corev1.ServicePort{{Name: "postgres", Port: 5432, TargetPort: intstr.FromInt32(5432), Protocol: corev1.ProtocolTCP}}}}
+		require.NoError(t, c.Create(t.Context(), service))
+		if side == "rw" {
+			direct = service
+		}
+	}
+	return direct
+}
 
 func TestCandidateEndpointsWaitForDirectServiceAndRemainStable(t *testing.T) {
 	scheme := runtime.NewScheme()

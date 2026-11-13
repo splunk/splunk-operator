@@ -127,7 +127,7 @@ func blueGreenAttemptStarted(intent mvutypes.Intent) bool {
 		}
 		// A requested retry is a new start, even when it reuses the durable
 		// attempt identity. Recheck source readiness before blocking components.
-		if *entry.Phase == string(mvutypes.Failed) && mvutypes.RetryRequestedAfterTerminalFailure(intent.RetryRequestedAt, entry) {
+		if *entry.Phase == string(mvutypes.Failed) && retryAuthorized(intent, entry) {
 			return false
 		}
 		return *entry.Phase != string(mvutypes.Scheduled)
@@ -165,7 +165,7 @@ func (h *MajorUpgradeUseCase) Schedule(ctx context.Context) (bool, error) {
 				h.active = true
 				return true, nil
 			}
-			if mvutypes.RetryRequestedAfterTerminalFailure(intent.RetryRequestedAt, entry) {
+			if retryAuthorized(intent, entry) {
 				h.active = true
 				return true, nil
 			}
@@ -399,8 +399,7 @@ func phaseForIntent(entries []platformv1alpha1.PostgresMajorUpgradeStatus, inten
 		// clean Scheduled phase: the strategy flow has no Failed state to resume,
 		// so feeding it Failed would just re-fail. This mirrors the retry gate in
 		// Schedule, which re-activates the use case on the same signal.
-		case phase == mvutypes.Failed &&
-			mvutypes.RetryRequestedAfterTerminalFailure(intent.RetryRequestedAt, entry):
+		case phase == mvutypes.Failed && retryAuthorized(intent, entry):
 			return mvutypes.Scheduled
 		// PreUpgradeBackup is owned by the outer use case, not the strategy flow.
 		// If we resume into this phase the flow should restart pg_upgrade from the top.
@@ -446,6 +445,15 @@ func hasPersistedAttempt(intent mvutypes.Intent) bool {
 		}
 	}
 	return false
+}
+
+// retryAuthorized reports whether the annotation authorizes one more run of a
+// terminal failure.
+func retryAuthorized(intent mvutypes.Intent, entry platformv1alpha1.PostgresMajorUpgradeStatus) bool {
+	if intent.Strategy == mvutypes.MajorUpgradeFlowBlueGreen {
+		return mvutypes.BlueGreenRetryAuthorized(intent.RetryRequestedAt, entry)
+	}
+	return mvutypes.RetryRequestedAfterTerminalFailure(intent.RetryRequestedAt, entry)
 }
 
 func (h *MajorUpgradeUseCase) emitPhaseEvent(report reconciliationtypes.Report) {

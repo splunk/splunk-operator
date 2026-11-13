@@ -344,3 +344,18 @@ func TestCommittedSourceFenceDriftIsNotSilentlyRepaired(t *testing.T) {
 	require.NoError(t, a.client.Get(t.Context(), client.ObjectKeyFromObject(blue), live))
 	assert.True(t, live.Spec.Managed.Roles[0].Login, "a contradictory committed source fence requires explicit recovery")
 }
+
+func TestRetryFenceGreenPreservesWritableBlue(t *testing.T) {
+	a, blue, green, databases, status, _ := accessFixture(t)
+	require.NoError(t, a.Snapshot(t.Context(), blue, green, databases, status))
+	require.Error(t, a.FenceGreen(t.Context(), green, status), "unverified controls cannot fence")
+	require.NoError(t, a.PrepareControl(t.Context(), blue, green, databases, status))
+	before := blue.DeepCopy()
+	require.NoError(t, a.FenceGreen(t.Context(), green, status))
+	require.NoError(t, a.FenceGreen(t.Context(), green, status))
+	require.NoError(t, a.client.Get(t.Context(), client.ObjectKeyFromObject(blue), blue))
+	assert.Equal(t, before.Spec, blue.Spec, "retry preparation must never interrupt blue")
+	require.NoError(t, a.client.Get(t.Context(), client.ObjectKeyFromObject(green), green))
+	assert.True(t, accessMatches(green, status, sideGreen, fenceApplied))
+	assert.True(t, accessMatches(blue, status, sideBlue, fenceOpen))
+}

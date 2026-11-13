@@ -365,16 +365,18 @@ func TestExplicitRetryResumesRestoredAttemptWithoutCandidateReplay(t *testing.T)
 			SourcePgVersion: new("17"), TargetPgVersion: new("18"), BlueGreen: status,
 		}},
 	}
-	candidate, source := &countingCandidate{}, &countingPreparer{}
-	outcome, err := New(mvutypes.Scheduled, source, candidate, nil).Advance(t.Context(), intent)
+	candidate, source, switchover := &countingCandidate{}, &countingPreparer{}, &countingSwitchover{}
+	outcome, err := New(mvutypes.Scheduled, source, candidate, switchover).Advance(t.Context(), intent)
 	require.NoError(t, err)
 	assert.Equal(t, string(mvutypes.SwitchingOver), outcome.Report.Phase)
 	assert.Equal(t, int64(2), outcome.BlueGreen.Switchover.Sequence)
 	assert.Equal(t, status.Gates.Switchover, outcome.BlueGreen.Gates.Switchover)
+	assert.Equal(t, 1, switchover.revalidations, "a reused green is revalidated before another window")
+	assert.Zero(t, switchover.calls)
 	assert.Zero(t, candidate.calls)
 	assert.Zero(t, source.calls)
 	intent.RetryRequestedAt = nil
-	outcome, err = New(mvutypes.Scheduled, source, candidate, nil).Advance(t.Context(), intent)
+	outcome, err = New(mvutypes.Scheduled, source, candidate, switchover).Advance(t.Context(), intent)
 	require.NoError(t, err)
 	assert.Equal(t, string(mvutypes.Failed), outcome.Report.Phase)
 	assert.False(t, outcome.Report.Retry)
@@ -399,7 +401,16 @@ type candidateWithStatus struct {
 	status *platformv1alpha1.PostgresBlueGreenUpgradeStatus
 }
 
-type countingSwitchover struct{ calls int }
+type countingSwitchover struct {
+	calls, revalidations int
+	notReady             bool
+	revalidateErr        error
+}
+
+func (s *countingSwitchover) RevalidateCandidate(context.Context, mvutypes.Intent, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error) {
+	s.revalidations++
+	return !s.notReady, s.revalidateErr
+}
 
 func (s *countingSwitchover) AdvanceSwitchover(_ context.Context, _ mvutypes.Intent, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (Outcome, error) {
 	s.calls++
@@ -487,6 +498,10 @@ func SwitchoverStarted(intent mvutypes.Intent) bool {
 }
 
 type failedReadSwitchover struct{ cause error }
+
+func (failedReadSwitchover) RevalidateCandidate(context.Context, mvutypes.Intent, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error) {
+	return false, nil
+}
 
 func (s failedReadSwitchover) AdvanceSwitchover(context.Context, mvutypes.Intent, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (Outcome, error) {
 	return Outcome{}, s.cause

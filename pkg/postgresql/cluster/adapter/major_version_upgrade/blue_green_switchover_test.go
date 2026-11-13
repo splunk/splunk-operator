@@ -85,8 +85,31 @@ type cutoverFixture struct {
 	access    *cutoverAccessFake
 	sql       *cutoverSQLFake
 	endpoints *cutoverEndpointsFake
+	candidate *cutoverCandidateFake
 	clock     time.Time
 	calls     []string
+}
+
+// cutoverCandidateFake certifies the persisted attempt as Candidate Ready.
+type cutoverCandidateFake struct{ f *cutoverFixture }
+
+func (c *cutoverCandidateFake) PrepareCandidate(_ context.Context, intent mvutypes.Intent) (*platformv1alpha1.PostgresBlueGreenUpgradeStatus, error) {
+	c.f.calls = append(c.f.calls, "prepare-candidate")
+	status := intent.State[len(intent.State)-1].BlueGreen.DeepCopy()
+	now := metav1.NewTime(c.f.clock)
+	status.Green.AvailableAt = &now
+	direct := &corev1.Service{}
+	if err := c.f.runtime.reader.Get(c.f.t.Context(), client.ObjectKey{Namespace: c.f.runtime.key.Namespace, Name: "green-rw"}, direct); err != nil {
+		return nil, err
+	}
+	status.CandidateEndpoints = &platformv1alpha1.BlueGreenCandidateEndpointsStatus{DirectService: serviceReference(direct)}
+	for i := range status.DatabaseReplication {
+		r := &status.DatabaseReplication[i]
+		r.SourceSchemaFingerprint, r.SourceAccessPolicyFingerprint, r.TargetSchemaFingerprint, r.TargetAccessPolicyFingerprint = new("s"), new("a"), new("s"), new("a")
+		r.SchemaImported, r.InitialCopyComplete, r.SubscriptionHealthy, r.SlotHealthy = new(true), new(true), new(true), new(true)
+		r.ReplicaSlots = []platformv1alpha1.BlueGreenReplicaSlotStatus{{ReplicaName: "blue-1", ReplicaUID: "blue-1-uid", SlotName: "slot", Valid: new(true)}}
+	}
+	return status, nil
 }
 
 func newCutoverFixture(t *testing.T) *cutoverFixture {
@@ -104,6 +127,7 @@ func newCutoverFixture(t *testing.T) *cutoverFixture {
 	green.Name, green.UID = "green", "green-uid"
 	green.Spec.SuperuserSecret = &cnpgv1.LocalObjectReference{Name: "green-superuser"}
 	green.Labels = map[string]string{blueGreenAttemptLabel: "attempt"}
+	green.Status.Phase, green.Status.ReadyInstances, green.Status.WriteService = cnpgv1.PhaseHealthy, 1, green.GetServiceReadWriteName()
 	child := &platformv1alpha1.PostgresDatabase{Name: "orders-database", Namespace: parent.Namespace, UID: "database-uid", Generation: 1,
 		Spec: platformv1alpha1.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: parent.Name}, Databases: []platformv1alpha1.DatabaseDefinition{{Name: "orders"}}}}
 	strategy := mvutypes.MajorUpgradeFlowBlueGreen
@@ -132,9 +156,11 @@ func newCutoverFixture(t *testing.T) *cutoverFixture {
 			return c.Create(ctx, obj, opts...)
 		},
 	}).Build()
+	direct := createCandidateDirectServices(t, c, green)
 	f.access = &cutoverAccessFake{f: f, ready: true}
 	f.sql = &cutoverSQLFake{f: f, parity: true, drained: true}
 	f.endpoints = &cutoverEndpointsFake{f: f, prepared: true, published: true}
+	f.candidate = &cutoverCandidateFake{f: f}
 	f.sql.targetDurable = true
 	f.runtime = &BlueGreenSwitchover{client: c, reader: c, key: client.ObjectKeyFromObject(parent), owner: parent,
 		access: f.access, sql: f.sql, endpoints: f.endpoints, now: func() time.Time { return f.clock }}
@@ -147,6 +173,7 @@ func newCutoverFixture(t *testing.T) *cutoverFixture {
 	require.NoError(t, err)
 	f.mutate(func(_ *platformv1alpha1.PostgresCluster, bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) {
 		bg.SourceConfigurationFingerprint, bg.CredentialFingerprints = &fingerprint, credentials
+		bg.CandidateEndpoints = &platformv1alpha1.BlueGreenCandidateEndpointsStatus{DirectService: serviceReference(direct)}
 	})
 	return f
 }
@@ -222,6 +249,10 @@ func (a *cutoverAccessFake) ApplyFence(context.Context, *cnpgv1.Cluster, *cnpgv1
 	a.f.calls = append(a.f.calls, "apply-fence")
 	return nil
 }
+func (a *cutoverAccessFake) FenceGreen(context.Context, *cnpgv1.Cluster, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {
+	a.f.calls = append(a.f.calls, "fence-green")
+	return nil
+}
 func (a *cutoverAccessFake) VerifyFences(context.Context, *cnpgv1.Cluster, *cnpgv1.Cluster, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error) {
 	a.f.calls = append(a.f.calls, "verify-fences")
 	return a.ready, nil
@@ -272,6 +303,13 @@ type cutoverSQLFake struct {
 	retainedDrains  int
 	targetDurable   bool
 	parityErr       error
+	behind          bool
+	catchUpErr      error
+}
+
+func (s *cutoverSQLFake) VerifyCandidateCatchUp(context.Context, *cnpgv1.Cluster, *cnpgv1.Cluster, []declaredDatabase, *platformv1alpha1.PostgresBlueGreenUpgradeStatus, cutoverIdentity) (bool, error) {
+	s.f.calls = append(s.f.calls, "catch-up")
+	return !s.behind, s.catchUpErr
 }
 
 func (s *cutoverSQLFake) Drain(_ context.Context, cluster *cnpgv1.Cluster, _ cutoverIdentity, terminate bool) (bool, error) {
@@ -651,7 +689,7 @@ func (f *cutoverFixture) retryRestoredWindow() {
 	f.clock = f.clock.Add(time.Second)
 	retryAt := metav1.NewTime(f.clock)
 	intent := mvutypes.Intent{Strategy: mvutypes.MajorUpgradeFlowBlueGreen, SourcePgVersion: "17", TargetPgVersion: "18", AttemptID: "attempt", Generation: parent.Generation, RetryRequestedAt: &retryAt, State: parent.Status.PostgresMajorUpgradeStatus}
-	outcome, err := bluegreen.New(mvutypes.Scheduled, nil, nil, nil).Advance(f.t.Context(), intent)
+	outcome, err := bluegreen.New(mvutypes.Scheduled, nil, f.candidate, f.runtime).Advance(f.t.Context(), intent)
 	require.NoError(f.t, err)
 	store := NewMajorUpgradeStateStore(newTestClusterStateStore(f.t, f.runtime.client, f.runtime.key))
 	require.NoError(f.t, progressError(store.SaveMajorUpgradeProgress(f.t.Context(), intent, mvutypes.Progress{BlueGreen: outcome.BlueGreen, Report: outcome.Report})))
@@ -668,12 +706,19 @@ func TestPartialControlSnapshotCanCompleteOnExplicitRetry(t *testing.T) {
 	f.until(func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool {
 		return bg.Switchover.SourceFenceRestoredAt != nil
 	})
-	f.retryRestoredWindow()
+	for range 3 {
+		f.retryRestoredWindow()
+		if f.status().Switchover.Sequence == 2 {
+			break
+		}
+	}
 	f.until(func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool {
 		return bg.Switchover.EndpointPublicationEventRef != nil
 	})
 	assert.NotEmpty(t, f.status().Switchover.GreenCredentialFingerprints)
 	assert.Equal(t, int64(2), f.status().Switchover.Sequence)
+	assert.NotContains(t, f.calls, "prepare-candidate", "a recorded control snapshot resumes its owned overlay")
+	assert.Contains(t, f.calls, "catch-up")
 	assert.Equal(t, 1, f.endpoints.commits)
 }
 
@@ -696,6 +741,8 @@ func TestGuardRemovalIntentSurvivesLostStatusAndTimeoutRetry(t *testing.T) {
 	})
 	f.retryRestoredWindow()
 	assert.Equal(t, intentTime, f.status().Switchover.CandidateGuardsRemovalStartedAt)
+	assert.Contains(t, f.calls, "catch-up", "a fenced green is revalidated through the control identity")
+	assert.NotContains(t, f.calls, "prepare-candidate")
 	f.until(func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool {
 		return bg.Switchover.EndpointPublicationEventRef != nil
 	})

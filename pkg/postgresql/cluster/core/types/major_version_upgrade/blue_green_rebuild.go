@@ -20,6 +20,7 @@ import (
 	"errors"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // maxRebuildReasonLength matches the API's MaxLength for rebuildRequired.
@@ -45,4 +46,13 @@ func MarkBlueGreenRebuildRequired(status *platformv1alpha1.PostgresBlueGreenUpgr
 	}
 	status.RebuildRequired = &reason
 	return true
+}
+
+// BlueGreenRetryAuthorized reports whether retryRequestedAt authorizes one
+// retry of a terminal pre-commit failure. A retry reuses the attempt's
+// durable artifacts, and each stage proves what it reuses again.
+func BlueGreenRetryAuthorized(retryRequestedAt *metav1.Time, entry platformv1alpha1.PostgresMajorUpgradeStatus) bool {
+	return entry.Phase != nil && *entry.Phase == string(Failed) &&
+		!CutoverStageOfStatus(entry.BlueGreen).Committed() && !BlueGreenRebuildRequired(entry.BlueGreen) &&
+		RetryRequestedAfterTerminalFailure(retryRequestedAt, entry)
 }

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
@@ -118,4 +119,25 @@ func TestRebuildClassificationIsWriteOnceAndPrecommitOnly(t *testing.T) {
 	committedClassified := committed.DeepCopy()
 	committedClassified.RebuildRequired = new("late drift")
 	assert.Error(t, validateExistingBlueGreenProgress("attempt", committed, committedClassified))
+}
+
+func TestBlueGreenRetryAuthorizedOncePerTerminalFailure(t *testing.T) {
+	failedAt := metav1.NewTime(time.Unix(1_000, 0))
+	before := metav1.NewTime(failedAt.Add(-time.Second))
+	after := metav1.NewTime(failedAt.Add(time.Second))
+	entry := func(phase Status, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) platformv1alpha1.PostgresMajorUpgradeStatus {
+		return platformv1alpha1.PostgresMajorUpgradeStatus{Phase: new(string(phase)), BlueGreen: status,
+			Conditions: []metav1.Condition{{Type: ConditionMajorUpgradeTerminalFailure, Status: metav1.ConditionTrue, LastTransitionTime: failedAt}}}
+	}
+	reusable := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt-1"}
+
+	assert.True(t, BlueGreenRetryAuthorized(&after, entry(Failed, reusable)))
+	assert.False(t, BlueGreenRetryAuthorized(nil, entry(Failed, reusable)))
+	assert.False(t, BlueGreenRetryAuthorized(&before, entry(Failed, reusable)), "an older timestamp cannot retry a newer failure")
+	assert.False(t, BlueGreenRetryAuthorized(&failedAt, entry(Failed, reusable)), "the consumed timestamp cannot retry the failure it caused")
+	assert.False(t, BlueGreenRetryAuthorized(&after, entry(Upgrading, reusable)))
+	assert.False(t, BlueGreenRetryAuthorized(&after, entry(Failed, &platformv1alpha1.PostgresBlueGreenUpgradeStatus{RebuildRequired: new("drift")})))
+	assert.False(t, BlueGreenRetryAuthorized(&after, entry(Failed, &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+		CommitReceipt: &platformv1alpha1.BlueGreenCommitReceiptStatus{Sequence: 1},
+	})))
 }

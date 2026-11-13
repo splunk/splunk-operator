@@ -202,6 +202,18 @@ func (a *blueGreenAccess) ApplyFence(ctx context.Context, blue, green *cnpgv1.Cl
 	return a.updateAccess(ctx, green, status, sideGreen, fenceApplied)
 }
 
+// FenceGreen repairs candidate isolation during retry revalidation. Blue stays
+// writable until a later, explicitly authorized interruption window.
+func (a *blueGreenAccess) FenceGreen(ctx context.Context, green *cnpgv1.Cluster, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {
+	if _, err := a.Credentials(ctx, status); err != nil {
+		return err
+	}
+	if status.Switchover.ControlIdentity.PreparedAt == nil {
+		return accessError("operator control access was not verified before fencing")
+	}
+	return a.updateAccess(ctx, green, status, sideGreen, fenceApplied)
+}
+
 // FenceBlue preserves source isolation during fail-forward recovery without
 // touching green, which may already accept application writes after a crash.
 func (a *blueGreenAccess) FenceBlue(ctx context.Context, blue *cnpgv1.Cluster, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error) {

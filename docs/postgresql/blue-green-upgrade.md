@@ -153,6 +153,11 @@ to authorize another interruption window within the same attempt. The operator
 preserves immutable identity and baseline evidence; it does not reuse an old
 window's fencing or parity receipts.
 
+Before opening that new window, the operator rechecks SQL catch-up and candidate
+endpoint readiness, including the green Pooler Deployments. An unavailable
+Pooler keeps the retry waiting while blue remains writable; readiness is checked
+again on subsequent reconciliations.
+
 After Endpoint Committed, failures and timeouts continue toward green. The
 operator rejects newly requested cancellation after a durable commit and
 repairs missing or stale endpoint projections from the existing
