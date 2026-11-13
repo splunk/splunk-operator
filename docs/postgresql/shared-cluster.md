@@ -20,6 +20,10 @@ From source, run `make helm-package` before installing.
 
 ## Installation
 
+A missing class is created by a Helm pre-install/pre-upgrade hook before cluster
+admission. Existing classes remain ordinary retained resources; upgrades never
+delete and recreate them.
+
 Create a protected `shared-values.yaml`:
 
 ```yaml

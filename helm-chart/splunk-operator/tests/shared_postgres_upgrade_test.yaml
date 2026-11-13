@@ -14,6 +14,15 @@ kubernetesProvider:
       gvr: {group: platform.splunk.com, version: v1alpha1, resource: postgresclusterclasses}
       namespaced: false
 tests:
+  - it: creates a missing class before admitting the cluster with webhooks enabled
+    set:
+      splunkOperator.featureGates.ValidationWebhook: true
+    documentIndex: 0
+    asserts:
+      - equal: {path: 'metadata.annotations["helm.sh/hook"]', value: 'pre-install,pre-upgrade'}
+      - equal: {path: 'metadata.annotations["helm.sh/hook-delete-policy"]', value: hook-failed}
+      - equal: {path: 'metadata.annotations["meta.helm.sh/release-name"]', value: backend}
+      - equal: {path: 'metadata.annotations["meta.helm.sh/release-namespace"]', value: backend}
   - it: rejects a changed default major version against an existing cluster
     kubernetesProvider:
       objects:
@@ -95,3 +104,5 @@ tests:
       - equal: {path: spec.instances, value: 4}
       - equal: {path: spec.resources.requests.cpu, value: "4"}
       - equal: {path: spec.class, value: backend-pg-aefaf86bf0}
+      - notExists: {path: 'metadata.annotations["helm.sh/hook"]'}
+        documentIndex: 0

@@ -11,6 +11,13 @@ metadata:
     {{- include "splunk-operator.labels" . | nindent 4 }}
   annotations:
     helm.sh/resource-policy: keep
+    meta.helm.sh/release-name: {{ .Release.Name | quote }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace | quote }}
+    {{- if not (lookup "platform.splunk.com/v1alpha1" "PostgresClusterClass" "" $name) }}
+    # Create before cluster admission; never re-run this hook for a retained class.
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-failed
+    {{- end }}
     platform.splunk.com/helm-class-policy: {{ include "splunk-operator.sharedPostgresClassPolicy" . | quote }}
 spec:
   {{- include "splunk-operator.sharedPostgresClassSpec" . | nindent 2 }}

@@ -39,6 +39,8 @@ tests:
         documentIndex: 1
       - equal: {path: 'metadata.annotations["helm.sh/resource-policy"]', value: keep}
         documentIndex: 0
+      - equal: {path: 'metadata.annotations["helm.sh/hook"]', value: 'pre-install,pre-upgrade'}
+        documentIndex: 0
       - equal: {path: 'metadata.annotations["helm.sh/resource-policy"]', value: keep}
         documentIndex: 1
   - it: enables both existing metrics exporters
