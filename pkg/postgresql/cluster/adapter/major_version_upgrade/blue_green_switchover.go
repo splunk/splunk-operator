@@ -35,8 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const candidateCredentialCheckMessage = "Checking candidate credential identities."
-
 // Source restoration and committed recovery outlive the interruption window,
 // but each attempt must release its worker even if an established SQL connection stalls.
 const cutoverRecoveryTimeout = 30 * time.Second
@@ -58,6 +56,7 @@ type cutoverAccess interface {
 	PrepareControl(context.Context, *cnpgv1.Cluster, *cnpgv1.Cluster, []declaredDatabase, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error
 	Credentials(context.Context, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (cutoverIdentity, error)
 	ApplyFence(context.Context, *cnpgv1.Cluster, *cnpgv1.Cluster, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error
+	FenceGreen(context.Context, *cnpgv1.Cluster, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error
 	VerifyFences(context.Context, *cnpgv1.Cluster, *cnpgv1.Cluster, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error)
 	FenceBlue(context.Context, *cnpgv1.Cluster, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error)
 	RestoreBlue(context.Context, *cnpgv1.Cluster, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error)
@@ -69,6 +68,7 @@ type cutoverSQL interface {
 	DrainRetainedSource(context.Context, *cnpgv1.Cluster, cutoverIdentity, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error)
 	SourceLSN(context.Context, *cnpgv1.Cluster, cutoverIdentity) (string, error)
 	VerifyFinalParity(context.Context, *cnpgv1.Cluster, *cnpgv1.Cluster, []declaredDatabase, *platformv1alpha1.PostgresBlueGreenUpgradeStatus, cutoverIdentity) (bool, error)
+	VerifyCandidateCatchUp(context.Context, *cnpgv1.Cluster, *cnpgv1.Cluster, []declaredDatabase, *platformv1alpha1.PostgresBlueGreenUpgradeStatus, cutoverIdentity) (bool, error)
 	SynchronizeSequences(context.Context, *cnpgv1.Cluster, *cnpgv1.Cluster, []declaredDatabase, cutoverIdentity) error
 	RemoveGuards(context.Context, *cnpgv1.Cluster, []declaredDatabase, cutoverIdentity) error
 	VerifyTargetDurability(context.Context, *cnpgv1.Cluster, cutoverIdentity) (bool, error)
@@ -195,29 +195,8 @@ func (s *BlueGreenSwitchover) beforeCommit(ctx context.Context, intent mvutypes.
 		}
 		return s.pending(status, "Operator control access is verified."), nil
 	}
-	if err := s.verifyFrozenConfiguration(ctx, blue, databases, status); err != nil {
+	if err := s.verifyFrozenInputs(ctx, blue, green, databases, status); err != nil {
 		return s.pending(status, "Checking the frozen configuration and credentials."), err
-	}
-	normalizedGreen, err := NormalizeFence(green, status, sideGreen)
-	if err != nil {
-		return s.pending(status, "Checking the frozen green configuration."), err
-	}
-	greenConfiguration, err := candidateConfigurationFingerprint(normalizedGreen)
-	if err != nil {
-		return s.pending(status, "Checking the frozen green configuration."), err
-	}
-	if w.GreenConfigurationFingerprint == nil {
-		return s.pending(status, "Checking the frozen green configuration."), errors.New("frozen green configuration fingerprint is missing")
-	}
-	if greenConfiguration != *w.GreenConfigurationFingerprint {
-		return s.pending(status, "Checking the frozen green configuration."), fmt.Errorf("%w: frozen green configuration changed during switchover", mvutypes.ErrCandidateInvalid)
-	}
-	greenCredentials, err := s.credentialBaseline().credentialFingerprints(ctx, normalizedGreen, databases, replicationSecretName(s.key.Name, status.AttemptID))
-	if err != nil {
-		return s.pending(status, candidateCredentialCheckMessage), err
-	}
-	if err := verifyCredentialBaseline(w.GreenCredentialFingerprints, greenCredentials); err != nil {
-		return s.pending(status, candidateCredentialCheckMessage), err
 	}
 	if w.StartedAt == nil {
 		timeout := intent.SwitchoverTimeout
@@ -556,6 +535,61 @@ func (s *BlueGreenSwitchover) CommitObserved(ctx context.Context, attemptID stri
 	return s.endpoints.ObserveCommit(ctx, s.key, attemptID)
 }
 
+// RevalidateCandidate resumes partial control bootstrap, isolates only green,
+// and re-proves Candidate Ready without interrupting restored blue access.
+func (s *BlueGreenSwitchover) RevalidateCandidate(ctx context.Context, _ mvutypes.Intent, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, cutoverRecoveryTimeout)
+	defer cancel()
+
+	w := status.Switchover
+	if w == nil || w.SourceFenceRestoredAt == nil || w.ControlIdentity == nil || w.GreenConfigurationFingerprint == nil {
+		return false, fmt.Errorf("%w: candidate revalidation requires a restored window with a complete control snapshot", mvutypes.ErrUpgradeFlowFailed)
+	}
+	blue, green, databases, err := s.inputs(ctx, status)
+	if err != nil {
+		return false, err
+	}
+	if len(w.GreenCredentialFingerprints) == 0 && w.ControlIdentity.PreparedAt == nil {
+		credentials, err := s.credentialBaseline().credentialFingerprints(ctx, green, databases, replicationSecretName(s.key.Name, status.AttemptID))
+		if err != nil {
+			return false, err
+		}
+		w.GreenCredentialFingerprints = credentials
+		return false, nil
+	}
+	if err := s.verifyFrozenInputs(ctx, blue, green, databases, status); err != nil {
+		return false, err
+	}
+	if w.ControlIdentity.PreparedAt == nil {
+		if err := s.access.PrepareControl(ctx, blue, green, databases, status); err != nil {
+			return false, err
+		}
+		// Persist completed control bootstrap before fencing or verifying SQL.
+		return false, nil
+	}
+	if err := s.access.FenceGreen(ctx, green, status); err != nil {
+		return false, err
+	}
+	id, err := s.access.Credentials(ctx, status)
+	if err != nil {
+		return false, err
+	}
+	ready, err := s.sql.VerifyCandidateCatchUp(ctx, blue, green, databases, status, id)
+	if err != nil || !ready {
+		return false, err
+	}
+	parent, _, err := s.readAttempt(ctx, status.AttemptID)
+	if err != nil {
+		return false, err
+	}
+	// Catch-up alone cannot authorize another interruption: the candidate's
+	// Services and Pooler Deployments must still be ready before blue is fenced.
+	if _, _, err := (&EndpointProofResolver{Reader: s.reader}).ResolveGreen(ctx, parent, status); err != nil {
+		return false, fmt.Errorf("revalidate candidate endpoints: %w", err)
+	}
+	return true, nil
+}
+
 // RestoreForCancellation restores blue before a cancellation proceeds. An
 // attempt that never opened a switchover window or endpoint preparation left
 // blue untouched and needs no restoration.
@@ -565,6 +599,34 @@ func (s *BlueGreenSwitchover) RestoreForCancellation(ctx context.Context, attemp
 	}
 	restored, _, err := s.restoreBlue(ctx, attemptID, status)
 	return restored, err
+}
+
+// verifyFrozenInputs proves that blue's and green's configuration and
+// credentials still match the baselines frozen for the attempt.
+func (s *BlueGreenSwitchover) verifyFrozenInputs(ctx context.Context, blue, green *cnpgv1.Cluster, databases []declaredDatabase, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {
+	if err := s.verifyFrozenConfiguration(ctx, blue, databases, status); err != nil {
+		return err
+	}
+	w := status.Switchover
+	if w.GreenConfigurationFingerprint == nil {
+		return errors.New("frozen green configuration fingerprint is missing")
+	}
+	normalizedGreen, err := NormalizeFence(green, status, sideGreen)
+	if err != nil {
+		return err
+	}
+	greenConfiguration, err := candidateConfigurationFingerprint(normalizedGreen)
+	if err != nil {
+		return err
+	}
+	if greenConfiguration != *w.GreenConfigurationFingerprint {
+		return fmt.Errorf("%w: frozen green configuration changed", mvutypes.ErrCandidateInvalid)
+	}
+	greenCredentials, err := s.credentialBaseline().credentialFingerprints(ctx, normalizedGreen, databases, replicationSecretName(s.key.Name, status.AttemptID))
+	if err != nil {
+		return err
+	}
+	return verifyCredentialBaseline(w.GreenCredentialFingerprints, greenCredentials)
 }
 
 func (s *BlueGreenSwitchover) verifyFrozenConfiguration(ctx context.Context, source *cnpgv1.Cluster, databases []declaredDatabase, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {

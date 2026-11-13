@@ -48,6 +48,8 @@ type CandidatePreparer interface {
 // handoff. It is invoked only after candidate readiness has been verified.
 type Switchover interface {
 	AdvanceSwitchover(context.Context, mvutypes.Intent, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (Outcome, error)
+	// RevalidateCandidate re-proves Candidate Ready before another window.
+	RevalidateCandidate(context.Context, mvutypes.Intent, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error)
 }
 
 // Outcome is the single durable result of one source-preparation transition.
@@ -139,11 +141,7 @@ func (f Flow) advance(ctx context.Context, intent mvutypes.Intent) (Outcome, err
 				Message: "Blue access is restored; another interruption requires a newer explicit retry timestamp.",
 			}}, nil
 		}
-		// Green remains fenced and may no longer have candidate DML guards.
-		// Ordinary candidate preparation uses pre-fence credentials and cannot
-		// safely be replayed here. The runtime verifies the frozen catalogs and
-		// current logical stream through the attempt control identity again.
-		return beginSwitchover(status, intent)
+		return f.revalidateRestoredCandidate(ctx, intent, status)
 	}
 	if f.phase == mvutypes.Scheduled || f.phase == mvutypes.PreUpgradeBackup {
 		return Outcome{Report: reconciliationTypes.Report{
@@ -189,29 +187,76 @@ func (f Flow) prepareCandidate(ctx context.Context, intent mvutypes.Intent) (Out
 	if f.phase != mvutypes.Preflight && f.phase != mvutypes.Upgrading && f.phase != mvutypes.ReadyForSwitchover {
 		return Outcome{}, errors.Join(mvutypes.ErrUpgradeFlowFailed, errors.New("blue/green candidate preparation cannot resume from phase "+string(f.phase)))
 	}
+	status, ready, outcome, err := f.checkCandidate(ctx, intent)
+	if !ready {
+		return outcome, err
+	}
+	if !intent.SwitchoverAuthorized {
+		return candidateReadyOutcome(status), nil
+	}
+	if f.switchover == nil {
+		return Outcome{BlueGreen: status}, errors.Join(mvutypes.ErrUpgradeFlowFailed, errors.New("blue/green switchover port is not configured"))
+	}
+	return beginSwitchover(status, intent)
+}
+
+// checkCandidate runs one candidate-preparation pass. Unless the candidate is
+// ready, it returns the outcome to report.
+func (f Flow) checkCandidate(ctx context.Context, intent mvutypes.Intent) (*platformv1alpha1.PostgresBlueGreenUpgradeStatus, bool, Outcome, error) {
 	if f.candidate == nil {
-		return Outcome{}, errors.Join(mvutypes.ErrUpgradeFlowFailed, errors.New("blue/green candidate preparer is not configured"))
+		return nil, false, Outcome{}, errors.Join(mvutypes.ErrUpgradeFlowFailed, errors.New("blue/green candidate preparer is not configured"))
 	}
 	status, err := f.candidate.PrepareCandidate(ctx, intent)
 	if err != nil {
-		if sourcePreparationRetryable(err) {
-			return candidatePendingOutcome(status), nil
-		}
-		if !mvutypes.IsTerminalFlowFailure(err) && !errors.Is(err, mvutypes.ErrInvalidUpgradeIntent) {
-			return candidateRetryableFailureOutcome(status, err), err
-		}
-		return terminalPreparationOutcome(status, intent, err), err
+		outcome, err := candidateFailureOutcome(status, intent, err)
+		return status, false, outcome, err
 	}
-	if CandidateReady(status) {
-		if intent.SwitchoverAuthorized {
-			if f.switchover == nil {
-				return Outcome{BlueGreen: status}, errors.Join(mvutypes.ErrUpgradeFlowFailed, errors.New("blue/green switchover port is not configured"))
-			}
-			return beginSwitchover(status, intent)
-		}
-		return candidateReadyOutcome(status), nil
+	if !CandidateReady(status) {
+		return status, false, candidatePendingOutcome(status), nil
 	}
-	return candidatePendingOutcome(status), nil
+	return status, true, Outcome{}, nil
+}
+
+// candidateFailureOutcome classifies a candidate preparation or revalidation
+// failure as pending, retryable, or terminal.
+func candidateFailureOutcome(status *platformv1alpha1.PostgresBlueGreenUpgradeStatus, intent mvutypes.Intent, err error) (Outcome, error) {
+	if sourcePreparationRetryable(err) {
+		return candidatePendingOutcome(status), nil
+	}
+	if !mvutypes.IsTerminalFlowFailure(err) && !errors.Is(err, mvutypes.ErrInvalidUpgradeIntent) {
+		return candidateRetryableFailureOutcome(status, err), err
+	}
+	return terminalPreparationOutcome(status, intent, err), err
+}
+
+// revalidateRestoredCandidate reuses green only after Candidate Ready passes
+// again. Once control bootstrap was authorized, its SQL overlay may exist
+// even without StartedAt. Resume and verify it through the attempt identity.
+func (f Flow) revalidateRestoredCandidate(ctx context.Context, intent mvutypes.Intent, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (Outcome, error) {
+	if mvutypes.BlueGreenRebuildRequired(status) {
+		return Outcome{BlueGreen: status, Report: reconciliationTypes.Report{
+			Name: mvutypes.UseCaseName, Phase: string(mvutypes.Failed), Reason: mvutypes.ReasonCandidateRebuildRequired,
+			Message: *status.RebuildRequired,
+		}}, nil
+	}
+	if status.Switchover.StartedAt == nil && status.Switchover.ControlIdentity == nil {
+		status, ready, outcome, err := f.checkCandidate(ctx, intent)
+		if !ready {
+			return outcome, err
+		}
+		return beginSwitchover(status, intent)
+	}
+	if f.switchover == nil {
+		return Outcome{BlueGreen: status}, errors.Join(mvutypes.ErrUpgradeFlowFailed, errors.New("blue/green switchover port is not configured"))
+	}
+	ready, err := f.switchover.RevalidateCandidate(ctx, intent, status)
+	if err != nil {
+		return candidateFailureOutcome(status, intent, err)
+	}
+	if !ready {
+		return candidatePendingOutcome(status), nil
+	}
+	return beginSwitchover(status, intent)
 }
 
 // beginSwitchover durably consumes the gate before the runtime prepares its

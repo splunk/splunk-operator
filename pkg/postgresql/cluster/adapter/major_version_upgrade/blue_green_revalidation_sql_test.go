@@ -21,6 +21,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -31,6 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type catchUpSQLModel struct {
@@ -178,4 +180,62 @@ func TestCandidateCatchUpUsesFrozenCatalogsAndAllSourceSlots(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRevalidationResumesPartialBootstrapWithProductionVerifier(t *testing.T) {
+	sql, blue, green, db, status, _, model := candidateCatchUpSQLFixture(t)
+	green.Status.WriteService = green.GetServiceReadWriteName()
+	status.CandidateEndpoints = &platformv1alpha1.BlueGreenCandidateEndpointsStatus{DirectService: serviceReference(createCandidateDirectServices(t, sql.client, green))}
+	status.CommitReceipt = nil
+	status.Switchover.StartedAt = nil
+	status.Switchover.CandidateGuardsRemovedAt = nil
+	model.greenGuards = true
+	status.Switchover.SourceFenceRestoredAt = new(metav1.NewTime(time.Now().UTC().Truncate(time.Second)))
+	// Blue was restored; green was never reached by the earlier fence call.
+	setAccess(blue, status, sideBlue, fenceOpen)
+	setAccess(green, status, sideGreen, fenceOpen)
+	require.NoError(t, sql.client.Update(t.Context(), blue))
+	require.NoError(t, sql.client.Update(t.Context(), green))
+	before := blue.DeepCopy()
+	require.NoError(t, sql.client.Create(t.Context(), &platformv1alpha1.PostgresDatabase{Name: "orders-db", Namespace: blue.Namespace, UID: "database-uid", Spec: platformv1alpha1.PostgresDatabaseSpec{ClusterRef: corev1.LocalObjectReference{Name: sql.logicalName}, Databases: []platformv1alpha1.DatabaseDefinition{db.definition}}}))
+	require.NoError(t, sql.client.Create(t.Context(), &corev1.Secret{Name: replicationSecretName(sql.logicalName, status.AttemptID), Namespace: blue.Namespace, UID: "replication-secret", Data: map[string][]byte{"password": []byte("replication")}}))
+	runtime := &BlueGreenSwitchover{client: sql.client, reader: sql.client, key: client.ObjectKeyFromObject(sql.owner), owner: sql.owner, sql: sql}
+	_, _, databases, err := runtime.inputs(t.Context(), status)
+	require.NoError(t, err)
+	baseline := runtime.credentialBaseline()
+	fingerprint, err := baseline.configurationFingerprint(blue, databases)
+	require.NoError(t, err)
+	status.SourceConfigurationFingerprint = &fingerprint
+	status.CredentialFingerprints, err = baseline.credentialFingerprints(t.Context(), blue, databases, replicationSecretName(sql.logicalName, status.AttemptID))
+	require.NoError(t, err)
+	status.Switchover.GreenCredentialFingerprints, err = baseline.credentialFingerprints(t.Context(), green, databases, replicationSecretName(sql.logicalName, status.AttemptID))
+	require.NoError(t, err)
+	greenFingerprint, err := candidateConfigurationFingerprint(green)
+	require.NoError(t, err)
+	status.Switchover.GreenConfigurationFingerprint = &greenFingerprint
+	control := &accessSQLStub{fenceReady: true}
+	access, err := newBlueGreenAccess(sql.client, sql.client, runtime.key, sql.owner, control)
+	require.NoError(t, err)
+	runtime.access = access
+	status.Switchover.ControlIdentity.PreparedAt = nil
+	parent := &platformv1alpha1.PostgresCluster{}
+	require.NoError(t, sql.client.Get(t.Context(), runtime.key, parent))
+	parent.Status.PostgresMajorUpgradeStatus = []platformv1alpha1.PostgresMajorUpgradeStatus{{BlueGreen: status.DeepCopy()}}
+	require.NoError(t, sql.client.Update(t.Context(), parent))
+	ready, err := runtime.RevalidateCandidate(t.Context(), mvutypes.Intent{}, status)
+	require.NoError(t, err)
+	assert.False(t, ready, "save completed bootstrap before SQL verification")
+	require.NotNil(t, status.Switchover.ControlIdentity.PreparedAt)
+	assert.Equal(t, 2, control.prepareCalls, "resume both sides before validating the owned control overlay")
+	require.NoError(t, sql.client.Get(t.Context(), client.ObjectKeyFromObject(green), green))
+	assert.True(t, accessMatches(green, status, sideGreen, fenceOpen))
+	ready, err = runtime.RevalidateCandidate(t.Context(), mvutypes.Intent{}, status)
+	require.NoError(t, err)
+	assert.True(t, ready, "the real catalog/replication verifier must accept the owned overlay")
+	require.NoError(t, sql.client.Get(t.Context(), client.ObjectKeyFromObject(blue), blue))
+	assert.Equal(t, before.Spec, blue.Spec)
+	assert.Nil(t, status.Switchover.StartedAt)
+	assert.Equal(t, int64(1), status.Switchover.Sequence)
+	require.NoError(t, sql.client.Get(t.Context(), client.ObjectKeyFromObject(green), green))
+	assert.True(t, accessMatches(green, status, sideGreen, fenceApplied))
 }

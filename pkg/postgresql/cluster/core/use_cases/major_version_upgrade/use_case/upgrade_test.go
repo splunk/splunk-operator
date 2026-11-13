@@ -945,6 +945,10 @@ func (f switchoverFunc) AdvanceSwitchover(ctx context.Context, intent mvutypes.I
 	return f(ctx, intent, status)
 }
 
+func (switchoverFunc) RevalidateCandidate(context.Context, mvutypes.Intent, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error) {
+	return true, nil
+}
+
 func (s *blueGreenProgressStore) ReadMajorUpgradeIntent(context.Context) (mvutypes.Intent, bool, error) {
 	return s.intent, true, nil
 }
