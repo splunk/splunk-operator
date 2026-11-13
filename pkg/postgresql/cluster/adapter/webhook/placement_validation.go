@@ -26,15 +26,25 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// Validate Kubernetes storage-class names and class-owned pod placement.
 // Match the toleration rules enforced by the pinned CNPG v1.30.1 webhook,
 // including omitted operators (Equal) and negative NoExecute toleration seconds.
 func validateClassPlacement(config *platformApi.CNPGConfig) field.ErrorList {
-	if config == nil || config.Affinity == nil {
+	if config == nil {
 		return nil
+	}
+	var errs field.ErrorList
+	if config.StorageClass != nil && *config.StorageClass != "" {
+		if reasons := validation.IsDNS1123Subdomain(*config.StorageClass); len(reasons) > 0 {
+			errs = append(errs, field.Invalid(field.NewPath("spec", "cnpg", "storageClass"), *config.StorageClass, strings.Join(reasons, "; ")))
+		}
+	}
+	if config.Affinity == nil {
+		return errs
 	}
 	affinity := config.Affinity
 	path := field.NewPath("spec", "cnpg", "affinity")
-	errs := metavalidation.ValidateLabels(affinity.NodeSelector, path.Child("nodeSelector"))
+	errs = append(errs, metavalidation.ValidateLabels(affinity.NodeSelector, path.Child("nodeSelector"))...)
 	if affinity.TopologyKey != "" {
 		if reasons := validation.IsQualifiedName(affinity.TopologyKey); len(reasons) > 0 {
 			errs = append(errs, field.Invalid(path.Child("topologyKey"), affinity.TopologyKey, strings.Join(reasons, "; ")))
