@@ -80,7 +80,8 @@
               "app.kubernetes.io/instance": "splunk-CM-cluster-manager",
               "app.kubernetes.io/name": "cluster-manager"
             }
-          }
+          },
+          "volumeAttributesClassName": "encrypted"
         },
         "status": {}
       },
@@ -109,7 +110,8 @@
               "app.kubernetes.io/instance": "splunk-CM-cluster-manager",
               "app.kubernetes.io/name": "cluster-manager"
             }
-          }
+          },
+          "volumeAttributesClassName": "high-throughput"
         },
         "status": {}
       }
