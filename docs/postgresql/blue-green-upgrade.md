@@ -11,10 +11,11 @@ managed schema, and copies data using logical replication. Applications continue
 using blue until a separate switchover gate authorizes an interruption.
 
 This implementation reaches **Target Available** and then waits in
-`PostUpgradeBackup`. Target-major recoverability, replication teardown,
-`Completed`, cancellation teardown, and retained-environment cleanup belong to
-subsequent workflow stages. Keep the upgrade configuration and retained blue
-environment in place at this boundary.
+`PostUpgradeBackup`. Before Endpoint Committed, an attempt can also be
+[cancelled](#cancel-an-attempt). Target-major recoverability, post-commit
+replication teardown, `Completed`, and retained-environment cleanup belong to
+subsequent workflow stages. Keep the upgrade configuration and retained
+environment in place at these boundaries.
 
 ### Prepare a candidate
 
@@ -52,7 +53,7 @@ of modifying the underlying CNPG resources to bypass a check.
 For PostgreSQL 17 and later, publisher preparation enables CNPG HA replication
 slots, logical-slot synchronization, `hot_standby_feedback`, and
 `sync_replication_slots` together. These settings remain enabled until
-replication cleanup. Candidate readiness verifies the running settings and
+retained-environment cleanup, including after a cancellation. Candidate readiness verifies the running settings and
 failover slots on every intended source instance.
 
 Once source preparation starts, keep cluster configuration, credentials,
@@ -124,6 +125,9 @@ Inspect the latest `status.postgresMajorUpgradeStatus` entry:
 | `blueGreen.endpointPublication` | Verified child publication barrier |
 | `blueGreen.switchover.targetAvailableAt` | Verified ordinary green access |
 | `blueGreen.canonicalRecovery` | Explicit proof for a recreated canonical ConfigMap |
+| `blueGreen.gates.cancellation` | Latched cancellation request and each completed cancellation step |
+| `blueGreen.rebuildRequired` | Why the attempt can no longer be reused by a retry |
+| `blueGreen.conditions` | Whether cancellation, retry, and cleanup are currently available |
 
 Fields without a `blueGreen` prefix in the table are under
 `blueGreen.switchover`. Phase `PostUpgradeBackup` at this implementation boundary
@@ -147,11 +151,8 @@ Each source-restoration pass has a fresh 30-second operation timeout. If it
 expires, the operator releases the worker and retries restoration. The window
 remains nonterminal until source access is verified.
 
-After correcting the cause, use a newer
-[`platform.splunk.com/major-upgrade-retry-at` timestamp](major-version-upgrade.md#retrying-after-terminal-failure)
-to authorize another interruption window within the same attempt. The operator
-preserves immutable identity and baseline evidence; it does not reuse an old
-window's fencing or parity receipts.
+After correcting the cause, [retry the attempt](#retry-after-a-failure) or
+[cancel it](#cancel-an-attempt).
 
 Before opening that new window, the operator rechecks SQL catch-up and candidate
 endpoint readiness, including the green Pooler Deployments. An unavailable
@@ -186,6 +187,79 @@ The protocol targets zero data loss for the supported, frozen managed database
 inventory. The timeout bounds the operator's interruption work; client
 reconnection, DNS caching, and external pooling behavior can extend the
 application-visible interruption.
+
+### Retry after a failure
+
+Transient failures retry automatically. A terminal failure stops the attempt
+until you set a newer
+[`platform.splunk.com/major-upgrade-retry-at` timestamp](major-version-upgrade.md#retrying-after-terminal-failure).
+One timestamp authorizes at most one retry: if the retried attempt fails again,
+set a newer timestamp.
+
+A retry resumes from the earliest step whose durable evidence is still valid.
+Completed source preparation is not repeated, and the operator never reuses an
+old window's fencing or parity evidence.
+
+After a failed or expired interruption window, the operator reuses green only
+after it catches up with blue and passes every Candidate Ready check again.
+Until then the attempt reports `Upgrading`, and no new interruption starts.
+
+Some failures mean the operator can no longer prove that green, or the
+attempt's frozen baseline, is valid:
+
+- a changed schema, access policy, credential, CA, or configuration, or a
+  changed database, role, object, or sequence inventory;
+- broken replication history: an invalidated slot, a subscription apply error
+  such as a replication conflict, or a changed publication, subscription, or
+  replication credential; and
+- a green that no longer matches the attempt: an imported schema that does
+  not match blue, a tampered write guard, or a changed or replaced environment.
+
+The attempt then records `blueGreen.rebuildRequired`, reports
+`CandidateRebuildRequired` and `RetryAvailable=False`, and ignores retry
+timestamps. Cancel it instead. A new attempt can start only after
+retained-environment cleanup, a later workflow stage. You cannot force the
+operator to reuse an attempt it cannot prove valid.
+
+### Cancel an attempt
+
+Set `postgresMajorUpgradeConfig.blueGreen.cancel: true` to abandon an attempt
+before Endpoint Committed. Cancellation takes priority over every unconsumed
+gate. It is accepted from any phase before the commit, including a terminal
+failure, and continues even if you later set `allow` or `cancel` back to
+`false`.
+
+During `Cancelling`, the operator:
+
+1. Restores and verifies blue's endpoint records and application access, if a
+   switchover window or endpoint preparation had started.
+2. Deletes the attempt's CNPG `Subscription` resources, removes publications
+   and replication slots from blue, and removes green's replication source.
+   SQL subscription state remains in fenced green until cleanup deletes green.
+3. Drops the attempt's temporary replication and control roles on blue and
+   deletes their Secrets. Green keeps its copy of the control role until
+   cleanup deletes green; its password existed only in the deleted Secret.
+4. Fences green: it disables every managed login and verifies that ordinary
+   database logins are refused. The reject rule blocks ordinary remote database
+   access; CNPG's preceding fixed certificate rules preserve provider access,
+   including physical replication. Local administrative access through the Unix
+   socket remains available.
+
+The attempt then reports `Cancelled`. Blue remains authoritative, ordinary
+reconciliation resumes, and the frozen configuration and database definitions
+are released. Green is retained, fenced, for explicit cleanup; it is never
+reopened. Blue keeps the publisher settings described in
+[Prepare a candidate](#prepare-a-candidate) until that cleanup. A blocked step keeps the attempt in `Cancelling` and retries; the
+condition message names the step.
+
+The admission webhook rejects `cancel: true` after Endpoint Committed. If a
+cancel races the commit, the operator ignores it and continues toward green.
+
+While a retained environment remains, `CleanupRequired=True` and a new major
+upgrade cannot start. Retained-environment cleanup is a later workflow stage
+and is not yet available. After it completes, starting another attempt for the
+same version pair requires setting `allow: false`, letting the operator observe
+it, and then setting `allow: true`.
 
 For the complete design and subsequent lifecycle stages, see
 [ADR-0007](adr/0007-minimum-downtime-major-upgrades.md) and its
