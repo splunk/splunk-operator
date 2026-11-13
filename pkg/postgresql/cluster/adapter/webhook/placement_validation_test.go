@@ -17,6 +17,7 @@ limitations under the License.
 package webhook_test
 
 import (
+	"strings"
 	"testing"
 
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -27,6 +28,51 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func TestPostgresClusterClassStorageClassAdmission(t *testing.T) {
+	server := validation.NewWebhookServer(validation.WebhookServerOptions{Validators: validation.DefaultValidators})
+	tests := []struct {
+		name   string
+		config *platformApi.CNPGConfig
+		want   []string
+	}{
+		{name: "omitted CNPG"},
+		{name: "omitted storage class", config: &platformApi.CNPGConfig{}},
+		{name: "explicit empty storage class", config: &platformApi.CNPGConfig{StorageClass: new("")}},
+		{name: "valid storage-only", config: &platformApi.CNPGConfig{StorageClass: new("encrypted-ssd")}},
+		{name: "valid dotted name", config: &platformApi.CNPGConfig{StorageClass: new("storage.example.com")}},
+		{name: "maximum length", config: &platformApi.CNPGConfig{StorageClass: new(strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 61))}},
+		{name: "invalid storage-only", config: &platformApi.CNPGConfig{StorageClass: new("bad class")}, want: []string{"storageClass"}},
+		{name: "uppercase name", config: &platformApi.CNPGConfig{StorageClass: new("Fast")}, want: []string{"storageClass"}},
+		{name: "underscore", config: &platformApi.CNPGConfig{StorageClass: new("bad_class")}, want: []string{"storageClass"}},
+		{name: "slash", config: &platformApi.CNPGConfig{StorageClass: new("example.com/class")}, want: []string{"storageClass"}},
+		{name: "invalid boundary", config: &platformApi.CNPGConfig{StorageClass: new("-fast")}, want: []string{"storageClass"}},
+		{name: "too long", config: &platformApi.CNPGConfig{StorageClass: new(strings.Repeat("a", 254))}, want: []string{"storageClass"}},
+		{name: "invalid with affinity", config: &platformApi.CNPGConfig{StorageClass: new("bad class"), Affinity: &platformApi.CNPGAffinityConfig{}}, want: []string{"storageClass"}},
+		{name: "both errors preserved", config: &platformApi.CNPGConfig{StorageClass: new("bad class"), Affinity: &platformApi.CNPGAffinityConfig{TopologyKey: "bad key"}}, want: []string{"storageClass", "affinity.topologyKey"}},
+	}
+	for _, tt := range tests {
+		for _, op := range []admissionv1.Operation{admissionv1.Create, admissionv1.Update} {
+			t.Run(tt.name+"/"+string(op), func(t *testing.T) {
+				obj := &platformApi.PostgresClusterClass{
+					APIVersion: "platform.splunk.com/v1alpha1", Kind: "PostgresClusterClass", Name: "storage",
+					Spec: platformApi.PostgresClusterClassSpec{Provisioner: "postgresql.cnpg.io", CNPG: tt.config},
+				}
+				old := obj.DeepCopy()
+				old.Spec.CNPG = nil
+				response := sendAdmissionReview(t, server, newPostgresClusterClassAdmissionReview(t, "storage", op, obj, old))
+				assert.Equal(t, len(tt.want) == 0, response.Allowed)
+				if len(tt.want) > 0 {
+					require.NotNil(t, response.Result)
+					assert.Equal(t, metav1.StatusReasonInvalid, response.Result.Reason)
+					for _, path := range tt.want {
+						assert.Contains(t, response.Result.Message, "spec.cnpg."+path)
+					}
+				}
+			})
+		}
+	}
+}
 
 func TestPostgresClusterClassPlacementAdmission(t *testing.T) {
 	server := validation.NewWebhookServer(validation.WebhookServerOptions{Validators: validation.DefaultValidators})
