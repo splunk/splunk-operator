@@ -685,11 +685,27 @@ database-level authorization, and it does not replace PostgreSQL roles or Kubern
 
 Required fields and impact:
 
-- Database names must begin with a lowercase letter and contain only lowercase letters and digits;
-  underscores and hyphens are rejected at admission. Generated Secret names are therefore
+- Database names must be 1–30 characters, begin with a lowercase letter, and end with a lowercase
+  letter or digit. Internal hyphens, including repeated hyphens (`tenant--abc`), are supported;
+  uppercase letters, underscores, spaces, and leading/trailing hyphens are rejected at admission.
+  The form `-bg-<10 lowercase hexadecimal digits>-` is reserved for operator-created blue/green
+  resources. For example, `primary-bg-0123456789-c` is rejected so it cannot alias the generated
+  resource for database `c` after cutover. Names such as `tenant--abc` and `tenant-bg-dev` remain valid.
+  Database names are preserved in PostgreSQL, default roles (`<database>_admin` and `<database>_rw`),
+  connection metadata, and workload mount selectors. Generated Secret names are therefore
   predictable as `<PostgresDatabase>-<database>-admin` and `<PostgresDatabase>-<database>-rw`. The
   exact names are also published in `PostgresDatabase.status.databases[].adminUserSecretRef` and
   `rwUserSecretRef`.
+  Generated-name collisions are rejected during reconciliation. For example, resource/database
+  pairs `a-b`/`c` and `a`/`b-c` both derive `a-b-c-*`; choose different resource names. The
+  conflicting request cannot modify, delete, or retain another request's resources.
+  Generated credentials record their originating PostgresDatabase in
+  `platform.splunk.com/credential-owner`. Older unowned credentials can be recovered through
+  their owner's published status references or retention marker; ambiguous unowned Secrets
+  require restoring the original owner reference instead of being adopted by name alone.
+- KVService's `spec.postgres.databaseName` selects the database hosting tenant data and uses
+  its existing lowercase-letter/digit naming rule, starting with a letter. Its default is
+  `kvstore`. KVService tenant IDs follow a separate naming contract from this selector.
 - `subjects[].name` must be the ServiceAccount used by the consuming workload Pods.
 - `podSelector.matchLabels` on the `NetworkPolicy` selects the database-side Pods to protect.
 - `ingress[].from[].podSelector` selects the application Pods allowed to connect.

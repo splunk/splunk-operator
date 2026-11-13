@@ -543,3 +543,18 @@ func TestSweepUnmanagedRolesAfterRestoreErrors(t *testing.T) {
 		assert.True(t, conn.closed)
 	})
 }
+
+func TestPGDBRepositoryQuotesHyphenatedDatabaseAndDefaultRoles(t *testing.T) {
+	tx := &fakeTx{}
+	repo := &pgDBRepository{conn: &fakeConn{tx: tx}}
+	require.NoError(t, repo.AssignRequiredPermissionsToRole(t.Context(), "tenant--abc", ports.DatabaseRoleNames{Admin: "tenant--abc_admin", RW: "tenant--abc_rw"}))
+	assert.Equal(t, []string{
+		`GRANT CONNECT ON DATABASE "tenant--abc" TO "tenant--abc_rw"`,
+		`GRANT USAGE ON SCHEMA public TO "tenant--abc_rw"`,
+		`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "tenant--abc_rw"`,
+		`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "tenant--abc_rw"`,
+		`ALTER DEFAULT PRIVILEGES FOR ROLE "tenant--abc_admin" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "tenant--abc_rw"`,
+		`ALTER DEFAULT PRIVILEGES FOR ROLE "tenant--abc_admin" IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO "tenant--abc_rw"`,
+	}, tx.stmts)
+	assert.True(t, tx.committed)
+}

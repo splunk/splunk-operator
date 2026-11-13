@@ -20,6 +20,7 @@ package cnpg
 
 import (
 	"context"
+	"fmt"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
@@ -50,6 +51,17 @@ func ApplyDatabase(
 		desiredSpec, err := desired(*database)
 		if err != nil {
 			return err
+		}
+		if !database.CreationTimestamp.IsZero() || database.ResourceVersion != "" {
+			// Ownership does not disambiguate conventional and environment-scoped
+			// names of different logical databases within the same request.
+			if database.Spec.Name != desiredSpec.Name || database.Spec.ClusterRef != desiredSpec.ClusterRef {
+				return fmt.Errorf("CNPG Database %s has a conflicting database identity", resourceName)
+			}
+			retainedFrom := database.Annotations[AnnotationRetainedFrom]
+			if !metav1.IsControlledBy(database, owner) && retainedFrom != "" && retainedFrom != owner.Name {
+				return fmt.Errorf("CNPG Database %s is retained by another PostgresDatabase", resourceName)
+			}
 		}
 		database.Spec = desiredSpec
 		reAdopted = database.Annotations[AnnotationRetainedFrom] == owner.Name

@@ -48,10 +48,9 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 		Expect(testenv.TeardownTestCaseEnv(ctx, testcaseEnvInst, deployment)).To(Succeed(), "Failed to teardown test case environment")
 	})
 
-	It("postgrescontrollers, integration, postgres-database: can deploy a PostgresDatabase and reach Ready",
+	DescribeTable("postgrescontrollers, integration, postgres-database: can deploy a PostgresDatabase and reach Ready",
 		Label("tier:e2e-full", "tier:e2e-pr", "sva:s1", "cloud:aws", "cloud:kraken", "feature:postgres"),
-		NodeTimeout(testenv.ShortTimeout),
-		func(ctx SpecContext) {
+		func(ctx SpecContext, databaseName string) {
 			ns := testcaseEnvInst.GetName()
 			kubeClient := testcaseEnvInst.GetKubeClient()
 
@@ -84,7 +83,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: pgCluster.Name},
 					Databases: []platformv1alpha1.DatabaseDefinition{
-						{Name: "appdb", DeletionPolicy: "Delete"},
+						{Name: databaseName, DeletionPolicy: "Delete"},
 					},
 				},
 			}
@@ -112,15 +111,29 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 			Eventually(func(g Gomega) {
 				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
-				g.Expect(presentRoleNames(pc)).To(ContainElements("appdb_admin", "appdb_rw"))
+				g.Expect(presentRoleNames(pc)).To(ContainElements(databaseName+"_admin", databaseName+"_rw"))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
 			By("connecting over the RW Service with generated application credentials and verify-full TLS")
 			Expect(kubeClient.Get(ctx, dbKey, pgDB)).To(Succeed())
 			pgtesthelpers.VerifyPostgresDatabaseConnectivity(ctx, kubeClient, postgresPodClient, pgDB, clusterKey)
-			GinkgoWriter.Println("Authenticated direct TLS SQL passed for admin and rw roles; sentinel rows verified.")
+			By("verifying default table and sequence permissions for the generated RW role")
+			admin, rw := pgtesthelpers.ManagedRoleCredentials(ctx, kubeClient, dbKey, databaseName)
+			pgtesthelpers.RunSQLAs(ctx, kubeClient, postgresPodClient, clusterKey, admin, databaseName,
+				"CREATE TABLE public.sok_permission_probe (id bigserial PRIMARY KEY, value text);")
+			Expect(pgtesthelpers.RunSQLAs(ctx, kubeClient, postgresPodClient, clusterKey, rw, databaseName,
+				"INSERT INTO public.sok_permission_probe (value) VALUES ('created') RETURNING id;")).To(Equal("1"))
+			Expect(pgtesthelpers.RunSQLAs(ctx, kubeClient, postgresPodClient, clusterKey, rw, databaseName,
+				"UPDATE public.sok_permission_probe SET value = 'updated' WHERE id = 1 RETURNING value;")).To(Equal("updated"))
+			Expect(pgtesthelpers.RunSQLAs(ctx, kubeClient, postgresPodClient, clusterKey, rw, databaseName,
+				"DELETE FROM public.sok_permission_probe WHERE id = 1 RETURNING value;")).To(Equal("updated"))
+			pgtesthelpers.RunSQLAs(ctx, kubeClient, postgresPodClient, clusterKey, admin, databaseName,
+				"DROP TABLE public.sok_permission_probe;")
 
 		},
+		Entry("existing alphanumeric name", NodeTimeout(testenv.ShortTimeout), "appdb"),
+		Entry("single internal hyphen", NodeTimeout(testenv.ShortTimeout), "tenant-abc"),
+		Entry("repeated internal hyphens", NodeTimeout(testenv.ShortTimeout), "tenant--abc"),
 	)
 
 	It("postgrescontrollers, integration, postgres-database: removes child resources when PostgresDatabase is deleted with Delete policy",
@@ -157,7 +170,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: pgCluster.Name},
 					Databases: []platformv1alpha1.DatabaseDefinition{
-						{Name: "dropme", DeletionPolicy: "Delete"},
+						{Name: "tenant--drop", DeletionPolicy: "Delete"},
 					},
 				},
 			}
@@ -194,8 +207,8 @@ var _ = Describe("postgrescontrollers, integration, postgres-database", Label("t
 			Eventually(func(g Gomega) {
 				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
-				g.Expect(presentRoleNames(pc)).NotTo(ContainElement("dropme_admin"))
-				g.Expect(presentRoleNames(pc)).NotTo(ContainElement("dropme_rw"))
+				g.Expect(presentRoleNames(pc)).NotTo(ContainElement("tenant--drop_admin"))
+				g.Expect(presentRoleNames(pc)).NotTo(ContainElement("tenant--drop_rw"))
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
 			By("verifying the database's access ConfigMap and role Secrets are deleted, not leaked")
@@ -252,7 +265,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 				Spec: platformv1alpha1.PostgresDatabaseSpec{
 					ClusterRef: corev1.LocalObjectReference{Name: pgCluster.Name},
 					Databases: []platformv1alpha1.DatabaseDefinition{
-						{Name: "keepme", DeletionPolicy: "Retain"},
+						{Name: "tenant-keep", DeletionPolicy: "Retain"},
 					},
 				},
 			}
@@ -268,7 +281,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			}, testenv.DefaultTimeout, testenv.PollInterval).Should(Succeed())
 
 			// cnpgDatabaseName = "<pgDB.Name>-<dbName>"
-			cnpgDBKey := types.NamespacedName{Name: pgDB.Name + "-keepme", Namespace: ns}
+			cnpgDBKey := types.NamespacedName{Name: pgDB.Name + "-tenant-keep", Namespace: ns}
 
 			By("deleting PostgresDatabase")
 			Expect(kubeClient.Delete(ctx, pgDB)).To(Succeed())
@@ -292,7 +305,7 @@ var _ = Describe("postgrescontrollers, integration, postgres-database-scenarios"
 			Consistently(func(g Gomega) {
 				pc := &platformv1alpha1.PostgresCluster{}
 				g.Expect(kubeClient.Get(ctx, clusterKey, pc)).To(Succeed())
-				g.Expect(presentRoleNames(pc)).To(ContainElements("keepme_admin", "keepme_rw"))
+				g.Expect(presentRoleNames(pc)).To(ContainElements("tenant-keep_admin", "tenant-keep_rw"))
 			}, time.Minute, testenv.ConsistentPollInterval).Should(Succeed())
 		},
 	)

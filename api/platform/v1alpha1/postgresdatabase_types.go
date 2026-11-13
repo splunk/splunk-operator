@@ -69,13 +69,15 @@ type DatabaseMonitoring struct {
 // +kubebuilder:validation:XValidation:rule="!has(self.allowConnections) || self.allowConnections || !has(self.extensions) || self.extensions.size() == 0",message="extensions cannot be managed when allowConnections is false"
 type DatabaseDefinition struct {
 	// Name of the PostgreSQL database to create. It must start with a lowercase
-	// letter and contain only lowercase letters and digits because it is also
-	// used to derive Kubernetes resource names. Underscores and hyphens are not
-	// allowed.
+	// letter, end with a lowercase letter or digit, and contain only lowercase
+	// letters, digits, and internal hyphens (including repeated hyphens).
+	// The -bg-<10 lowercase hex digits>- form is reserved for blue/green resources.
+	// The name is preserved in PostgreSQL and derived Kubernetes resources.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=30
-	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9]*$`
+	// +kubebuilder:validation:Pattern=`^[a-z]([a-z0-9-]*[a-z0-9])?$`
+	// +kubebuilder:validation:XValidation:rule="!self.matches('-bg-[0-9a-f]{10}-')",message="the -bg-<10 lowercase hex digits>- name form is reserved for blue/green resources"
 	Name string `json:"name"`
 	// AdminRoleName is the PostgreSQL role used as the database owner. When
 	// omitted, it defaults to <name>_admin.

@@ -37,10 +37,13 @@ type PostgresDatabaseMountSpec struct {
 	PostgresDatabaseRef corev1.LocalObjectReference `json:"postgresDatabaseRef"`
 
 	// Database selects one entry in PostgresDatabase.spec.databases by name.
+	// Internal hyphens, including repeated hyphens, are preserved.
+	// The -bg-<10 lowercase hex digits>- form is reserved for blue/green resources.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=30
-	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9]*$`
+	// +kubebuilder:validation:Pattern=`^[a-z]([a-z0-9-]*[a-z0-9])?$`
+	// +kubebuilder:validation:XValidation:rule="!self.matches('-bg-[0-9a-f]{10}-')",message="the -bg-<10 lowercase hex digits>- name form is reserved for blue/green resources"
 	Database string `json:"database"`
 
 	// IncludeAdmin also mounts the database-owner password for schema changes.

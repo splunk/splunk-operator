@@ -7112,12 +7112,18 @@ spec:
                     enable a sidecar, or configure Splunk to use PostgreSQL.
                   properties:
                     database:
-                      description: Database selects one entry in PostgresDatabase.spec.databases
-                        by name.
+                      description: |-
+                        Database selects one entry in PostgresDatabase.spec.databases by name.
+                        Internal hyphens, including repeated hyphens, are preserved.
+                        The -bg-<10 lowercase hex digits>- form is reserved for blue/green resources.
                       maxLength: 30
                       minLength: 1
-                      pattern: ^[a-z][a-z0-9]*$
+                      pattern: ^[a-z]([a-z0-9-]*[a-z0-9])?$
                       type: string
+                      x-kubernetes-validations:
+                      - message: the -bg-<10 lowercase hex digits>- name form is reserved
+                          for blue/green resources
+                        rule: '!self.matches(''-bg-[0-9a-f]{10}-'')'
                     includeAdmin:
                       default: false
                       description: |-

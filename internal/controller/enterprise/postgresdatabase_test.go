@@ -17,17 +17,50 @@ package controller
 import (
 	"testing"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+)
+
+var _ = DescribeTable("PostgresDatabase mount naming reserves blue/green resource names",
+	func(ctx SpecContext, kind string) {
+		mounts := []enterpriseApi.PostgresDatabaseMountSpec{{Name: "app", PostgresDatabaseRef: corev1.LocalObjectReference{Name: "database"}, Database: "primary-bg-0123456789-c"}}
+		var resource client.Object = &enterpriseApi.Standalone{
+			GenerateName: "pg-mount-", Namespace: "default", Annotations: map[string]string{enterpriseApi.StandalonePausedAnnotation: "true"},
+			Spec: enterpriseApi.StandaloneSpec{ImagePullPolicy: "IfNotPresent", PostgresDatabaseMounts: mounts},
+		}
+		if kind == "SearchHeadCluster" {
+			resource = &enterpriseApi.SearchHeadCluster{
+				GenerateName: "pg-mount-", Namespace: "default", Annotations: map[string]string{enterpriseApi.SearchHeadClusterPausedAnnotation: "true"},
+				Spec: enterpriseApi.SearchHeadClusterSpec{ImagePullPolicy: "IfNotPresent", Replicas: 3, PostgresDatabaseMounts: mounts},
+			}
+		}
+		err := k8sClient.Create(ctx, resource)
+		Expect(apierrors.IsInvalid(err)).To(BeTrue(), "error: %v", err)
+		Expect(err.Error()).To(ContainSubstring("spec.postgresDatabaseMounts[0].database"))
+		Expect(err.Error()).To(ContainSubstring("reserved for blue/green resources"))
+		postgresMountSpecs(resource)[0].Database = "tenant--abc"
+		Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		DeferCleanup(func(ctx SpecContext) { Expect(k8sClient.Delete(ctx, resource)).To(Succeed()) })
+		postgresMountSpecs(resource)[0].Database = "primary-bg-0123456789-c"
+		err = k8sClient.Update(ctx, resource)
+		Expect(apierrors.IsInvalid(err)).To(BeTrue(), "error: %v", err)
+		Expect(err.Error()).To(ContainSubstring("spec.postgresDatabaseMounts[0].database"))
+		Expect(err.Error()).To(ContainSubstring("reserved for blue/green resources"))
+	},
+	Entry("Standalone", "Standalone"),
+	Entry("SearchHeadCluster", "SearchHeadCluster"),
 )
 
 func TestPostgresDatabaseWatch(t *testing.T) {

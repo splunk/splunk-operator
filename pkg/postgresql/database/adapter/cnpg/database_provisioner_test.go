@@ -212,6 +212,7 @@ func TestDatabaseProvisionerReAdoptsRetainedDatabase(t *testing.T) {
 			Name: "primary-payments", Namespace: "dbs",
 			Annotations: map[string]string{cnpginfra.AnnotationRetainedFrom: "primary"},
 		},
+		Spec: cnpgv1.DatabaseSpec{Name: "payments", ClusterRef: corev1.LocalObjectReference{Name: "cnpg-primary"}},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(database).Build()
 	provisioner := NewDatabaseProvisioner(c, scheme)
@@ -278,4 +279,43 @@ func TestDatabaseProvisionerAdoptsAndVerifiesSchemaImportedGreenDatabase(t *test
 	assert.True(t, observation.Databases[0].Found)
 	assert.True(t, observation.Databases[0].Applied)
 	assert.Equal(t, result.Expected[0].Generation, observation.Databases[0].ObservedGeneration)
+}
+
+func TestDatabaseProvisionerRejectsIdentityChangesForOwnedAndRetainedResources(t *testing.T) {
+	for _, ownership := range []string{"owned", "retained"} {
+		for _, mismatch := range []string{"database", "cluster"} {
+			t.Run(ownership+"/"+mismatch, func(t *testing.T) {
+				scheme := runtime.NewScheme()
+				require.NoError(t, platformv1alpha1.AddToScheme(scheme))
+				require.NoError(t, cnpgv1.AddToScheme(scheme))
+				database := &cnpgv1.Database{
+					Name: "primary-payments", Namespace: "dbs",
+					Spec: cnpgv1.DatabaseSpec{Name: "payments", ClusterRef: corev1.LocalObjectReference{Name: "cnpg-primary"}},
+				}
+				if ownership == "owned" {
+					database.OwnerReferences = []metav1.OwnerReference{{
+						APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: "primary", UID: "owner-uid", Controller: new(true),
+					}}
+				} else {
+					database.Annotations = map[string]string{cnpginfra.AnnotationRetainedFrom: "primary"}
+				}
+				c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(database).Build()
+				require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: database.Name, Namespace: database.Namespace}, database))
+				before := database.DeepCopy()
+				target := dbtypes.ProvisionerTarget{
+					Namespace: "dbs", PostgresDatabaseName: "primary", PostgresDatabaseUID: "owner-uid", ProviderClusterName: "cnpg-primary",
+				}
+				desired := dbtypes.DesiredDatabase{ResourceName: database.Name, Name: "payments", Owner: "payments_admin"}
+				if mismatch == "database" {
+					desired.Name = "other"
+				} else {
+					target.ProviderClusterName = "other"
+				}
+				_, err := NewDatabaseProvisioner(c, scheme).Apply(t.Context(), target, []dbtypes.DesiredDatabase{desired})
+				require.ErrorContains(t, err, "conflicting database identity")
+				require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: database.Name, Namespace: database.Namespace}, database))
+				assert.Equal(t, before, database)
+			})
+		}
+	}
 }
