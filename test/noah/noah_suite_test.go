@@ -58,6 +58,7 @@ var _ = BeforeSuite(func() {
 
 	testcaseEnvInstance, err = testenv.AttachToExistingEnv(
 		testenvInstance.GetKubeClient(),
+		testenvInstance.GetAPIReader(),
 		operatorNamespace,
 		operatorName,
 	)

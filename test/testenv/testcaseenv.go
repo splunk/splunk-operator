@@ -40,6 +40,7 @@ import (
 // TestCaseEnv represents a namespaced-isolated k8s cluster environment (aka virtual k8s cluster) to run test cases against
 type TestCaseEnv struct {
 	kubeClient                 client.Client
+	kubeAPIReader              client.Reader
 	name                       string
 	namespace                  string
 	serviceAccountName         string
@@ -87,6 +88,13 @@ func (testenv *TestCaseEnv) cleanupParentCtx() context.Context {
 // GetKubeClient returns the kube client to talk to kube-apiserver
 func (testenv *TestCaseEnv) GetKubeClient() client.Client {
 	return testenv.kubeClient
+}
+
+// GetAPIReader returns a direct (uncached) reader against the kube-apiserver, see
+// TestEnv.GetAPIReader's doc comment for why a read-only, attach-to-existing-env suite needs
+// this instead of the cache-backed GetKubeClient() for some object types (e.g. Leases).
+func (testenv *TestCaseEnv) GetAPIReader() client.Reader {
+	return testenv.kubeAPIReader
 }
 
 // injectAWSCredentials adds the short-lived pipeline credentials to Splunk
@@ -165,16 +173,16 @@ func (testenv *TestCaseEnv) OperatorDeployment() (namespace, name string) {
 }
 
 // NewDefaultTestCaseEnv creates a default test environment
-func NewDefaultTestCaseEnv(kubeClient client.Client, name string) (*TestCaseEnv, error) {
+func NewDefaultTestCaseEnv(kubeClient client.Client, kubeAPIReader client.Reader, name string) (*TestCaseEnv, error) {
 	if os.Getenv("GRAVITON_TESTING") == "true" {
-		return NewTestCaseEnv(kubeClient, name, specifiedOperatorImage, os.Getenv("SPLUNK_ENTERPRISE_IMAGE"), specifiedLicenseFilePath)
+		return NewTestCaseEnv(kubeClient, kubeAPIReader, name, specifiedOperatorImage, os.Getenv("SPLUNK_ENTERPRISE_IMAGE"), specifiedLicenseFilePath)
 	} else {
-		return NewTestCaseEnv(kubeClient, name, specifiedOperatorImage, specifiedSplunkImage, specifiedLicenseFilePath)
+		return NewTestCaseEnv(kubeClient, kubeAPIReader, name, specifiedOperatorImage, specifiedSplunkImage, specifiedLicenseFilePath)
 	}
 }
 
 // NewTestCaseEnv creates a new test environment to run tests againsts
-func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string, splunkImage string, licenseFilePath string) (*TestCaseEnv, error) {
+func NewTestCaseEnv(kubeClient client.Client, kubeAPIReader client.Reader, name string, operatorImage string, splunkImage string, licenseFilePath string) (*TestCaseEnv, error) {
 	// The name are used in various resource label and there is a 63 char limit. Do our part to make sure we do not exceed that limit
 	if len(name) > maxTestCaseEnvNameLength {
 		return nil, fmt.Errorf("name %s has exceeded 24 chars", name)
@@ -190,6 +198,7 @@ func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string,
 
 	testenv := &TestCaseEnv{
 		kubeClient:                 kubeClient,
+		kubeAPIReader:              kubeAPIReader,
 		name:                       name,
 		namespace:                  name,
 		serviceAccountName:         name,
@@ -227,9 +236,10 @@ func NewTestCaseEnv(kubeClient client.Client, name string, operatorImage string,
 // this is conventionally "splunk-operator"); tenant CRs/pods that live in a different,
 // dynamically-discovered namespace are addressed separately by callers via
 // PodExecCommandInNamespace and direct GetKubeClient() reads with an explicit namespace.
-func AttachToExistingEnv(kubeClient client.Client, namespace string, operatorName string) (*TestCaseEnv, error) {
+func AttachToExistingEnv(kubeClient client.Client, kubeAPIReader client.Reader, namespace string, operatorName string) (*TestCaseEnv, error) {
 	testenv := &TestCaseEnv{
 		kubeClient:          kubeClient,
+		kubeAPIReader:       kubeAPIReader,
 		name:                namespace,
 		namespace:           namespace,
 		operatorName:        operatorName,

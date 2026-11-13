@@ -447,6 +447,10 @@ Expect(err).To(Succeed())
 | Data ingestion and search | `ingest_utils.go`, `search_utils.go` |
 | Secrets and credentials | `secretutil.go` |
 
+`TestEnv.GetAPIReader()` and `TestCaseEnv.GetAPIReader()` return an uncached reader against the kube-apiserver. `NewDefaultTestCaseEnv`, `NewTestCaseEnv`, and `AttachToExistingEnv` take it as their second argument. Attached suites should use it for reads that must stay within namespace-scoped RBAC, such as leader Leases; the cache-backed client can otherwise start a forbidden cluster-wide list/watch and hang. Writes continue through `GetKubeClient()`.
+
+The SCS sanity suite attaches to the existing operator; its health checks read operator resources, CRDs, and logs, while the optional canary creates, scales, and cleans up only its own Standalone resources in a pre-existing namespace. See the [SCS pipeline guide](../../gitlab-ci/README.md#scs-sanity-gate-testscs_sanity) for its execution contract. `make test-scs-sanity` runs the cluster-free unit tests and skips the live-cluster Ginkgo entry point.
+
 ### Shared Test Procedures
 
 Some suites extract multi-step test procedures into `*_shared.go` files to keep the Ginkgo spec files declarative. For example, the License Manager suite uses `test/licensemanager/lm_test_shared.go`:

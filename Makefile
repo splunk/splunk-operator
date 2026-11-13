@@ -170,6 +170,10 @@ test-testenv: setup/ginkgo ## Run Ginkgo tests for shared integration-test helpe
 test-noah-framework: setup/ginkgo ## Discover the attached Noah Ginkgo suite without requiring a cluster.
 	"$(GOBIN)/ginkgo" --dry-run -v --trace ./test/noah
 
+.PHONY: test-scs-sanity
+test-scs-sanity: ## Run cluster-free SCS sanity unit tests, skipping the live-cluster Ginkgo entry point.
+	KUBECONFIG=/dev/null go test -skip '^TestSCSSanity$$' ./test/scs_sanity/
+
 
 ##@ Documentation
 

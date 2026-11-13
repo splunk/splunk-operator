@@ -14,6 +14,7 @@
 package scssanity
 
 import (
+	"os"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -22,25 +23,16 @@ import (
 	"github.com/splunk/splunk-operator/test/testenv"
 )
 
-// Env-var contract for this suite. Unlike every other package under test/, this suite never
-// provisions a namespace/operator/CR — it attaches to an already-running, persistent
-// per-environment SOK install (see AttachToExistingEnv) and must not disrupt it.
+// The suite attaches to the already-running SOK install on an SCS cluster
+// (see AttachToExistingEnv). Health checks read its state; the optional canary
+// creates and cleans up its own Standalone in a pre-existing namespace.
 var (
 	operatorNamespace = testenv.GetEnvWithDefault("SCS_OPERATOR_NAMESPACE", "splunk-operator")
 	operatorName      = testenv.GetEnvWithDefault("SCS_OPERATOR_NAME", "splunk-operator-controller-manager")
-	ingestorNamespace = testenv.GetEnvWithDefault("SCS_INGESTOR_NAMESPACE", "")
-	ingestorName      = testenv.GetEnvWithDefault("SCS_INGESTOR_NAME", "")
 	targetOperatorImg = testenv.GetEnvWithDefault("TARGET_OPERATOR_IMAGE", "")
-
-	// baselineFile points at the pre-upgrade tenant snapshot written by
-	// gitlab-ci/scs-sanity-gate.sh's capture_tenant_baseline() before the Helm upgrade runs.
-	// This suite only ever runs post-upgrade, so the "before" half of the non-disruption check
-	// (check 4) has to be handed in from outside the process rather than captured here.
-	baselineFile = testenv.GetEnvWithDefault("SCS_SANITY_BASELINE_FILE", "")
 
 	testenvInstance     *testenv.TestEnv
 	testcaseEnvInstance *testenv.TestCaseEnv
-	deployment          *testenv.Deployment
 	testSuiteName       = "scs-sanity-" + testenv.RandomDNSName(3)
 )
 
@@ -51,9 +43,12 @@ func TestSCSSanity(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	sc, _ := GinkgoConfiguration()
-	// Must exceed the sum of the per-operation budgets one invocation can spend, or the suite
-	// aborts before any of them can report its own failure.
-	sc.Timeout = testenv.MediumSuiteTimeout
+	// The gate sets SCS_SANITY_SUITE_TIMEOUT below its hard timeout so cleanup still runs.
+	suiteTimeout, err := parseSuiteTimeout(os.Getenv("SCS_SANITY_SUITE_TIMEOUT"), testenv.MediumSuiteTimeout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc.Timeout = suiteTimeout
 
 	RunSpecs(t, "Running "+testSuiteName, sc)
 }
@@ -66,11 +61,8 @@ var _ = BeforeSuite(func() {
 	testenvInstance, err = testenv.NewDefaultTestEnv(testSuiteName)
 	Expect(err).To(Succeed(), "Failed to initialize kube client for scs-sanity suite")
 
-	testcaseEnvInstance, err = testenv.AttachToExistingEnv(testenvInstance.GetKubeClient(), operatorNamespace, operatorName)
+	testcaseEnvInstance, err = testenv.AttachToExistingEnv(testenvInstance.GetKubeClient(), testenvInstance.GetAPIReader(), operatorNamespace, operatorName)
 	Expect(err).To(Succeed(), "Failed to attach to existing SCS environment")
-
-	deployment, err = testcaseEnvInstance.NewDeployment(testSuiteName, nil)
-	Expect(err).To(Succeed(), "Failed to build deployment handle for scs-sanity suite")
 })
 
 var _ = AfterSuite(func() {
