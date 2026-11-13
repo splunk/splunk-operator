@@ -27,9 +27,9 @@ tests:
       - hasDocuments: {count: 2}
       - equal: {path: spec.instances, value: 3}
         documentIndex: 1
-      - equal: {path: spec.cnpg.affinity.podAntiAffinityType, value: required}
+      - equal: {path: 'items[0].spec.cnpg.affinity.podAntiAffinityType', value: required}
         documentIndex: 0
-      - equal: {path: spec.cnpg.affinity.topologyKey, value: kubernetes.io/hostname}
+      - equal: {path: 'items[0].spec.cnpg.affinity.topologyKey', value: kubernetes.io/hostname}
         documentIndex: 0
       - equal: {path: spec.postgresVersion, value: "17"}
         documentIndex: 1
@@ -37,9 +37,9 @@ tests:
         documentIndex: 1
       - equal: {path: spec.postgresMajorUpgradeConfig.allow, value: false}
         documentIndex: 1
-      - equal: {path: 'metadata.annotations["helm.sh/resource-policy"]', value: keep}
+      - equal: {path: 'items[0].metadata.annotations["helm.sh/resource-policy"]', value: keep}
         documentIndex: 0
-      - equal: {path: 'metadata.annotations["helm.sh/hook"]', value: 'pre-install,pre-upgrade'}
+      - isKind: {of: List}
         documentIndex: 0
       - equal: {path: 'metadata.annotations["helm.sh/resource-policy"]', value: keep}
         documentIndex: 1
@@ -72,15 +72,15 @@ tests:
       sharedPostgres.affinity.nodeSelector: {pool: database}
       sharedPostgres.affinity.tolerations: [{key: database, operator: Exists}]
     asserts:
-      - equal: {path: spec.cnpg.storageClass, value: encrypted}
+      - equal: {path: 'items[0].spec.cnpg.storageClass', value: encrypted}
         documentIndex: 0
       - equal: {path: spec.storage, value: 200Gi}
         documentIndex: 1
       - equal: {path: spec.resources.requests.cpu, value: "4"}
         documentIndex: 1
-      - equal: {path: spec.cnpg.affinity.nodeSelector, value: {pool: database}}
+      - equal: {path: 'items[0].spec.cnpg.affinity.nodeSelector', value: {pool: database}}
         documentIndex: 0
-      - equal: {path: spec.cnpg.affinity.tolerations, value: [{key: database, operator: Exists}]}
+      - equal: {path: 'items[0].spec.cnpg.affinity.tolerations', value: [{key: database, operator: Exists}]}
         documentIndex: 0
   - it: uses externally managed backup credentials without embedding secret material
     set:
@@ -92,9 +92,9 @@ tests:
     asserts:
       - equal: {path: spec.backup, value: {enabled: true, schedule: "0 2 * * *"}}
         documentIndex: 1
-      - equal: {path: spec.cnpg.backup.barmanObjectStore.s3Credentials.accessKeyId.name, value: customer-backup}
+      - equal: {path: 'items[0].spec.cnpg.backup.barmanObjectStore.s3Credentials.accessKeyId.name', value: customer-backup}
         documentIndex: 0
-      - equal: {path: spec.cnpg.backup.barmanObjectStore.destinationPath, value: "s3://customer/backups/"}
+      - equal: {path: 'items[0].spec.cnpg.backup.barmanObjectStore.destinationPath', value: "s3://customer/backups/"}
         documentIndex: 0
   - it: defaults additional application databases to retention
     set:
@@ -133,7 +133,7 @@ tests:
       <<: *enabled
       sharedPostgres.instances: 1
     asserts:
-      - equal: {path: spec.cnpg.primaryUpdateMethod, value: restart}
+      - equal: {path: 'items[0].spec.cnpg.primaryUpdateMethod', value: restart}
         documentIndex: 0
       - equal: {path: spec.instances, value: 1}
         documentIndex: 1
@@ -149,9 +149,9 @@ tests:
     documentIndex: 0
     asserts:
       - equal:
-          path: metadata.annotations["platform.splunk.com/helm-class-policy"]
+          path: 'items[0].metadata.annotations["platform.splunk.com/helm-class-policy"]'
           value: 5f517e5f53d6a680370471e07cac0b3951081c40e4e776dd682d7b74517f60b0
-      - equal: {path: spec.config.postgresVersion, value: "17"}
-      - notExists: {path: spec.config.resources}
-      - notExists: {path: spec.config.storage}
-      - notExists: {path: spec.config.backup}
+      - equal: {path: 'items[0].spec.config.postgresVersion', value: "17"}
+      - notExists: {path: 'items[0].spec.config.resources'}
+      - notExists: {path: 'items[0].spec.config.storage'}
+      - notExists: {path: 'items[0].spec.config.backup'}
