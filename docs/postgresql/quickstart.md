@@ -320,6 +320,31 @@ EOF
 The class's configuration is shared by every cluster that refers to it. For a production workload,
 use the platform-approved class rather than creating or changing one yourself.
 
+### Class storage and placement
+
+A platform-owned class can select a StorageClass and PostgreSQL pod placement.
+Include this fragment when defining a new class, using labels and storage that
+exist in your cluster:
+
+```yaml
+spec:
+  cnpg:
+    storageClass: encrypted-ssd
+    affinity:
+      enablePodAntiAffinity: true
+      podAntiAffinityType: required
+      topologyKey: kubernetes.io/hostname
+      nodeSelector:
+        pool: database
+      tolerations: []
+```
+
+Omitting these fields preserves existing storage selection and independently
+managed placement. Class policy is immutable; create a new class for a different
+policy. Changing a class does not migrate existing volumes. Placement applies to
+PostgreSQL instances; PgBouncer uses provider placement. Required anti-affinity
+needs an eligible node for every PostgreSQL instance.
+
 ## 3. Create a PostgreSQL cluster
 
 Apply a `PostgresCluster` to ask the Postgres Operator to provision and manage the PostgreSQL

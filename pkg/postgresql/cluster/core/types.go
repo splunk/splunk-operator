@@ -121,6 +121,11 @@ type normalizedCNPGClusterSpec struct {
 	Plugins              []normalizedPluginSpec
 	BootstrapType        bootstrapKind
 	Recovery             *normalizedRecoverySpec
+	// Keep the persisted BlueGreenSourceCNPGSpec.Managed fingerprint format
+	// stable when extending reconcile drift detection. StorageClass is frozen
+	// separately there; source affinity was never part of that receipt.
+	StorageClass *string                      `json:"-"`
+	Affinity     cnpgv1.AffinityConfiguration `json:"-"`
 }
 
 // BlueGreenSourceCNPGSpec is the live blue configuration that must remain stable

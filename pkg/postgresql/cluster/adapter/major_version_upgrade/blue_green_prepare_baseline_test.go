@@ -206,6 +206,49 @@ func TestConfigurationFingerprintCoversFrozenDeclarationsAndLiveBlue(t *testing.
 	assert.NotEqual(t, changedCluster, changedCNPG)
 }
 
+func TestConfigurationFingerprintAcceptsPreviousOperatorReceipt(t *testing.T) {
+	// Receipts captured by 52f2501283b7f190da366785c57ead0e6123688d,
+	// before storage/affinity joined the ordinary reconcile drift projection.
+	for _, test := range []struct {
+		name        string
+		storage     *string
+		affinity    cnpgv1.AffinityConfiguration
+		fingerprint string
+	}{
+		{name: "provider defaults", fingerprint: "4d64496d6e8e0fb1c11538d8f01ac9fcd11a58179410dd27b3040f421d836365"},
+		{
+			name: "existing dedicated placement", storage: new("existing-storage"),
+			affinity: cnpgv1.AffinityConfiguration{
+				PodAntiAffinityType: "required", NodeSelector: map[string]string{"pool": "database"},
+			},
+			fingerprint: "d028c0dec28ce823671a89700d3e8f3ded2d657fff783f2984783cd05dbce2d6",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			preparer := &BlueGreenPreparer{
+				cluster: &platformv1alpha1.PostgresCluster{},
+				plan:    BlueGreenPreflightPlan{TargetImage: "postgres:18"},
+			}
+			source := &cnpgv1.Cluster{Spec: cnpgv1.ClusterSpec{
+				ImageName: "postgres:17", Affinity: test.affinity,
+				StorageConfiguration: cnpgv1.StorageConfiguration{StorageClass: test.storage},
+			}}
+			current, err := preparer.configurationFingerprint(source, nil)
+			require.NoError(t, err)
+			require.Equal(t, test.fingerprint, current, "operator replacement must preserve an unchanged source receipt")
+			intent := mvutypes.Intent{AttemptID: "paused-attempt", State: []platformv1alpha1.PostgresMajorUpgradeStatus{{
+				BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+					AttemptID: "paused-attempt", Blue: &platformv1alpha1.BlueGreenEnvironmentStatus{},
+					SourceConfigurationFingerprint: &test.fingerprint,
+				},
+			}}}
+			require.NoError(t, verifyBlueGreenBaseline(intent, &platformv1alpha1.PostgresBlueGreenUpgradeStatus{
+				SourceConfigurationFingerprint: &current,
+			}))
+		})
+	}
+}
+
 func TestPreserveCredentialCaptureTimesRetainsExistingBaselineTime(t *testing.T) {
 	capturedAt := metav1.Now()
 	previous := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{CredentialFingerprints: []platformv1alpha1.BlueGreenCredentialFingerprintStatus{{
