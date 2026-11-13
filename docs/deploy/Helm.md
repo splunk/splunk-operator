@@ -110,7 +110,9 @@ Install SOK CRDs and cert-manager first when enabling the bundle; Barman require
 cert-manager even when SOK uses another webhook certificate mechanism.
 
 PostgreSQL RBAC follows the gate in both access modes. Bundling creates no databases or
-backup policy; use the [PostgreSQL quickstart](../postgresql/quickstart.md).
+backup policy by itself. Enable [the shared PostgreSQL cluster](../postgresql/shared-cluster.md)
+to provision release-owned workloads, backups and optional KVService wiring.
+Dedicated workloads remain covered by the [PostgreSQL quickstart](../postgresql/quickstart.md).
 PG17/PG18/PgBouncer runtime compatibility remains subject to installation validation.
 
 For existing compatible controllers, leave their dependencies disabled and enable

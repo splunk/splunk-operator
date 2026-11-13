@@ -1,0 +1,94 @@
+{{- if .Values.sharedPostgres.enabled -}}
+{{- include "splunk-operator.sharedPostgresValidate" . -}}
+{{- $cfg := .Values.sharedPostgres -}}
+{{- $name := include "splunk-operator.sharedPostgresName" . -}}
+{{- $namespace := include "splunk-operator.namespace" . -}}
+apiVersion: platform.splunk.com/v1alpha1
+kind: PostgresClusterClass
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "splunk-operator.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+    platform.splunk.com/helm-class-policy: {{ include "splunk-operator.sharedPostgresClassPolicy" . | quote }}
+spec:
+  {{- include "splunk-operator.sharedPostgresClassSpec" . | nindent 2 }}
+---
+apiVersion: platform.splunk.com/v1alpha1
+kind: PostgresCluster
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "splunk-operator.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  class: {{ $name }}
+  postgresVersion: {{ $cfg.postgresVersion | quote }}
+  instances: {{ $cfg.instances }}
+  storage: {{ $cfg.storage }}
+  resources:
+    {{- toYaml $cfg.resources | nindent 4 }}
+  postgresqlConfig:
+    {{- toYaml $cfg.postgresqlConfig | nindent 4 }}
+  pgHBA:
+    {{- toYaml $cfg.pgHBA | nindent 4 }}
+  connectionPooler:
+    enabled: {{ $cfg.connectionPooler.enabled }}
+    readWrite: {{ $cfg.connectionPooler.readWrite }}
+    readOnly: {{ $cfg.connectionPooler.readOnly }}
+  monitoring:
+    postgresqlMetrics: {{ $cfg.monitoring.postgresqlMetrics }}
+    connectionPoolerMetrics: {{ $cfg.monitoring.connectionPoolerMetrics }}
+  backup:
+    enabled: {{ $cfg.backup.enabled }}
+    {{- if $cfg.backup.enabled }}
+    schedule: {{ $cfg.backup.schedule | quote }}
+    {{- end }}
+  clusterDeletionPolicy: Retain
+  postgresMajorUpgradeConfig:
+    allow: false
+  images:
+    {{- toYaml $cfg.images | nindent 4 }}
+  {{- with $cfg.bootstrapFrom }}
+  bootstrapFrom:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- if $cfg.databases }}
+---
+apiVersion: platform.splunk.com/v1alpha1
+kind: PostgresDatabase
+metadata:
+  name: {{ $name }}-apps
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "splunk-operator.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  clusterRef:
+    name: {{ $name }}
+  databases:
+    {{- range $cfg.databases }}
+    - {{- toYaml (merge (deepCopy .) (dict "deletionPolicy" "Retain")) | nindent 6 }}
+    {{- end }}
+{{- end }}
+{{- if $cfg.kvService.enabled }}
+---
+apiVersion: enterprise.splunk.com/v4
+kind: KVService
+metadata:
+  name: {{ $name }}-kv
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "splunk-operator.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  {{- $spec := deepCopy $cfg.kvService.spec -}}
+  {{- $_ := set $spec "postgres" (dict "clusterRef" (dict "name" $name)) -}}
+  {{- toYaml $spec | nindent 2 }}
+{{- end }}
+{{- end }}

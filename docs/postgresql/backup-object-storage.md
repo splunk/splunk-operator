@@ -46,7 +46,7 @@ The Splunk Operator surfaces backup state on `PostgresCluster.status.backupStatu
 
 ## 2. Prerequisites
 
-- The **barman-cloud CNPG plugin** (`barmancloud.cnpg.io/v1 ObjectStore` CRD) must be installed on the cluster. It is not bundled with the Splunk Operator — install it separately via Helm if not already present:
+- The **barman-cloud CNPG plugin** (`barmancloud.cnpg.io/v1 ObjectStore` CRD) must be installed on the cluster. The SOK Helm chart can install it with `plugin-barman-cloud.enabled=true`; see [shared-cluster setup](shared-cluster.md). When managing backends separately, install the plugin before creating PostgreSQL resources:
   ```bash
   helm upgrade --install barman-cloud cnpg/plugin-barman-cloud \
     --namespace cnpg-system --create-namespace
