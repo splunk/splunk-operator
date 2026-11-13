@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func TestBundleAndHelmSchemasExposeTheSamePlacementPolicy(t *testing.T) {
+func TestBaseAndBundleSchemasExposeTheSamePlacementPolicy(t *testing.T) {
 	var schemas []apiextv1.CustomResourceDefinition
 	for _, path := range []string{
 		"../../../../config/crd/bases/platform.splunk.com_postgresclusterclasses.yaml",

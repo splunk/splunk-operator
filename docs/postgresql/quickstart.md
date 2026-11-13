@@ -339,8 +339,16 @@ spec:
       tolerations: []
 ```
 
-Omitting these fields preserves existing storage selection and independently
-managed placement. Class policy is immutable; create a new class for a different
+Omitting `storageClass` preserves existing storage selection; `storageClass: ""`
+explicitly disables default-class selection for new PVCs. Omitting `affinity`
+preserves existing placement. An explicit `affinity: {}` enables preferred
+anti-affinity on `kubernetes.io/hostname` and clears the class-owned node selector
+and tolerations. Other independently managed affinity fields are preserved.
+With ValidationWebhook enabled, class admission validates Kubernetes label syntax
+and CNPG toleration rules, including `NoExecute` for `tolerationSeconds` and an
+empty value for `operator: Exists`.
+
+Class policy is immutable; create a new class for a different
 policy. Changing a class does not migrate existing volumes. Placement applies to
 PostgreSQL instances; PgBouncer uses provider placement. Required anti-affinity
 needs an eligible node for every PostgreSQL instance.
