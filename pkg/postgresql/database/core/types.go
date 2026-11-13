@@ -60,6 +60,7 @@ const (
 
 	postgresDatabaseFinalizerName string = "postgresdatabases.platform.splunk.com/finalizer"
 	annotationRetainedFrom        string = "platform.splunk.com/retained-from"
+	annotationCredentialOwner     string = "platform.splunk.com/credential-owner"
 
 	secretRoleAdmin   string = "admin"
 	secretRoleRW      string = "rw"

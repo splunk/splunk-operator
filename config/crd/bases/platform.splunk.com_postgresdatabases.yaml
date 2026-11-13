@@ -196,13 +196,18 @@ spec:
                     name:
                       description: |-
                         Name of the PostgreSQL database to create. It must start with a lowercase
-                        letter and contain only lowercase letters and digits because it is also
-                        used to derive Kubernetes resource names. Underscores and hyphens are not
-                        allowed.
+                        letter, end with a lowercase letter or digit, and contain only lowercase
+                        letters, digits, and internal hyphens (including repeated hyphens).
+                        The -bg-<10 lowercase hex digits>- form is reserved for blue/green resources.
+                        The name is preserved in PostgreSQL and derived Kubernetes resources.
                       maxLength: 30
                       minLength: 1
-                      pattern: ^[a-z][a-z0-9]*$
+                      pattern: ^[a-z]([a-z0-9-]*[a-z0-9])?$
                       type: string
+                      x-kubernetes-validations:
+                      - message: the -bg-<10 lowercase hex digits>- name form is reserved
+                          for blue/green resources
+                        rule: '!self.matches(''-bg-[0-9a-f]{10}-'')'
                     passwordConfig:
                       description: |-
                         External Admin and RW secret configuration,

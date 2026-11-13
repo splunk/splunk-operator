@@ -31,7 +31,10 @@ type PostgresDatabaseMountInput struct {
 	Database      string
 }
 
-var postgresDatabaseNamePattern = regexp.MustCompile(`^[a-z][a-z0-9]{0,29}$`)
+var (
+	postgresDatabaseNamePattern         = regexp.MustCompile(`^[a-z]([a-z0-9-]*[a-z0-9])?$`)
+	postgresDatabaseReservedNamePattern = regexp.MustCompile(`-bg-[0-9a-f]{10}-`)
+)
 
 // ValidatePostgresDatabaseMounts checks names, reference syntax, database-based
 // file collisions, and the reserved workload volume without constructing objects.
@@ -57,8 +60,11 @@ func ValidatePostgresDatabaseMounts(mounts []PostgresDatabaseMountInput, volumeN
 		if len(validation.IsDNS1123Subdomain(mount.ReferenceName)) != 0 {
 			return fmt.Errorf("mount %q requires a valid postgresDatabaseRef.name", mount.Name)
 		}
-		if !postgresDatabaseNamePattern.MatchString(mount.Database) {
+		if len(mount.Database) > 30 || !postgresDatabaseNamePattern.MatchString(mount.Database) {
 			return fmt.Errorf("mount %q requires a valid database name", mount.Name)
+		}
+		if postgresDatabaseReservedNamePattern.MatchString(mount.Database) {
+			return fmt.Errorf("mount %q database name %q uses a name form reserved for blue/green resources", mount.Name, mount.Database)
 		}
 		if databases[mount.Database] {
 			return fmt.Errorf("database %q has conflicting PostgresDatabase bundle filenames", mount.Database)

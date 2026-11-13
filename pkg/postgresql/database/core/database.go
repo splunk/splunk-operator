@@ -19,7 +19,6 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
-	"slices"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -527,19 +526,11 @@ func handleDeletion(ctx context.Context, rc *ReconcileContext, postgresDB *platf
 	} else if err != nil {
 		return fmt.Errorf("getting PostgresCluster for database cleanup: %w", err)
 	}
-	var clusterCard *identitytypes.ClusterCard
-	if cluster != nil {
-		clusterCard, err = readReferencedClusterCard(ctx, rc, postgresDB)
-		if err != nil {
-			return fmt.Errorf("resolving PostgresCluster identity for database cleanup: %w", err)
-		}
-	}
-	environmentNames := databaseEnvironmentNames(clusterCard)
 	plan := buildDeletionPlan(postgresDB.Spec.Databases)
-	if err := orphanRetainedResources(ctx, c, postgresDB, plan.retained, environmentNames...); err != nil {
+	if err := orphanRetainedResources(ctx, c, postgresDB, plan.retained); err != nil {
 		return err
 	}
-	if err := deleteRemovedResources(ctx, c, postgresDB, plan.deleted, environmentNames...); err != nil {
+	if err := deleteRemovedResources(ctx, c, postgresDB, plan.deleted); err != nil {
 		return err
 	}
 	if err := cleanupManagedRoles(ctx, rc, postgresDB, cluster, plan); err != nil {
@@ -557,8 +548,8 @@ func handleDeletion(ctx context.Context, rc *ReconcileContext, postgresDB *platf
 	return nil
 }
 
-func orphanRetainedResources(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, retained []platformv1alpha1.DatabaseDefinition, environmentNames ...string) error {
-	if err := orphanCNPGDatabases(ctx, c, postgresDB, retained, environmentNames...); err != nil {
+func orphanRetainedResources(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, retained []platformv1alpha1.DatabaseDefinition) error {
+	if err := orphanCNPGDatabases(ctx, c, postgresDB, retained); err != nil {
 		return err
 	}
 	if err := orphanConfigMaps(ctx, c, postgresDB, retained); err != nil {
@@ -567,8 +558,8 @@ func orphanRetainedResources(ctx context.Context, c client.Client, postgresDB *p
 	return orphanSecrets(ctx, c, postgresDB, retained)
 }
 
-func deleteRemovedResources(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, deleted []platformv1alpha1.DatabaseDefinition, environmentNames ...string) error {
-	if err := deleteCNPGDatabases(ctx, c, postgresDB, deleted, environmentNames...); err != nil {
+func deleteRemovedResources(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, deleted []platformv1alpha1.DatabaseDefinition) error {
+	if err := deleteCNPGDatabases(ctx, c, postgresDB, deleted); err != nil {
 		return err
 	}
 	if err := deleteConfigMaps(ctx, c, postgresDB, deleted); err != nil {
@@ -622,7 +613,7 @@ func cleanupManagedRoles(ctx context.Context, rc *ReconcileContext, postgresDB *
 	return nil
 }
 
-func orphanCNPGDatabases(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition, environmentNames ...string) error {
+func orphanCNPGDatabases(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition) error {
 	logger := logging.FromContext(ctx)
 	owned, err := ownedCNPGDatabases(ctx, c, postgresDB, databases)
 	if err != nil {
@@ -642,32 +633,6 @@ func orphanCNPGDatabases(ctx context.Context, c client.Client, postgresDB *platf
 		}
 		logger.InfoContext(ctx, "CNPG Database orphaned", "name", db.Name)
 	}
-	for _, dbSpec := range databases {
-		for _, name := range cnpgDatabaseNamesForCleanup(postgresDB, dbSpec.Name, environmentNames...) {
-			db := &cnpgv1.Database{}
-			if err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: postgresDB.Namespace}, db); err != nil {
-				if errors.IsNotFound(err) {
-					continue
-				}
-				return fmt.Errorf("getting CNPG Database %s for orphaning: %w", name, err)
-			}
-			if !metav1.IsControlledBy(db, postgresDB) {
-				continue
-			}
-			if db.Annotations[annotationRetainedFrom] == postgresDB.Name {
-				continue
-			}
-			stripOwnerReference(db, postgresDB.UID)
-			if db.Annotations == nil {
-				db.Annotations = make(map[string]string)
-			}
-			db.Annotations[annotationRetainedFrom] = postgresDB.Name
-			if err := c.Update(ctx, db); err != nil {
-				return fmt.Errorf("orphaning CNPG Database %s: %w", name, err)
-			}
-			logger.InfoContext(ctx, "CNPG Database orphaned", "name", name)
-		}
-	}
 	return nil
 }
 
@@ -682,7 +647,7 @@ func orphanConfigMaps(ctx context.Context, c client.Client, postgresDB *platform
 			}
 			return fmt.Errorf("getting ConfigMap %s for orphaning: %w", name, err)
 		}
-		if cm.Annotations[annotationRetainedFrom] == postgresDB.Name {
+		if !metav1.IsControlledBy(cm, postgresDB) {
 			continue
 		}
 		stripOwnerReference(cm, postgresDB.UID)
@@ -714,7 +679,7 @@ func orphanSecrets(ctx context.Context, c client.Client, postgresDB *platformv1a
 				}
 				return fmt.Errorf("getting Secret %s for orphaning: %w", name, err)
 			}
-			if secret.Annotations[annotationRetainedFrom] == postgresDB.Name {
+			if !metav1.IsControlledBy(secret, postgresDB) {
 				continue
 			}
 			stripOwnerReference(secret, postgresDB.UID)
@@ -731,35 +696,17 @@ func orphanSecrets(ctx context.Context, c client.Client, postgresDB *platformv1a
 	return nil
 }
 
-func deleteCNPGDatabases(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition, environmentNames ...string) error {
+func deleteCNPGDatabases(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition) error {
 	logger := logging.FromContext(ctx)
 	owned, err := ownedCNPGDatabases(ctx, c, postgresDB, databases)
 	if err != nil {
 		return err
 	}
 	for _, db := range owned {
-		if err := c.Delete(ctx, db); err != nil && !errors.IsNotFound(err) {
+		if err := deleteObservedOwnedResource(ctx, c, postgresDB, db); err != nil {
 			return fmt.Errorf("deleting CNPG Database %s: %w", db.Name, err)
 		}
 		logger.InfoContext(ctx, "CNPG Database deleted", "name", db.Name)
-	}
-	for _, dbSpec := range databases {
-		for _, name := range cnpgDatabaseNamesForCleanup(postgresDB, dbSpec.Name, environmentNames...) {
-			db := &cnpgv1.Database{}
-			if err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: postgresDB.Namespace}, db); err != nil {
-				if errors.IsNotFound(err) {
-					continue
-				}
-				return fmt.Errorf("getting CNPG Database %s for deletion: %w", name, err)
-			}
-			if !metav1.IsControlledBy(db, postgresDB) {
-				continue
-			}
-			if err := c.Delete(ctx, db); err != nil && !errors.IsNotFound(err) {
-				return fmt.Errorf("deleting CNPG Database %s: %w", name, err)
-			}
-			logger.InfoContext(ctx, "CNPG Database deleted", "name", name)
-		}
 	}
 	return nil
 }
@@ -784,23 +731,17 @@ func ownedCNPGDatabases(ctx context.Context, c client.Client, postgresDB *platfo
 }
 
 func deleteConfigMaps(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition) error {
-	logger := logging.FromContext(ctx)
 	for _, dbSpec := range databases {
 		name := configMapName(postgresDB.Name, dbSpec.Name)
-		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: postgresDB.Namespace}}
-		if err := c.Delete(ctx, cm); err != nil {
-			if errors.IsNotFound(err) {
-				continue
-			}
+		cm := &corev1.ConfigMap{Name: name, Namespace: postgresDB.Namespace}
+		if err := deleteOwnedResource(ctx, c, postgresDB, cm); err != nil {
 			return fmt.Errorf("deleting ConfigMap %s: %w", name, err)
 		}
-		logger.InfoContext(ctx, "ConfigMap deleted", "name", name)
 	}
 	return nil
 }
 
 func deleteSecrets(ctx context.Context, c client.Client, postgresDB *platformv1alpha1.PostgresDatabase, databases []platformv1alpha1.DatabaseDefinition) error {
-	logger := logging.FromContext(ctx)
 	for _, dbSpec := range databases {
 		// Do not delete externally managed Secrets; they may have other consumers.
 		if dbSpec.PasswordConfig != nil {
@@ -808,17 +749,34 @@ func deleteSecrets(ctx context.Context, c client.Client, postgresDB *platformv1a
 		}
 		for _, role := range []string{secretRoleAdmin, secretRoleRW} {
 			name := roleSecretName(postgresDB.Name, dbSpec.Name, role)
-			secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: postgresDB.Namespace}}
-			if err := c.Delete(ctx, secret); err != nil {
-				if errors.IsNotFound(err) {
-					continue
-				}
+			secret := &corev1.Secret{Name: name, Namespace: postgresDB.Namespace}
+			if err := deleteOwnedResource(ctx, c, postgresDB, secret); err != nil {
 				return fmt.Errorf("deleting Secret %s: %w", name, err)
 			}
-			logger.InfoContext(ctx, "secret deleted", "name", name)
 		}
 	}
 	return nil
+}
+
+// deleteOwnedResource checks the current owner and binds the delete to the
+// observed object version. A replacement or ownership change must be retried.
+func deleteOwnedResource(ctx context.Context, c client.Client, owner *platformv1alpha1.PostgresDatabase, obj client.Object) error {
+	if err := c.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	return deleteObservedOwnedResource(ctx, c, owner, obj)
+}
+
+// Delete the exact snapshot validated by the caller. Re-reading here could
+// switch to a replacement with the same owner but a different database name.
+func deleteObservedOwnedResource(ctx context.Context, c client.Client, owner *platformv1alpha1.PostgresDatabase, obj client.Object) error {
+	if !metav1.IsControlledBy(obj, owner) {
+		return nil
+	}
+	err := c.Delete(ctx, obj, client.Preconditions{
+		UID: new(obj.GetUID()), ResourceVersion: new(obj.GetResourceVersion()),
+	})
+	return client.IgnoreNotFound(err)
 }
 
 func roleCleanupTimedOut(postgresDB *platformv1alpha1.PostgresDatabase) bool {
@@ -985,7 +943,7 @@ func ensureSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, 
 	if secret == nil {
 		return createRoleSecret(ctx, c, scheme, postgresDB, roleName, secretName)
 	}
-	return reconcileExistingSecret(ctx, c, scheme, postgresDB, secretName, secret)
+	return reconcileExistingSecret(ctx, c, scheme, postgresDB, roleName, secretName, secret)
 }
 
 func ensureProvisionedSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, roleName, secretName string) error {
@@ -999,7 +957,7 @@ func ensureProvisionedSecret(ctx context.Context, c client.Client, scheme *runti
 			reason:  reasonManagedSecretMissing,
 		}
 	}
-	return reconcileExistingSecret(ctx, c, scheme, postgresDB, secretName, secret)
+	return reconcileExistingSecret(ctx, c, scheme, postgresDB, roleName, secretName, secret)
 }
 
 func isManagedSecretDriftReason(reason conditionReasons) bool {
@@ -1008,30 +966,42 @@ func isManagedSecretDriftReason(reason conditionReasons) bool {
 
 // reconcileExistingSecret only reconciles ownership — it never rewrites secret data.
 // Passwords must not be regenerated for existing credentials; CNPG and consumers hold live references.
-func reconcileExistingSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, secretName string, secret *corev1.Secret) error {
+func reconcileExistingSecret(ctx context.Context, c client.Client, scheme *runtime.Scheme, postgresDB *platformv1alpha1.PostgresDatabase, roleName, secretName string, secret *corev1.Secret) error {
 	logger := logging.FromContext(ctx)
-	switch {
-	case secret.Annotations[annotationRetainedFrom] == postgresDB.Name:
-		if err := adoptResource(ctx, c, scheme, postgresDB, secret); err != nil {
-			return err
-		}
-		logger.InfoContext(ctx, "secret re-adopted", "name", secretName)
+	credentialOwner := secret.Annotations[annotationCredentialOwner]
+	identityMatches := string(secret.Data[secretKeyUsername]) == roleName &&
+		(credentialOwner == postgresDB.Name || (credentialOwner == "" && hasPublishedSecretReference(postgresDB, secretName)))
+	if err := validateResourceAdoption(secret, postgresDB, identityMatches); err != nil {
+		return secretReconcileError{message: err.Error(), reason: reasonManagedSecretOwnershipConflict}
+	}
+	if metav1.IsControlledBy(secret, postgresDB) && credentialOwner == postgresDB.Name && secret.Annotations[annotationRetainedFrom] != postgresDB.Name {
 		return nil
-	case metav1.IsControlledBy(secret, postgresDB):
-		return nil
-	case metav1.GetControllerOf(secret) == nil:
-		if err := adoptResource(ctx, c, scheme, postgresDB, secret); err != nil {
-			return err
-		}
-		logger.InfoContext(ctx, "secret adopted", "name", secretName)
-		return nil
-	default:
-		owner := metav1.GetControllerOf(secret)
-		return secretReconcileError{
-			message: fmt.Sprintf("Managed Secret %s is controlled by %s %s; remove the conflicting owner or restore operator ownership", secretName, owner.Kind, owner.Name),
-			reason:  reasonManagedSecretOwnershipConflict,
+	}
+	if secret.Annotations == nil {
+		secret.Annotations = make(map[string]string)
+	}
+	secret.Annotations[annotationCredentialOwner] = postgresDB.Name
+	if metav1.IsControlledBy(secret, postgresDB) {
+		delete(secret.Annotations, annotationRetainedFrom)
+		return c.Update(ctx, secret)
+	}
+	if err := adoptResource(ctx, c, scheme, postgresDB, secret); err != nil {
+		return err
+	}
+	logger.InfoContext(ctx, "secret ownership restored", "name", secretName)
+	return nil
+}
+
+// Published references let older credentials recover ownership without treating
+// a matching custom SQL role name as proof of their Kubernetes owner.
+func hasPublishedSecretReference(postgresDB *platformv1alpha1.PostgresDatabase, secretName string) bool {
+	for _, database := range postgresDB.Status.Databases {
+		if (database.AdminUserSecretRef != nil && database.AdminUserSecretRef.Name == secretName) ||
+			(database.RWUserSecretRef != nil && database.RWUserSecretRef.Name == secretName) {
+			return true
 		}
 	}
+	return false
 }
 
 func getSecret(ctx context.Context, c client.Client, namespace, name string) (*corev1.Secret, error) {
@@ -1057,7 +1027,11 @@ func createRoleSecret(ctx context.Context, c client.Client, scheme *runtime.Sche
 	}
 	if err := c.Create(ctx, secret); err != nil {
 		if errors.IsAlreadyExists(err) {
-			return nil
+			existing := &corev1.Secret{}
+			if err := c.Get(ctx, client.ObjectKeyFromObject(secret), existing); err != nil {
+				return err
+			}
+			return reconcileExistingSecret(ctx, c, scheme, postgresDB, roleName, secretName, existing)
 		}
 		return err
 	}
@@ -1065,14 +1039,29 @@ func createRoleSecret(ctx context.Context, c client.Client, scheme *runtime.Sche
 	return nil
 }
 
+// validateResourceAdoption permits recovery of this owner's retained resources
+// or an unowned object with the expected identity, never a foreign retention.
+func validateResourceAdoption(obj metav1.Object, owner *platformv1alpha1.PostgresDatabase, identityMatches bool) error {
+	if metav1.IsControlledBy(obj, owner) {
+		return nil
+	}
+	if controller := metav1.GetControllerOf(obj); controller != nil {
+		return fmt.Errorf("resource %s is controlled by %s %s; remove the conflicting owner or restore operator ownership", obj.GetName(), controller.Kind, controller.Name)
+	}
+	retainedFrom := obj.GetAnnotations()[annotationRetainedFrom]
+	if retainedFrom == owner.Name || (retainedFrom == "" && identityMatches) {
+		return nil
+	}
+	return fmt.Errorf("resource %s has a conflicting database identity or retention owner", obj.GetName())
+}
+
 func buildPasswordSecret(postgresDB *platformv1alpha1.PostgresDatabase, secretName, roleName, pw string) *corev1.Secret {
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: postgresDB.Namespace,
-			Labels:    map[string]string{labelManagedBy: "splunk-operator", labelCNPGReload: "true"},
-		},
-		Data: map[string][]byte{"username": []byte(roleName), secretKeyPassword: []byte(pw)},
+		Name:        secretName,
+		Namespace:   postgresDB.Namespace,
+		Labels:      map[string]string{labelManagedBy: "splunk-operator", labelCNPGReload: "true"},
+		Annotations: map[string]string{annotationCredentialOwner: postgresDB.Name},
+		Data:        map[string][]byte{"username": []byte(roleName), secretKeyPassword: []byte(pw)},
 	}
 }
 
@@ -1089,6 +1078,11 @@ func reconcileRoleConfigMaps(ctx context.Context, c client.Client, scheme *runti
 			},
 		}
 		_, err := controllerutil.CreateOrUpdate(ctx, c, cm, func() error {
+			if !cm.CreationTimestamp.IsZero() || cm.ResourceVersion != "" {
+				if err := validateResourceAdoption(cm, postgresDB, cm.Data[ConfigMapKeyDatabaseName] == dbSpec.Name); err != nil {
+					return err
+				}
+			}
 			data, _, err := buildDatabaseConfigMapDataForDatabase(dbSpec, endpoints)
 			if err != nil {
 				return fmt.Errorf("building ConfigMap data for database %s: %w", dbSpec.Name, err)
@@ -1309,49 +1303,6 @@ func cnpgDatabaseEnvironmentName(environment identitytypes.Environment) string {
 		return ""
 	}
 	return environment.Identity.Name
-}
-
-func cnpgDatabaseNameFromStatus(postgresDB *platformv1alpha1.PostgresDatabase, databaseName string) string {
-	for _, database := range postgresDB.Status.Databases {
-		if database.Name == databaseName && database.DatabaseRef != nil && database.DatabaseRef.Name != "" {
-			return database.DatabaseRef.Name
-		}
-	}
-	return cnpgDatabaseName(postgresDB.Name, databaseName)
-}
-
-func cnpgDatabaseNamesForCleanup(postgresDB *platformv1alpha1.PostgresDatabase, databaseName string, environmentNames ...string) []string {
-	names := make([]string, 0, len(environmentNames)+1)
-	seen := make(map[string]struct{}, len(environmentNames)+1)
-	add := func(name string) {
-		if name == "" {
-			return
-		}
-		if _, found := seen[name]; found {
-			return
-		}
-		seen[name] = struct{}{}
-		names = append(names, name)
-	}
-	add(cnpgDatabaseNameFromStatus(postgresDB, databaseName))
-	for _, environmentName := range environmentNames {
-		add(cnpgDatabaseResourceName(postgresDB, databaseName, environmentName))
-	}
-	return names
-}
-
-func databaseEnvironmentNames(cluster *identitytypes.ClusterCard) []string {
-	if cluster == nil {
-		return nil
-	}
-	names := make([]string, 0, len(cluster.Managed))
-	for _, environment := range cluster.Managed {
-		name := cnpgDatabaseEnvironmentName(environment)
-		if !slices.Contains(names, name) {
-			names = append(names, name)
-		}
-	}
-	return names
 }
 
 func roleSecretName(postgresDBName, dbName, role string) string {

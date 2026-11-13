@@ -2425,23 +2425,62 @@ var _ = Describe("PostgresDatabase Controller", Label("postgres"), func() {
 			Expect(err.Error()).To(ContainSubstring("extensions cannot be managed when allowConnections is false"))
 		})
 
-		It("rejects database names containing underscores or hyphens", func() {
-			for i, databaseName := range []string{"my_db", "_mydb", "my__db", "my-db", "-mydb", "my--db"} {
+		It("accepts internal hyphens and preserves database name boundaries on create and update", func() {
+			for i, databaseName := range []string{"a", "appdb", "tenant1", "tenant-abc", "tenant--abc", "a--1", strings.Repeat("a", 30), "a" + strings.Repeat("-", 28) + "1", "tenant-bg-dev", "tenant-bg-0123456789", "bg-0123456789-c", "a-bg-012345678-c", "a-bg-01234567890-c", "a-bg-012345678g-c"} {
 				postgresDB := &platformv1alpha1.PostgresDatabase{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      fmt.Sprintf("invalid-database-name-%d", i),
-						Namespace: namespace,
-					},
+					Name: fmt.Sprintf("valid-database-name-%d", i), Namespace: namespace,
 					Spec: platformv1alpha1.PostgresDatabaseSpec{
 						ClusterRef: corev1.LocalObjectReference{Name: "tenant-cluster"},
 						Databases:  []platformv1alpha1.DatabaseDefinition{{Name: databaseName}},
 					},
 				}
+				Expect(k8sClient.Create(ctx, postgresDB)).To(Succeed(), "name: %s", databaseName)
+				postgresDB.Spec.Databases[0].ConnectionLimit = new(int32(10))
+				Expect(k8sClient.Update(ctx, postgresDB)).To(Succeed(), "name: %s", databaseName)
+			}
+		})
 
+		It("rejects database names reserved for blue/green resources on create and update", func() {
+			for i, databaseName := range []string{"primary-bg-0123456789-c", "a-bg-abcdef0123-x", "tenant--bg-0123456789--abc"} {
+				postgresDB := &platformv1alpha1.PostgresDatabase{
+					Name: fmt.Sprintf("reserved-database-name-%d", i), Namespace: namespace,
+					Spec: platformv1alpha1.PostgresDatabaseSpec{
+						ClusterRef: corev1.LocalObjectReference{Name: "primary"},
+						Databases:  []platformv1alpha1.DatabaseDefinition{{Name: "c"}, {Name: databaseName}},
+					},
+				}
 				err := k8sClient.Create(ctx, postgresDB)
-				Expect(err).To(HaveOccurred())
+				Expect(apierrors.IsInvalid(err)).To(BeTrue(), "name: %q, error: %v", databaseName, err)
+				Expect(err.Error()).To(ContainSubstring("spec.databases[1].name"))
+				Expect(err.Error()).To(ContainSubstring("reserved for blue/green resources"))
+				postgresDB.Spec.Databases[1].Name = "tenant--abc"
+				Expect(k8sClient.Create(ctx, postgresDB)).To(Succeed())
+				postgresDB.Spec.Databases[1].Name = databaseName
+				err = k8sClient.Update(ctx, postgresDB)
+				Expect(apierrors.IsInvalid(err)).To(BeTrue(), "name: %q, error: %v", databaseName, err)
+				Expect(err.Error()).To(ContainSubstring("spec.databases[1].name"))
+				Expect(err.Error()).To(ContainSubstring("reserved for blue/green resources"))
+			}
+		})
+
+		It("rejects unsupported database names on create and update", func() {
+			for i, databaseName := range []string{"", "my_db", "_mydb", "my__db", "-mydb", "mydb-", "mydb--", "1mydb", "Mydb", "my.db", "my db", `my"db`, "my/db", strings.Repeat("a", 31)} {
+				postgresDB := &platformv1alpha1.PostgresDatabase{
+					Name: fmt.Sprintf("invalid-database-name-%d", i), Namespace: namespace,
+					Spec: platformv1alpha1.PostgresDatabaseSpec{
+						ClusterRef: corev1.LocalObjectReference{Name: "tenant-cluster"},
+						Databases:  []platformv1alpha1.DatabaseDefinition{{Name: databaseName}},
+					},
+				}
+				err := k8sClient.Create(ctx, postgresDB)
+				Expect(apierrors.IsInvalid(err)).To(BeTrue(), "name: %q, error: %v", databaseName, err)
 				Expect(err.Error()).To(ContainSubstring("spec.databases[0].name"))
-				Expect(err.Error()).To(ContainSubstring("should match '^[a-z][a-z0-9]*$'"))
+				postgresDB.Spec.Databases[0].Name = "appdb"
+				Expect(k8sClient.Create(ctx, postgresDB)).To(Succeed())
+				postgresDB.Spec.Databases[0].Name = databaseName
+				err = k8sClient.Update(ctx, postgresDB)
+				Expect(apierrors.IsInvalid(err)).To(BeTrue(), "name: %q, error: %v", databaseName, err)
+				Expect(err.Error()).To(ContainSubstring("spec.databases[0].name"))
 			}
 		})
 

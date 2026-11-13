@@ -41,6 +41,7 @@ func TestValidatePostgresDatabaseMounts(t *testing.T) {
 		{name: "empty database", change: func(s *PostgresDatabaseMountInput) { s.Database = "" }, want: "requires a valid database name"},
 		{name: "invalid database", change: func(s *PostgresDatabaseMountInput) { s.Database = "app_data" }, want: "requires a valid database name"},
 		{name: "long database", change: func(s *PostgresDatabaseMountInput) { s.Database = strings.Repeat("a", 31) }, want: "requires a valid database name"},
+		{name: "blue/green database alias", change: func(s *PostgresDatabaseMountInput) { s.Database = "primary-bg-0123456789-c" }, want: "reserved for blue/green resources"},
 		{name: "reserved volume", volumeNames: []string{common.PostgresDatabaseVolumeName}, want: "is reserved for PostgresDatabase bundles"},
 		{name: "duplicate", duplicate: true, want: "duplicate PostgresDatabase mount name"},
 	} {
@@ -68,4 +69,13 @@ func TestValidatePostgresDatabaseMounts(t *testing.T) {
 	}
 	require.NoError(t, ValidatePostgresDatabaseMounts(maximum, nil))
 	require.ErrorContains(t, ValidatePostgresDatabaseMounts(append(maximum, valid), nil), "at most 10 entries")
+}
+
+func TestPostgresDatabaseMountNameBoundaries(t *testing.T) {
+	for _, name := range []string{"a", "appdb", "tenant-abc", "tenant--abc", "a--1", "a" + strings.Repeat("-", 28) + "1", "tenant-bg-dev", "tenant-bg-0123456789", "bg-0123456789-c", "a-bg-012345678-c", "a-bg-01234567890-c", "a-bg-012345678g-c"} {
+		require.NoError(t, ValidatePostgresDatabaseMounts([]PostgresDatabaseMountInput{{Name: "mount", ReferenceName: "database", Database: name}}, nil), name)
+	}
+	for _, name := range []string{"", "-tenant", "tenant-", "1tenant", "Tenant", "tenant_db", "tenant.db", "tenant db", strings.Repeat("a", 31), "primary-bg-0123456789-c", "a-bg-abcdef0123-x", "tenant--bg-0123456789--abc"} {
+		require.Error(t, ValidatePostgresDatabaseMounts([]PostgresDatabaseMountInput{{Name: "mount", ReferenceName: "database", Database: name}}, nil), name)
+	}
 }

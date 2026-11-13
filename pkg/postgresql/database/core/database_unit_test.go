@@ -545,6 +545,56 @@ func TestPostgresDatabaseServiceSkipsPendingPhaseDuringDeletion(t *testing.T) {
 	assert.Nil(t, statusPhase)
 }
 
+func TestPostgresDatabaseDeletionDoesNotRequireClusterIdentity(t *testing.T) {
+	for _, policy := range []string{"Retain", "Delete"} {
+		t.Run(policy, func(t *testing.T) {
+			scheme := testScheme(t)
+			owner := &platformv1alpha1.PostgresDatabase{
+				Name: "primary", Namespace: "dbs", UID: "owner", Generation: 1,
+				DeletionTimestamp: new(metav1.Now()), Finalizers: []string{postgresDatabaseFinalizerName, "test.platform.splunk.com/hold"},
+				Spec: platformv1alpha1.PostgresDatabaseSpec{
+					ClusterRef: corev1.LocalObjectReference{Name: "cluster"},
+					Databases:  []platformv1alpha1.DatabaseDefinition{{Name: "payments", DeletionPolicy: policy}},
+				},
+			}
+			cluster := &platformv1alpha1.PostgresCluster{
+				Name: "cluster", Namespace: owner.Namespace,
+				Status: platformv1alpha1.PostgresClusterStatus{ManagedRolesStatus: &platformv1alpha1.ManagedRolesStatus{
+					RoleOwners: map[string]platformv1alpha1.RoleOwnerReference{
+						"payments_admin": {Name: owner.Name, UID: string(owner.UID)},
+						"payments_rw":    {Name: owner.Name, UID: string(owner.UID)},
+					},
+				}},
+			}
+			database := &cnpgv1.Database{Name: "unrecorded-retired-environment-payments", Namespace: owner.Namespace,
+				Spec: cnpgv1.DatabaseSpec{Name: "payments"}}
+			require.NoError(t, controllerutil.SetControllerReference(owner, database, scheme))
+			c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(owner, cluster).WithObjects(owner, cluster, database).Build()
+
+			result, err := reconcilePostgresDatabaseServiceForTest(t.Context(), c, scheme, owner)
+			require.NoError(t, err)
+			if policy == "Delete" {
+				assert.Equal(t, ctrl.Result{RequeueAfter: retryDelay}, result)
+				require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(owner), owner))
+				assert.Contains(t, owner.Finalizers, postgresDatabaseFinalizerName, "managed-role cleanup must still gate finalization")
+				assert.True(t, apierrors.IsNotFound(c.Get(t.Context(), client.ObjectKeyFromObject(database), &cnpgv1.Database{})))
+				cluster.Status.ManagedRolesStatus.RoleOwners = nil
+				require.NoError(t, c.Status().Update(t.Context(), cluster))
+				result, err = reconcilePostgresDatabaseServiceForTest(t.Context(), c, scheme, owner)
+				require.NoError(t, err)
+			} else {
+				retained := &cnpgv1.Database{}
+				require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(database), retained))
+				assert.False(t, metav1.IsControlledBy(retained, owner))
+				assert.Equal(t, owner.Name, retained.Annotations[annotationRetainedFrom])
+			}
+			assert.Equal(t, ctrl.Result{}, result)
+			require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(owner), owner))
+			assert.NotContains(t, owner.Finalizers, postgresDatabaseFinalizerName)
+		})
+	}
+}
+
 // TestPostgresDatabaseServiceTerminalOnMissingExternalSecret verifies that a
 // referenced-but-absent external role secret surfaces as a reconcile.TerminalError
 // from the service entry point. The operator only consumes external secrets, so a
@@ -2112,6 +2162,7 @@ func TestOrphanResourceHelpers(t *testing.T) {
 
 	t.Run("orphanCNPGDatabases strips owner and adds retain annotation", func(t *testing.T) {
 		db := &cnpgv1.Database{
+			Spec: cnpgv1.DatabaseSpec{Name: "payments"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "primary-payments",
 				Namespace: "dbs",
@@ -2132,8 +2183,9 @@ func TestOrphanResourceHelpers(t *testing.T) {
 		assert.Equal(t, types.UID("other"), updated.OwnerReferences[0].UID)
 	})
 
-	t.Run("orphanCNPGDatabases uses the active environment name", func(t *testing.T) {
+	t.Run("orphanCNPGDatabases finds owned active environment resources", func(t *testing.T) {
 		db := &cnpgv1.Database{
+			Spec: cnpgv1.DatabaseSpec{Name: "payments"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            "primary-green-payments",
 				Namespace:       "dbs",
@@ -2142,32 +2194,32 @@ func TestOrphanResourceHelpers(t *testing.T) {
 		}
 		c := testClient(t, scheme, db)
 
-		require.NoError(t, orphanCNPGDatabases(t.Context(), c, postgresDB, databases, "green"))
+		require.NoError(t, orphanCNPGDatabases(t.Context(), c, postgresDB, databases))
 		updated := &cnpgv1.Database{}
 		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, updated))
 		assert.Empty(t, updated.OwnerReferences)
 		assert.Equal(t, postgresDB.Name, updated.Annotations[annotationRetainedFrom])
 	})
 
-	t.Run("orphanCNPGDatabases checks the recorded and every known environment name", func(t *testing.T) {
+	t.Run("orphanCNPGDatabases finds both recorded and historical owned resources", func(t *testing.T) {
 		scopedPostgresDB := postgresDB.DeepCopy()
 		scopedPostgresDB.Status.Databases = []platformv1alpha1.DatabaseInfo{{
 			Name:        "payments",
 			DatabaseRef: &corev1.LocalObjectReference{Name: "primary-green-payments"},
 		}}
-		blue := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+		blue := &cnpgv1.Database{Spec: cnpgv1.DatabaseSpec{Name: "payments"}, ObjectMeta: metav1.ObjectMeta{
 			Name:            "primary-blue-payments",
 			Namespace:       "dbs",
 			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: new(true)}},
 		}}
-		green := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+		green := &cnpgv1.Database{Spec: cnpgv1.DatabaseSpec{Name: "payments"}, ObjectMeta: metav1.ObjectMeta{
 			Name:            "primary-green-payments",
 			Namespace:       "dbs",
 			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: new(true)}},
 		}}
 		c := testClient(t, scheme, blue, green)
 
-		require.NoError(t, orphanCNPGDatabases(t.Context(), c, scopedPostgresDB, databases, "blue", "green"))
+		require.NoError(t, orphanCNPGDatabases(t.Context(), c, scopedPostgresDB, databases))
 		for _, name := range []string{blue.Name, green.Name} {
 			updated := &cnpgv1.Database{}
 			require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: name, Namespace: "dbs"}, updated))
@@ -2177,7 +2229,7 @@ func TestOrphanResourceHelpers(t *testing.T) {
 	})
 
 	t.Run("orphanCNPGDatabases leaves a foreign historical name untouched", func(t *testing.T) {
-		foreign := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+		foreign := &cnpgv1.Database{Spec: cnpgv1.DatabaseSpec{Name: "payments"}, ObjectMeta: metav1.ObjectMeta{
 			Name:      "primary-green-payments",
 			Namespace: "dbs",
 			OwnerReferences: []metav1.OwnerReference{{
@@ -2186,7 +2238,7 @@ func TestOrphanResourceHelpers(t *testing.T) {
 		}}
 		c := testClient(t, scheme, foreign)
 
-		require.NoError(t, orphanCNPGDatabases(t.Context(), c, postgresDB, databases, "green"))
+		require.NoError(t, orphanCNPGDatabases(t.Context(), c, postgresDB, databases))
 		updated := &cnpgv1.Database{}
 		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: foreign.Name, Namespace: foreign.Namespace}, updated))
 		assert.Equal(t, foreign.OwnerReferences, updated.OwnerReferences)
@@ -2277,7 +2329,7 @@ func TestDeleteResourceHelpers(t *testing.T) {
 	databases := []platformv1alpha1.DatabaseDefinition{{Name: "payments"}}
 
 	t.Run("deleteCNPGDatabases removes existing object", func(t *testing.T) {
-		db := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+		db := &cnpgv1.Database{Spec: cnpgv1.DatabaseSpec{Name: "payments"}, ObjectMeta: metav1.ObjectMeta{
 			Name: "primary-payments", Namespace: "dbs",
 			OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: new(true)}},
 		}}
@@ -2285,34 +2337,34 @@ func TestDeleteResourceHelpers(t *testing.T) {
 		require.NoError(t, deleteCNPGDatabases(t.Context(), c, postgresDB, databases))
 	})
 
-	t.Run("deleteCNPGDatabases uses the active environment name", func(t *testing.T) {
-		db := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+	t.Run("deleteCNPGDatabases finds owned active environment resources", func(t *testing.T) {
+		db := &cnpgv1.Database{Spec: cnpgv1.DatabaseSpec{Name: "payments"}, ObjectMeta: metav1.ObjectMeta{
 			Name: "primary-green-payments", Namespace: "dbs",
 			OwnerReferences: []metav1.OwnerReference{{UID: postgresDB.UID, Name: postgresDB.Name, Controller: new(true)}},
 		}}
 		c := testClient(t, scheme, db)
-		require.NoError(t, deleteCNPGDatabases(t.Context(), c, postgresDB, databases, "green"))
+		require.NoError(t, deleteCNPGDatabases(t.Context(), c, postgresDB, databases))
 		err := c.Get(t.Context(), types.NamespacedName{Name: db.Name, Namespace: db.Namespace}, &cnpgv1.Database{})
 		assert.True(t, apierrors.IsNotFound(err))
 	})
 
-	t.Run("deleteCNPGDatabases checks the recorded and every known environment name", func(t *testing.T) {
+	t.Run("deleteCNPGDatabases finds both recorded and historical owned resources", func(t *testing.T) {
 		scopedPostgresDB := postgresDB.DeepCopy()
 		scopedPostgresDB.Status.Databases = []platformv1alpha1.DatabaseInfo{{
 			Name:        "payments",
 			DatabaseRef: &corev1.LocalObjectReference{Name: "primary-green-payments"},
 		}}
-		blue := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+		blue := &cnpgv1.Database{Spec: cnpgv1.DatabaseSpec{Name: "payments"}, ObjectMeta: metav1.ObjectMeta{
 			Name: "primary-blue-payments", Namespace: "dbs",
 			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: new(true)}},
 		}}
-		green := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+		green := &cnpgv1.Database{Spec: cnpgv1.DatabaseSpec{Name: "payments"}, ObjectMeta: metav1.ObjectMeta{
 			Name: "primary-green-payments", Namespace: "dbs",
 			OwnerReferences: []metav1.OwnerReference{{UID: scopedPostgresDB.UID, Name: scopedPostgresDB.Name, Controller: new(true)}},
 		}}
 		c := testClient(t, scheme, blue, green)
 
-		require.NoError(t, deleteCNPGDatabases(t.Context(), c, scopedPostgresDB, databases, "blue", "green"))
+		require.NoError(t, deleteCNPGDatabases(t.Context(), c, scopedPostgresDB, databases))
 		for _, name := range []string{blue.Name, green.Name} {
 			err := c.Get(t.Context(), types.NamespacedName{Name: name, Namespace: "dbs"}, &cnpgv1.Database{})
 			assert.True(t, apierrors.IsNotFound(err))
@@ -2320,7 +2372,7 @@ func TestDeleteResourceHelpers(t *testing.T) {
 	})
 
 	t.Run("deleteCNPGDatabases leaves a foreign historical name untouched", func(t *testing.T) {
-		foreign := &cnpgv1.Database{ObjectMeta: metav1.ObjectMeta{
+		foreign := &cnpgv1.Database{Spec: cnpgv1.DatabaseSpec{Name: "payments"}, ObjectMeta: metav1.ObjectMeta{
 			Name:      "primary-green-payments",
 			Namespace: "dbs",
 			OwnerReferences: []metav1.OwnerReference{{
@@ -2329,7 +2381,7 @@ func TestDeleteResourceHelpers(t *testing.T) {
 		}}
 		c := testClient(t, scheme, foreign)
 
-		require.NoError(t, deleteCNPGDatabases(t.Context(), c, postgresDB, databases, "green"))
+		require.NoError(t, deleteCNPGDatabases(t.Context(), c, postgresDB, databases))
 		updated := &cnpgv1.Database{}
 		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: foreign.Name, Namespace: foreign.Namespace}, updated))
 		assert.Equal(t, foreign.OwnerReferences, updated.OwnerReferences)
@@ -2364,8 +2416,13 @@ func TestDeleteResourceHelpers(t *testing.T) {
 	t.Run("deleteSecrets deletes admin and rw secrets", func(t *testing.T) {
 		admin := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "primary-payments-admin", Namespace: "dbs"}}
 		rw := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "primary-payments-rw", Namespace: "dbs"}}
+		require.NoError(t, controllerutil.SetControllerReference(postgresDB, admin, scheme))
+		require.NoError(t, controllerutil.SetControllerReference(postgresDB, rw, scheme))
 		c := testClient(t, scheme, admin, rw)
 		require.NoError(t, deleteSecrets(t.Context(), c, postgresDB, databases))
+		for _, secret := range []*corev1.Secret{admin, rw} {
+			assert.True(t, apierrors.IsNotFound(c.Get(t.Context(), client.ObjectKeyFromObject(secret), &corev1.Secret{})))
+		}
 	})
 
 	t.Run("deleteSecrets never deletes external secrets", func(t *testing.T) {
@@ -2390,18 +2447,6 @@ func TestDeleteResourceHelpers(t *testing.T) {
 		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: external.Name, Namespace: external.Namespace}, survivor),
 			"external secret must survive PostgresDatabase deletion")
 	})
-}
-
-func TestDatabaseEnvironmentNamesUsesResolvedCard(t *testing.T) {
-	card := &identitytypes.ClusterCard{Managed: []identitytypes.Environment{
-		{Identity: identitytypes.ObjectIdentity{Name: "primary"}, Role: identitytypes.EnvironmentRoleRetained, Scope: identitytypes.NamingScopeConventional},
-		{Identity: identitytypes.ObjectIdentity{Name: "primary-green"}, Role: identitytypes.EnvironmentRoleAuthoritative, Scope: identitytypes.NamingScopeEnvironment},
-		{Identity: identitytypes.ObjectIdentity{Name: "primary-next"}, Role: identitytypes.EnvironmentRoleCandidate, Scope: identitytypes.NamingScopeEnvironment},
-	}}
-
-	names := databaseEnvironmentNames(card)
-
-	assert.Equal(t, []string{"", "primary-green", "primary-next"}, names)
 }
 
 func TestGeneratePassword(t *testing.T) {
@@ -2472,7 +2517,7 @@ func TestCreateRoleSecret(t *testing.T) {
 		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: secretName, Namespace: postgresDB.Namespace}, got))
 		assert.Equal(t, wantRolename, string(got.Data["username"]))
 		assert.Equal(t, wantPassword, string(got.Data[secretKeyPassword]))
-		assert.Empty(t, got.OwnerReferences)
+		assert.True(t, metav1.IsControlledBy(got, postgresDB))
 	})
 }
 
@@ -2624,6 +2669,8 @@ func TestEnsureSecret(t *testing.T) {
 	})
 
 	t.Run("re-attaches owner reference when ownership was manually stripped", func(t *testing.T) {
+		postgresDB := postgresDB.DeepCopy()
+		postgresDB.Status.Databases = []platformv1alpha1.DatabaseInfo{{Name: "payments", AdminUserSecretRef: &corev1.SecretKeySelector{Name: "primary-payments-admin"}}}
 		roleName := "payments_admin"
 		secretName := "primary-payments-admin"
 		existing := &corev1.Secret{
@@ -2663,7 +2710,7 @@ func TestEnsureSecret(t *testing.T) {
 				Name:      secretName,
 				Namespace: postgresDB.Namespace,
 				OwnerReferences: []metav1.OwnerReference{
-					{UID: postgresDB.UID, Name: postgresDB.Name},
+					{UID: postgresDB.UID, Name: postgresDB.Name, Controller: new(true)},
 				},
 			},
 			Data: map[string][]byte{
@@ -3810,6 +3857,7 @@ func TestReconcileReplacesRecoveredMessageWhilePrivilegeBootstrapFails(t *testin
 	// privilege bootstrap has also completed.
 	cnpgDB := &cnpgv1.Database{
 		ObjectMeta: metav1.ObjectMeta{Name: cnpgDatabaseResourceName(postgresDB, "payments", "primary-cnpg"), Namespace: requestName.Namespace},
+		Spec:       cnpgv1.DatabaseSpec{Name: "payments", ClusterRef: corev1.LocalObjectReference{Name: "primary-cnpg"}},
 		Status:     cnpgv1.DatabaseStatus{Applied: boolPtr(true)},
 	}
 	ownerRef := metav1.OwnerReference{APIVersion: platformv1alpha1.GroupVersion.String(), Kind: "PostgresDatabase", Name: requestName.Name, UID: postgresDB.UID, Controller: boolPtr(true), BlockOwnerDeletion: boolPtr(true)}
