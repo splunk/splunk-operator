@@ -211,6 +211,7 @@ type TestEnv struct {
 	licenseCMName              string
 	s3IndexSecret              string
 	kubeClient                 client.Client
+	kubeAPIReader              client.Reader
 	Log                        logr.Logger
 	cleanupFuncs               []cleanupFunc
 	debug                      string
@@ -244,6 +245,17 @@ func init() {
 // GetKubeClient returns the kube client to talk to kube-apiserver
 func (testenv *TestEnv) GetKubeClient() client.Client {
 	return testenv.kubeClient
+}
+
+// GetAPIReader returns a direct (uncached) reader against the kube-apiserver. Unlike
+// GetKubeClient's manager-cache-backed client, this issues a live Get with no underlying
+// list/watch informer, so it only needs "get" RBAC on the exact object, not "list"/"watch" at
+// whatever scope the shared manager cache happens to be configured for. Needed by read-only,
+// attach-to-existing-env suites (e.g. scs_sanity) checking cluster-scoped-by-default resource
+// types (e.g. coordination.k8s.io Leases) that a namespace-scoped caller/service-account can
+// read individually but cannot list/watch cluster-wide.
+func (testenv *TestEnv) GetAPIReader() client.Reader {
+	return testenv.kubeAPIReader
 }
 
 // NewDefaultTestEnv creates a default test environment
@@ -341,6 +353,10 @@ func NewTestEnv(name, commitHash, operatorImage, splunkImage, licenseFilePath st
 	testenv.kubeClient = kubeManager.GetClient()
 	if testenv.kubeClient == nil {
 		return nil, fmt.Errorf("kubeClient is nil")
+	}
+	testenv.kubeAPIReader = kubeManager.GetAPIReader()
+	if testenv.kubeAPIReader == nil {
+		return nil, fmt.Errorf("kubeAPIReader is nil")
 	}
 
 	// We need to start the manager to setup the cache. Otherwise, we have to

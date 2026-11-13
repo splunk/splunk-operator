@@ -50,7 +50,7 @@ func SetupTestCaseEnv(testenvInstance *TestEnv, namePrefix string, opts ...Setup
 	}
 
 	name := buildTestCaseEnvName(namePrefix, testenvInstance.GetName(), RandomDNSName(3))
-	testcaseEnvInst, err := NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), name)
+	testcaseEnvInst, err := NewDefaultTestCaseEnv(testenvInstance.GetKubeClient(), testenvInstance.GetAPIReader(), name)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to create testcaseenv: %w", err)
 	}
