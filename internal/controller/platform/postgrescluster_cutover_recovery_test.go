@@ -126,3 +126,40 @@ func TestMajorUpgradeFactoryReturnsConstructionErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestFreshCancellationUsesRealFactoryWithoutClass(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, platformv1alpha1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, cnpgv1.AddToScheme(scheme))
+	parent := &platformv1alpha1.PostgresCluster{Name: "orders", Namespace: "default", UID: "parent-uid", Generation: 3,
+		Spec: platformv1alpha1.PostgresClusterSpec{Class: "missing-class", PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Allow: new(false), Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen), BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeConfig{Cancel: new(true)}}}}
+	owner := *metav1.NewControllerRef(parent, platformv1alpha1.GroupVersion.WithKind("PostgresCluster"))
+	blue := &cnpgv1.Cluster{Name: "blue", Namespace: parent.Namespace, UID: "blue-uid", OwnerReferences: []metav1.OwnerReference{owner}}
+	green := &cnpgv1.Cluster{Name: "green", Namespace: parent.Namespace, UID: "green-uid", OwnerReferences: []metav1.OwnerReference{owner}, Labels: map[string]string{"platform.splunk.com/blue-green-attempt": "attempt"}}
+	bg := &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt", Blue: &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: corev1.ObjectReference{Name: blue.Name, Namespace: blue.Namespace, UID: blue.UID}}, Green: &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: corev1.ObjectReference{Name: green.Name, Namespace: green.Namespace, UID: green.UID}}}
+	parent.Status.ProvisionerRef = bg.Blue.Ref.DeepCopy()
+	parent.Status.Resources = &platformv1alpha1.PostgresClusterResources{ConfigMapRef: &corev1.LocalObjectReference{Name: "access"}}
+	parent.Status.PostgresMajorUpgradeStatus = []platformv1alpha1.PostgresMajorUpgradeStatus{{Phase: new(string(mvutypes.ReadyForSwitchover)), SourcePgVersion: new("17"), TargetPgVersion: new("18"), Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen), BlueGreen: bg}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(parent).WithObjects(parent, blue, green).Build()
+	r := &PostgresClusterReconciler{Client: c, APIReader: c, Scheme: scheme, Recorder: record.NewFakeRecorder(20)}
+	for range 2 {
+		_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(parent)})
+		require.NoError(t, err)
+	}
+	fresh := new(platformv1alpha1.PostgresCluster)
+	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(parent), fresh))
+	entry := fresh.Status.PostgresMajorUpgradeStatus[0]
+	require.Equal(t, string(mvutypes.Cancelling), *entry.Phase)
+	require.NotNil(t, entry.BlueGreen.Gates.Cancellation.RequestedAt)
+	assert.NotNil(t, entry.BlueGreen.Gates.Cancellation.SourceAccessRestoredAt, "the production factory must permit subsequent cancellation progress")
+	assert.Nil(t, fresh.Spec.PostgresVersion)
+	assert.False(t, *fresh.Spec.PostgresMajorUpgradeConfig.Allow)
+}
+
+func TestFreshCancellationCannotBypassFactoryWithoutExistingAttempt(t *testing.T) {
+	parent := &platformv1alpha1.PostgresCluster{Spec: platformv1alpha1.PostgresClusterSpec{PostgresMajorUpgradeConfig: &platformv1alpha1.PostgresMajorUpgradeConfig{Strategy: new(mvutypes.MajorUpgradeFlowBlueGreen), BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeConfig{Cancel: new(true)}}}}
+	r := &PostgresClusterReconciler{}
+	_, err := r.newMajorUpgradeUseCase(client.ObjectKey{}, parent, nil)()
+	require.ErrorContains(t, err, "resolve major-upgrade target image")
+}

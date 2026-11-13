@@ -103,6 +103,7 @@ const (
 	ConditionMajorUpgradeProgressing      = "MajorUpgradeProgressing"
 	ConditionMajorUpgradeRetryableFailure = "MajorUpgradeRetryableFailure"
 	ConditionMajorUpgradeTerminalFailure  = "MajorUpgradeTerminalFailure"
+	ConditionMajorUpgradeRetryConsumed    = "MajorUpgradeRetryConsumed"
 	ConditionMajorUpgradeCompleted        = "MajorUpgradeCompleted"
 	ConditionReadyToStart                 = "ReadyToStart"
 	ConditionReadyForSwitchover           = "ReadyForSwitchover"

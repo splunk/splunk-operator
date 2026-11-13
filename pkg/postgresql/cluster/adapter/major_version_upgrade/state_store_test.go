@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -1465,5 +1466,79 @@ func TestCancellationSavedConditionsReplaceFailedAttemptWithoutRetry(t *testing.
 			assert.Nil(t, meta.FindStatusCondition(conditions, mvutypes.ConditionMajorUpgradeRetryableFailure))
 		}
 		intent.State = fresh.Status.PostgresMajorUpgradeStatus
+	}
+}
+
+func TestRetriedFailureNeedsANewerRetryTimestamp(t *testing.T) {
+	failedAt := metav1.NewTime(time.Now().Add(-time.Hour).Truncate(time.Second))
+	retryAt := metav1.NewTime(failedAt.Add(time.Minute))
+	strategy := mvutypes.MajorUpgradeFlowPgUpgrade
+	entry := platformv1alpha1.PostgresMajorUpgradeStatus{Strategy: &strategy, SourcePgVersion: ptr.To("17"), TargetPgVersion: ptr.To("18"),
+		Phase:      ptr.To(string(mvutypes.Failed)),
+		Conditions: []metav1.Condition{{Type: mvutypes.ConditionMajorUpgradeTerminalFailure, Status: metav1.ConditionTrue, Reason: mvutypes.ReasonUpgradeFlowFailed, LastTransitionTime: failedAt}}}
+	intent := mvutypes.Intent{Strategy: strategy, SourcePgVersion: "17", TargetPgVersion: "18", RetryRequestedAt: &retryAt,
+		State: []platformv1alpha1.PostgresMajorUpgradeStatus{entry}}
+	require.True(t, mvutypes.RetryRequestedAfterTerminalFailure(&retryAt, entry))
+
+	report := mvutypes.ReportFromError(mvutypes.ErrUpgradeFlowFailed)
+	next := stateWithProgress(intent, mvutypes.Progress{Report: report})
+	require.Len(t, next, 1)
+	assert.Equal(t, string(mvutypes.Failed), *next[0].Phase)
+	assert.False(t, mvutypes.RetryRequestedAfterTerminalFailure(&retryAt, next[0]), "one timestamp authorizes at most one retry")
+	assert.True(t, mvutypes.RetryRequestedAfterTerminalFailure(new(metav1.NewTime(time.Now().Add(time.Hour))), next[0]))
+}
+
+func TestRetryConsumptionSurvivesClockSkewAndStatusReload(t *testing.T) {
+	for _, strategy := range []string{mvutypes.MajorUpgradeFlowPgUpgrade, mvutypes.MajorUpgradeFlowBlueGreen} {
+		for _, progressFirst := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/progress=%t", strategy, progressFirst), func(t *testing.T) {
+				synctest.Test(t, func(t *testing.T) {
+					c, parent, store := initialAttemptStoreFixture(t)
+					parent.Spec.PostgresMajorUpgradeConfig.Strategy = &strategy
+					retryAt := time.Now().UTC().Add(5 * time.Second)
+					parent.Annotations = map[string]string{mvutypes.AnnotationMajorUpgradeRetryAt: retryAt.Format(time.RFC3339Nano)}
+					require.NoError(t, c.Update(t.Context(), parent))
+					entry := platformv1alpha1.PostgresMajorUpgradeStatus{Strategy: &strategy, SourcePgVersion: new("17"), TargetPgVersion: new("18"), Phase: new(string(mvutypes.Failed)),
+						Conditions: []metav1.Condition{{Type: mvutypes.ConditionMajorUpgradeTerminalFailure, Status: metav1.ConditionTrue, Reason: mvutypes.ReasonUpgradeFlowFailed, LastTransitionTime: metav1.NewTime(time.Now().Add(-time.Minute))}}}
+					if strategy == mvutypes.MajorUpgradeFlowBlueGreen {
+						entry.BlueGreen = &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "attempt"}
+					}
+					parent.Status.PostgresMajorUpgradeStatus = []platformv1alpha1.PostgresMajorUpgradeStatus{entry}
+					require.NoError(t, c.Status().Update(t.Context(), parent))
+					for request := range 2 {
+						intent, enabled, err := store.ReadMajorUpgradeIntent(t.Context())
+						require.NoError(t, err)
+						require.True(t, enabled)
+						useCase := majorupgrade.NewMajorUpgradeUseCase(store, nil, nil, nil, nil, nil, nil)
+						scheduled, err := useCase.Schedule(t.Context())
+						require.NoError(t, err)
+						require.True(t, scheduled, "a newer retry value must authorize one retry")
+						if progressFirst {
+							require.NoError(t, progressError(store.SaveMajorUpgradeProgress(t.Context(), intent, mvutypes.Progress{Report: reconciliationtypes.Report{Name: mvutypes.UseCaseName, Phase: string(mvutypes.Preflight), Reason: mvutypes.ReasonUpgradeFlowPending, Retry: true}})))
+							intent, _, err = store.ReadMajorUpgradeIntent(t.Context())
+							require.NoError(t, err)
+						}
+						failure := mvutypes.Progress{Report: mvutypes.ReportFromError(mvutypes.ErrUpgradeFlowFailed)}
+						for range 3 {
+							require.NoError(t, progressError(store.SaveMajorUpgradeProgress(t.Context(), intent, failure)))
+							store = NewMajorUpgradeStateStore(newTestClusterStateStore(t, c, client.ObjectKeyFromObject(parent)))
+							intent, _, err = store.ReadMajorUpgradeIntent(t.Context())
+							require.NoError(t, err)
+							useCase = majorupgrade.NewMajorUpgradeUseCase(store, nil, nil, nil, nil, nil, nil)
+							scheduled, err = useCase.Schedule(t.Context())
+							require.NoError(t, err)
+							require.False(t, scheduled, "an unchanged future timestamp must not authorize another retry after status reload")
+						}
+						if request == 0 {
+							require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(parent), parent))
+							// A newer value in the same second must survive status serialization too.
+							retryAt = retryAt.Add(time.Nanosecond)
+							parent.Annotations[mvutypes.AnnotationMajorUpgradeRetryAt] = retryAt.Format(time.RFC3339Nano)
+							require.NoError(t, c.Update(t.Context(), parent))
+						}
+					}
+				})
+			})
+		}
 	}
 }

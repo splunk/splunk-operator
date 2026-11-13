@@ -363,7 +363,17 @@ func applyBaseline(current *platformv1alpha1.PostgresMajorUpgradeStatus, report 
 }
 
 func applyConditions(current *platformv1alpha1.PostgresMajorUpgradeStatus, intent mvutypes.Intent, report reconciliationtypes.Report) {
-	if (mvutypes.RetryRequestedAfterTerminalFailure(intent.RetryRequestedAt, *current) || mvutypes.BlueGreenCancellationRequested(current.BlueGreen)) && report.Phase != string(mvutypes.Failed) {
+	// Save the accepted value with this report, even if the retry immediately
+	// fails. Failure transition times alone cannot consume a future timestamp.
+	if mvutypes.RetryRequestedAfterTerminalFailure(intent.RetryRequestedAt, *current) {
+		meta.SetStatusCondition(&current.Conditions, metav1.Condition{
+			Type: mvutypes.ConditionMajorUpgradeRetryConsumed, Status: metav1.ConditionTrue,
+			Reason: "RetryConsumed", Message: intent.RetryRequestedAt.UTC().Format(time.RFC3339Nano), LastTransitionTime: metav1.Now(),
+		})
+		current.Conditions = removeCondition(current.Conditions, mvutypes.ConditionMajorUpgradeTerminalFailure)
+	}
+	// Cancellation clears the old failure once it makes recovery progress.
+	if mvutypes.BlueGreenCancellationRequested(current.BlueGreen) && report.Phase != string(mvutypes.Failed) {
 		current.Conditions = removeCondition(current.Conditions, mvutypes.ConditionMajorUpgradeTerminalFailure)
 	}
 	condition := conditionFromReport(report)
