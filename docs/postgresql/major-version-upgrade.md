@@ -218,6 +218,8 @@ The annotation value must be an RFC3339 UTC timestamp. It must be newer than bot
 
 This makes retry edge-triggered. Reapplying the same annotation value does not retry a newer failure, including when the client clock is ahead of the controller clock. To retry again after another terminal failure, overwrite the annotation with a newer current timestamp.
 
+A `blueGreen` attempt that the operator can no longer prove valid ignores retry timestamps; see [Retry after a failure](blue-green-upgrade.md#retry-after-a-failure).
+
 Kubernetes annotations are string key-value metadata stored under `metadata.annotations`. They are not part of the desired spec and they are not used for resource identity or selection. Updating an annotation still changes the Kubernetes object, so the operator receives a watch event and reconciles the cluster.
 
 ### Secret rotation and upgrades
