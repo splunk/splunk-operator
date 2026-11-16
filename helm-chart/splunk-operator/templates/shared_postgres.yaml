@@ -1,3 +1,11 @@
+{{- if and .Release.IsUpgrade (not .Values.sharedPostgres.enabled) -}}
+{{- with lookup "platform.splunk.com/v1alpha1" "PostgresCluster" (include "splunk-operator.namespace" .) (include "splunk-operator.sharedPostgresName" .) -}}
+{{- $annotations := .metadata.annotations | default dict -}}
+{{- if and (eq (index $annotations "meta.helm.sh/release-name") $.Release.Name) (eq (index $annotations "meta.helm.sh/release-namespace") $.Release.Namespace) -}}
+{{- fail "sharedPostgres.enabled cannot be disabled while this release owns a PostgresCluster; keep it enabled to preserve rollback compatibility, or uninstall the release to retain the database" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- if .Values.sharedPostgres.enabled -}}
 {{- include "splunk-operator.sharedPostgresValidate" . -}}
 {{- $cfg := .Values.sharedPostgres -}}

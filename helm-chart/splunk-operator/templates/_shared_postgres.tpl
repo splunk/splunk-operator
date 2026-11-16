@@ -13,6 +13,12 @@
 {{- end -}}
 {{- end -}}
 
+{{/* Keep credentials while referenced by immutable policy, including restore-only releases. */}}
+{{- define "splunk-operator.sharedPostgresObjectStore" -}}
+{{- $cfg := .Values.sharedPostgres -}}
+{{- if or $cfg.backup.enabled $cfg.backup.destinationPath (hasKey $cfg.bootstrapFrom "objectStorage") (hasKey ($cfg.bootstrapFrom.volumeSnapshot | default dict) "walArchive") -}}true{{- end -}}
+{{- end -}}
+
 {{- define "splunk-operator.sharedPostgresValidate" -}}
 {{- $cfg := .Values.sharedPostgres -}}
 {{- if not (include "splunk-operator.postgresEnabled" .) -}}
@@ -35,11 +41,15 @@
 {{- fail "sharedPostgres.kvService.spec.image must supply an approved KVService image" -}}
 {{- end -}}
 {{- if $cfg.backup.enabled -}}
+{{- $_ := required "sharedPostgres.backup.schedule is required" $cfg.backup.schedule -}}
+{{- else if not $cfg.backup.acknowledgeNoBackups -}}
+{{- fail "configure sharedPostgres.backup.enabled or explicitly set sharedPostgres.backup.acknowledgeNoBackups=true" -}}
+{{- end -}}
+{{- if include "splunk-operator.sharedPostgresObjectStore" . -}}
 {{- $_ := required "sharedPostgres.backup.destinationPath is required" $cfg.backup.destinationPath -}}
 {{- if not (hasPrefix "s3://" $cfg.backup.destinationPath) -}}
 {{- fail "sharedPostgres.backup.destinationPath must use an S3-compatible s3:// destination" -}}
 {{- end -}}
-{{- $_ := required "sharedPostgres.backup.schedule is required" $cfg.backup.schedule -}}
 {{- $creds := $cfg.backup.credentials -}}
 {{- if eq $creds.accessKeyIdKey $creds.secretAccessKeyKey -}}
 {{- fail "backup accessKeyIdKey and secretAccessKeyKey must be different" -}}
@@ -54,8 +64,6 @@
 {{- $_ := required "backup credentials.secretAccessKey is required without existingSecret" $creds.secretAccessKey -}}
 {{- end -}}
 {{- end -}}
-{{- else if not $cfg.backup.acknowledgeNoBackups -}}
-{{- fail "configure sharedPostgres.backup.enabled or explicitly set sharedPostgres.backup.acknowledgeNoBackups=true" -}}
 {{- end -}}
 {{- $namespace := include "splunk-operator.namespace" . -}}
 {{- $watched := include "splunk-operator.watchNamespaces" . -}}

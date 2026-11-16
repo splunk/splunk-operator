@@ -64,4 +64,11 @@ credential Secret through `sharedPostgres.backup.credentials.existingSecret` if
 managed externally. Omitting backups requires `backup.acknowledgeNoBackups: true`.
 PG17 is the default; PG18 is an explicit initial-install option. Class policy is
 immutable, major changes are guarded, and database data/credentials are retained
-on uninstall. Select storage, placement and backup policy before installation.
+on uninstall. Disabling `sharedPostgres.enabled` on an existing cluster is rejected
+to preserve Helm rollback; uninstall the release to retain its data instead.
+Keep rollback targets at or after the revision that enabled provisioning: Helm
+rollback reuses stored manifests and cannot run this upgrade guard.
+Restore-only releases still need the object-store destination and credentials
+when using `bootstrapFrom.objectStorage` or snapshot `walArchive` recovery, even
+with scheduled backups disabled. Select storage, placement and backup policy
+before installation.
