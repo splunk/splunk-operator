@@ -15,6 +15,8 @@
 package resources
 
 import (
+	"strconv"
+
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
@@ -23,6 +25,46 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
+
+// WithLegacyKVStoreDefault supplies the local default required by older 10.6
+// Ansible images. New roles must explicitly opt in to this compatibility policy.
+// Deployers retain the legacy default without consuming KVService client settings.
+func WithLegacyKVStoreDefault(role splcommon.InstanceType) StatefulSetOption {
+	return func(statefulSet *appsv1.StatefulSet) {
+		switch role {
+		case splcommon.SplunkStandalone, splcommon.SplunkIndexer, splcommon.SplunkSearchHead,
+			splcommon.SplunkClusterManager, splcommon.SplunkClusterMaster,
+			splcommon.SplunkLicenseManager, splcommon.SplunkLicenseMaster,
+			splcommon.SplunkMonitoringConsole, splcommon.SplunkDeployer:
+		default:
+			return
+		}
+
+		for i := range statefulSet.Spec.Template.Spec.Containers {
+			container := &statefulSet.Spec.Template.Spec.Containers[i]
+			if container.Name != "splunk" {
+				continue
+			}
+			local := corev1.EnvVar{Name: splcommon.KVStoreDefaultTypeEnvName, Value: "local"}
+			container.Env = RemoveDuplicateEnvVars(append([]corev1.EnvVar{local}, container.Env...))
+		}
+	}
+}
+
+// WithKVServiceEnabled supplies the operator-owned flag to the Splunk container,
+// replacing any existing value while preserving other environment variables.
+func WithKVServiceEnabled(enabled bool) StatefulSetOption {
+	return func(statefulSet *appsv1.StatefulSet) {
+		for i := range statefulSet.Spec.Template.Spec.Containers {
+			container := &statefulSet.Spec.Template.Spec.Containers[i]
+			if container.Name != "splunk" {
+				continue
+			}
+			flag := corev1.EnvVar{Name: splcommon.KVServiceEnabledEnvName, Value: strconv.FormatBool(enabled)}
+			container.Env = RemoveDuplicateEnvVars(append([]corev1.EnvVar{flag}, container.Env...))
+		}
+	}
+}
 
 // GetKVServiceService builds the Service without API calls.
 func GetKVServiceService(cr splcommon.MetaObject, spec *enterpriseApi.KVServiceSpec) *corev1.Service {

@@ -90,6 +90,16 @@ func TestValidateCommonSplunkSpec(t *testing.T) {
 			wantErrCount: 2, // VAR1[1] and VAR1[2] are duplicates of VAR1[0]
 		},
 		{
+			name: "extraEnv - operator KVService enablement is reserved",
+			spec: &enterpriseApi.CommonSplunkSpec{
+				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{
+					ExtraEnv: []corev1.EnvVar{{Name: "SPLUNK_KVSERVICE_ENABLED", Value: "true"}},
+				},
+			},
+			wantErrCount: 1,
+			wantErrField: "spec.extraEnv[0].name",
+		},
+		{
 			name: "extraEnv - KV Store default type is allowed",
 			spec: &enterpriseApi.CommonSplunkSpec{
 				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{

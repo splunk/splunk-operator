@@ -34,7 +34,6 @@ SOK passes generated defaults to Ansible, which writes the following to
 
 ```ini
 [kvstore]
-defaultKVStoreType = external
 kvserviceConnectionString = http://splunk-kvs2-kvservice-service.default:8066
 
 [scs]
@@ -42,9 +41,34 @@ tenant = tenant1
 mvl-enabled = true
 ```
 
-SOK does not set `kvserviceScope` or `[scs] environment`. Changing the tenant or
-address rolls affected workloads. Removing or disabling the enable label removes
-the connection string and tenant and restores these local defaults:
+Use Splunk/Ansible images that support this connection-string configuration.
+SOK retains `SPLUNK_KVSTORE_DEFAULT_TYPE=local` on non-ingestor workloads for
+compatibility with older 10.6 Ansible images. Updated Ansible honors that legacy
+input on 10.6.x regardless of the enablement flag and skips its writes on managed
+10.9 workloads. Splunk 10.9 images contain the updated Ansible policy, so this
+compatibility input does not reset a migrated external backend.
+SOK also sets `SPLUNK_KVSERVICE_ENABLED=true` for these clients from the same
+namespace decision that supplies the connection string. Disabled clients receive
+`SPLUNK_KVSERVICE_ENABLED=false`. This variable is operator-owned and reserved;
+admission rejects it in `spec.extraEnv`. Generated pod configuration also replaces
+stored overrides so its value matches the namespace configuration.
+
+For enabled clients, SOK omits `defaultKVStoreType` and
+`postgresMigrateOnStartup` from generated defaults. Use images whose Ansible
+configuration honors the explicit enablement flag: on Splunk 10.6 it keeps local
+KV Store with migration disabled; on Splunk 10.9 enabled clients receive startup
+migration while their saved backend type is preserved. Successful migration
+persists the external backend, which SOK leaves unchanged on subsequent
+reconciliations. Fresh-install backend initialization and startup sequencing are
+separate from this flag contract.
+
+Older operators do not supply this flag. An unset flag does not mean disabled;
+the image retains its legacy behavior for deployments without the explicit flag.
+
+Changing the address or tenant triggers a rollout of affected workloads. Removing or
+disabling the enable label replaces the generated configuration with
+the following local defaults, with no connection string or tenant, and sets the
+enablement flag to `false`:
 
 ```ini
 [kvstore]

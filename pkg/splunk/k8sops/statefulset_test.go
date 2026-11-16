@@ -38,6 +38,36 @@ import (
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 )
 
+func TestLegacyKVStoreDefaultPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		role InstanceType
+		want string
+	}{
+		{SplunkStandalone, "local"},
+		{SplunkDeployer, "local"},
+		{SplunkIngestor, "external"},
+		{"future-role", "external"},
+	} {
+		t.Run(string(tc.role), func(t *testing.T) {
+			client := spltest.NewMockClient()
+			client.AddObject(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: splutil.GetProbeConfigMapName("test"), Namespace: "test"}})
+			cr := &enterpriseApi.Standalone{ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "test"}}
+			cr.Spec.ExtraEnv = []corev1.EnvVar{
+				{Name: splcommon.KVStoreDefaultTypeEnvName, Value: "external"},
+				{Name: "UNRELATED", Value: "kept"},
+			}
+			sts, err := GetSplunkStatefulSet(t.Context(), client, cr, &cr.Spec.CommonSplunkSpec, tc.role, 1, nil)
+			require.NoError(t, err)
+			env := map[string]string{}
+			for _, variable := range sts.Spec.Template.Spec.Containers[0].Env {
+				env[variable.Name] = variable.Value
+			}
+			require.Equal(t, tc.want, env[splcommon.KVStoreDefaultTypeEnvName])
+			require.Equal(t, "kept", env["UNRELATED"])
+		})
+	}
+}
+
 // errTestPodManager is used for UT negative testing
 type errTestPodManager struct {
 	c splcommon.ControllerClient

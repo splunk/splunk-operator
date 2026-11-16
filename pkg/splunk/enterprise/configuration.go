@@ -738,6 +738,7 @@ func getSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 
 	certs.InjectCertMounts(&statefulSet.Spec.Template, certMounts)
 
+	resources.WithLegacyKVStoreDefault(instanceType)(statefulSet)
 	resources.ApplyStatefulSetOptions(statefulSet, opts...)
 
 	return statefulSet, nil

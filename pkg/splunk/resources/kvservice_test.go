@@ -15,12 +15,14 @@
 package resources
 
 import (
+	"strconv"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,6 +30,75 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 )
+
+func TestWithLegacyKVStoreDefaultRoles(t *testing.T) {
+	for _, tc := range []struct {
+		role splcommon.InstanceType
+		want bool
+	}{
+		{splcommon.SplunkStandalone, true},
+		{splcommon.SplunkIndexer, true},
+		{splcommon.SplunkSearchHead, true},
+		{splcommon.SplunkClusterManager, true},
+		{splcommon.SplunkClusterMaster, true},
+		{splcommon.SplunkLicenseManager, true},
+		{splcommon.SplunkLicenseMaster, true},
+		{splcommon.SplunkMonitoringConsole, true},
+		{splcommon.SplunkDeployer, true},
+		{splcommon.SplunkIngestor, false},
+		{splcommon.SplunkKVService, false},
+		{splcommon.SplunkQueue, false},
+		{splcommon.SplunkObjectStorage, false},
+		{"future-role", false},
+		{"", false},
+	} {
+		t.Run(string(tc.role), func(t *testing.T) {
+			unrelated := corev1.EnvVar{Name: "UNRELATED", Value: "kept"}
+			sts := &appsv1.StatefulSet{}
+			sts.Spec.Template.Spec.Containers = []corev1.Container{{Name: "splunk", Env: []corev1.EnvVar{unrelated}}}
+			ApplyStatefulSetOptions(sts, WithLegacyKVStoreDefault(tc.role))
+			want := []corev1.EnvVar{unrelated}
+			if tc.want {
+				want = append([]corev1.EnvVar{{Name: splcommon.KVStoreDefaultTypeEnvName, Value: "local"}}, want...)
+			}
+			require.Equal(t, want, sts.Spec.Template.Spec.Containers[0].Env)
+		})
+	}
+}
+
+func TestWithLegacyKVStoreDefaultOverrides(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(strconv.FormatBool(enabled), func(t *testing.T) {
+			overrides := []corev1.EnvVar{
+				{Name: splcommon.KVStoreDefaultTypeEnvName, Value: "external"},
+				{Name: splcommon.KVStoreDefaultTypeEnvName, ValueFrom: &corev1.EnvVarSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "override"}, Key: "type",
+					},
+				}},
+				{Name: "UNRELATED", Value: "kept"},
+			}
+			sts := &appsv1.StatefulSet{}
+			sts.Spec.Template.Spec.Containers = []corev1.Container{
+				{Name: "splunk", Env: overrides},
+				{Name: "sidecar", Env: overrides},
+			}
+			sts.Spec.Template.Spec.InitContainers = []corev1.Container{{Name: "init", Env: overrides}}
+			opts := []StatefulSetOption{WithLegacyKVStoreDefault(splcommon.SplunkStandalone), WithKVServiceEnabled(enabled)}
+			ApplyStatefulSetOptions(sts, opts...)
+			require.Equal(t, []corev1.EnvVar{
+				{Name: splcommon.KVServiceEnabledEnvName, Value: strconv.FormatBool(enabled)},
+				{Name: splcommon.KVStoreDefaultTypeEnvName, Value: "local"},
+				{Name: "UNRELATED", Value: "kept"},
+			}, sts.Spec.Template.Spec.Containers[0].Env)
+			require.Equal(t, overrides, sts.Spec.Template.Spec.Containers[1].Env)
+			require.Equal(t, overrides, sts.Spec.Template.Spec.InitContainers[0].Env)
+			before := sts.DeepCopy()
+			ApplyStatefulSetOptions(sts, opts...)
+			require.Equal(t, before, sts, "repeated application must not duplicate managed variables")
+		})
+	}
+}
 
 func TestGetStandardK8sServiceForKVServiceDeployment(t *testing.T) {
 	cr := &enterpriseApi.KVService{

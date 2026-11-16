@@ -81,6 +81,10 @@
             ],
             "env": [
               {
+                "name": "SPLUNK_KVSTORE_DEFAULT_TYPE",
+                "value": "local"
+              },
+              {
                 "name": "SPLUNK_SEARCH_HEAD_URL",
                 "value": "splunk-stack1-search-head-0.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-1.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-2.splunk-stack1-search-head-headless.test.svc.cluster.local,splunk-stack1-search-head-3.splunk-stack1-search-head-headless.test.svc.cluster.local"
               },

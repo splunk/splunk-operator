@@ -56,7 +56,7 @@ func TestKVServiceDefaultsConfigMap(t *testing.T) {
 	entry := defaults.Splunk.Conf[0]
 	assert.Equal(t, "server", entry.ConfFileName)
 	assert.Empty(t, entry.Value.Directory, "use the implicit system/local target")
-	assert.Equal(t, "external", entry.Value.Stanzas["kvstore"]["defaultKVStoreType"])
+	assert.NotContains(t, entry.Value.Stanzas["kvstore"], "defaultKVStoreType")
 	assert.Equal(t, "http://splunk-kvs2-kvservice-service.default:8066", entry.Value.Stanzas["kvstore"]["kvserviceConnectionString"])
 	assert.NotContains(t, entry.Value.Stanzas["kvstore"], "kvserviceScope")
 	assert.NotContains(t, entry.Value.Stanzas["kvstore"], "postgresMigrateOnStartup")
