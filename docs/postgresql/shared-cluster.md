@@ -66,8 +66,11 @@ PG17 is the default; PG18 is an explicit initial-install option. Class policy is
 immutable, major changes are guarded, and database data/credentials are retained
 on uninstall. Disabling `sharedPostgres.enabled` after provisioning is rejected
 to preserve Helm rollback; uninstall the release to retain its data instead.
-An empty release-state Secret in the Helm release namespace enforces this guard
-independently of `namespaceOverride`; it is removed on uninstall.
+A release-state Secret in the Helm release namespace records the backend name
+and namespace. Upgrades reject changes to this identity, including changing
+`namespaceOverride` while provisioning stays enabled. State without identity
+metadata requires verifying the existing backend before continuing. The Secret
+is removed on uninstall.
 Keep rollback targets at or after the revision that enabled provisioning: Helm
 rollback reuses stored manifests and cannot run this upgrade guard.
 Restore-only releases still need the object-store destination and credentials

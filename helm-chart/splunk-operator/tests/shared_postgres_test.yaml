@@ -1,29 +1,27 @@
 suite: shared PostgreSQL provisioning
 templates:
   - templates/shared_postgres.yaml
+set:
+  sharedPostgres.enabled: true
+  sharedPostgres.backup.acknowledgeNoBackups: true
+  splunkOperator.featureGates.PostgresController: true
 tests:
-  - it: creates no database workloads by default
+  - it: creates no database workloads when disabled
     release: {upgrade: true}
+    set: {sharedPostgres.enabled: false}
     asserts:
       - hasDocuments: {count: 0}
   - it: requires the PostgreSQL controller gate
-    set:
-      sharedPostgres.enabled: true
+    set: {splunkOperator.featureGates.PostgresController: false}
     asserts:
       - failedTemplate:
           errorMessage: sharedPostgres.enabled requires the PostgresController feature gate
   - it: requires a deliberate backup decision
-    set:
-      sharedPostgres.enabled: true
-      splunkOperator.featureGates.PostgresController: true
+    set: {sharedPostgres.backup.acknowledgeNoBackups: false}
     asserts:
       - failedTemplate:
           errorMessage: configure sharedPostgres.backup.enabled or explicitly set sharedPostgres.backup.acknowledgeNoBackups=true
   - it: provisions one retained HA cluster and class with no backend installation requirement
-    set: &enabled
-      sharedPostgres.enabled: true
-      sharedPostgres.backup.acknowledgeNoBackups: true
-      splunkOperator.featureGates.PostgresController: true
     asserts:
       - hasDocuments: {count: 2}
       - equal: {path: spec.instances, value: 3}
@@ -45,7 +43,6 @@ tests:
       - equal: {path: 'metadata.annotations["helm.sh/resource-policy"]', value: keep}
         documentIndex: 1
   - it: enables both existing metrics exporters
-    set: *enabled
     documentIndex: 1
     asserts:
       - equal: {path: spec.monitoring.postgresqlMetrics, value: true}
@@ -53,7 +50,6 @@ tests:
       - equal: {path: spec.connectionPooler.enabled, value: true}
   - it: selects PG18 explicitly and preserves immutable public image mappings
     set:
-      <<: *enabled
       sharedPostgres.postgresVersion: "18"
     documentIndex: 1
     asserts:
@@ -66,7 +62,6 @@ tests:
           pattern: '^registry-1.docker.io/splunk/postgresok-postgresql:18.1-splunk.1-ci.a1b7ebc9e8ad@sha256:[0-9a-f]{64}$'
   - it: passes storage resources and scheduling to the class
     set:
-      <<: *enabled
       sharedPostgres.storageClass: encrypted
       sharedPostgres.storage: "1000"
       namespaceOverride: "123"
@@ -88,7 +83,6 @@ tests:
         documentIndex: 0
   - it: uses externally managed backup credentials without embedding secret material
     set:
-      <<: *enabled
       sharedPostgres.backup.enabled: true
       sharedPostgres.backup.destinationPath: s3://customer/backups/
       sharedPostgres.backup.endpointURL: https://s3.example.com
@@ -106,7 +100,6 @@ tests:
         documentIndex: 0
   - it: defaults additional application databases to retention
     set:
-      <<: *enabled
       sharedPostgres.databases: [{name: application}]
     documentIndex: 2
     asserts:
@@ -116,7 +109,6 @@ tests:
   - it: wires KVService to this release's shared cluster
     release: {name: backend, namespace: backend}
     set:
-      <<: *enabled
       sharedPostgres.kvService.enabled: true
       sharedPostgres.kvService.spec.image: example.com/kvservice:tested
       sharedPostgres.kvService.spec.postgres.clusterRef.name: wrong-cluster
@@ -128,7 +120,6 @@ tests:
       - equal: {path: 'metadata.annotations["helm.sh/resource-policy"]', value: keep}
   - it: passes replacement-cluster recovery to the existing API
     set:
-      <<: *enabled
       sharedPostgres.backup.enabled: false
       sharedPostgres.backup.destinationPath: s3://customer/backups/
       sharedPostgres.backup.credentials.existingSecret: customer-backup
@@ -139,27 +130,23 @@ tests:
       - equal: {path: spec.backup, value: {enabled: false}}
   - it: requires an object store destination for restore-only clusters
     set:
-      <<: *enabled
       sharedPostgres.bootstrapFrom: {objectStorage: {serverName: original}}
     asserts:
       - failedTemplate: {errorMessage: sharedPostgres.backup.destinationPath is required}
   - it: validates credentials for snapshot WAL recovery without scheduled backups
     set:
-      <<: *enabled
       sharedPostgres.backup.destinationPath: s3://customer/backups/
       sharedPostgres.bootstrapFrom: {volumeSnapshot: {storage: snapshot, walArchive: {serverName: original}}}
     asserts:
       - failedTemplate: {errorMessage: backup credentials.accessKeyId is required without existingSecret}
   - it: permits a plain snapshot restore without an object store
     set:
-      <<: *enabled
       sharedPostgres.bootstrapFrom: {volumeSnapshot: {storage: snapshot}}
     documentIndex: 1
     asserts:
       - equal: {path: spec.bootstrapFrom.volumeSnapshot.storage, value: snapshot}
   - it: supports one instance without an invalid switchover policy
     set:
-      <<: *enabled
       sharedPostgres.instances: 1
     asserts:
       - equal: {path: 'spec.cnpg.primaryUpdateMethod', value: restart}
@@ -168,7 +155,6 @@ tests:
         documentIndex: 1
   - it: keeps the immutable class policy unchanged when operational values change
     set:
-      <<: *enabled
       sharedPostgres.instances: 4
       sharedPostgres.storage: 200Gi
       sharedPostgres.resources.requests.cpu: "4"
@@ -184,10 +170,10 @@ tests:
       - notExists: {path: 'spec.config.resources'}
       - notExists: {path: 'spec.config.storage'}
       - notExists: {path: 'spec.config.backup'}
-  - it: rejects disabling an owned cluster before losing rollback compatibility
+  - it: rejects changing the namespace of an enabled backend
     release: {name: backend, namespace: backend, upgrade: true}
     set:
-      sharedPostgres.enabled: false
+      namespaceOverride: other
     kubernetesProvider: &ownedState
       scheme:
         v1/Secret:
@@ -203,11 +189,14 @@ tests:
             annotations:
               meta.helm.sh/release-name: backend
               meta.helm.sh/release-namespace: backend
+              platform.splunk.com/shared-postgres-namespace: backend
+              platform.splunk.com/shared-postgres-name: backend-pg-aefaf86bf0
     asserts:
       - failedTemplate:
-          errorMessage: sharedPostgres.enabled cannot be disabled after provisioning is enabled; keep it enabled to preserve rollback compatibility, or uninstall the release to retain the database
+          errorMessage: shared PostgreSQL backend identity cannot change; restore namespaceOverride or use an explicit replacement/restore procedure
   - it: leaves foreign release state alone when provisioning is disabled
     release: {name: backend, namespace: backend, upgrade: true}
+    set: {sharedPostgres.enabled: false}
     kubernetesProvider:
       <<: *ownedState
       objects:

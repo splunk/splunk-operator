@@ -5,6 +5,9 @@ kind: Secret
 metadata:
   name: {{ .Release.Name }}-shared-postgres
   namespace: {{ .Release.Namespace | quote }}
+  annotations:
+    platform.splunk.com/shared-postgres-namespace: {{ include "splunk-operator.namespace" . | quote }}
+    platform.splunk.com/shared-postgres-name: {{ include "splunk-operator.sharedPostgresName" . | quote }}
   labels:
     {{- include "splunk-operator.labels" . | nindent 4 }}
 type: Opaque

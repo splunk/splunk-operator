@@ -66,11 +66,20 @@
 {{- end -}}
 {{- end -}}
 {{- $namespace := include "splunk-operator.namespace" . -}}
+{{- $name := include "splunk-operator.sharedPostgresName" . -}}
+{{- with lookup "v1" "Secret" .Release.Namespace (printf "%s-shared-postgres" .Release.Name) -}}
+{{- include "splunk-operator.sharedPostgresOwner" (dict "ctx" $ "object" .) -}}
+{{- $annotations := .metadata.annotations | default dict -}}
+{{- $previousNamespace := required "shared PostgreSQL state is missing its backend namespace; verify the existing backend before continuing" (index $annotations "platform.splunk.com/shared-postgres-namespace") -}}
+{{- $previousName := required "shared PostgreSQL state is missing its backend name; verify the existing backend before continuing" (index $annotations "platform.splunk.com/shared-postgres-name") -}}
+{{- if or (ne $previousNamespace $namespace) (ne $previousName $name) -}}
+{{- fail "shared PostgreSQL backend identity cannot change; restore namespaceOverride or use an explicit replacement/restore procedure" -}}
+{{- end -}}
+{{- end -}}
 {{- $watched := include "splunk-operator.watchNamespaces" . -}}
 {{- if and .Values.splunkOperator.clusterWideAccess $watched (not (has $namespace (splitList "," $watched))) -}}
 {{- fail "splunkOperator.watchNamespaces must include the shared PostgreSQL namespace" -}}
 {{- end -}}
-{{- $name := include "splunk-operator.sharedPostgresName" . -}}
 {{- $cluster := lookup "platform.splunk.com/v1alpha1" "PostgresCluster" $namespace $name -}}
 {{- include "splunk-operator.sharedPostgresOwner" (dict "ctx" . "object" $cluster) -}}
 {{- if and $cluster (ne (toString $cluster.spec.postgresVersion) $major) -}}
