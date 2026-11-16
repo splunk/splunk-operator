@@ -181,30 +181,30 @@ tests:
     release: {name: backend, namespace: backend, upgrade: true}
     set:
       sharedPostgres.enabled: false
-    kubernetesProvider: &ownedCluster
+    kubernetesProvider: &ownedState
       scheme:
-        platform.splunk.com/v1alpha1/PostgresCluster:
-          gvr: {group: platform.splunk.com, version: v1alpha1, resource: postgresclusters}
+        v1/Secret:
+          gvr: {version: v1, resource: secrets}
           namespaced: true
       objects:
-        - &cluster
-          apiVersion: platform.splunk.com/v1alpha1
-          kind: PostgresCluster
+        - &state
+          apiVersion: v1
+          kind: Secret
           metadata:
-            name: backend-pg-aefaf86bf0
+            name: backend-shared-postgres
             namespace: backend
             annotations:
               meta.helm.sh/release-name: backend
               meta.helm.sh/release-namespace: backend
     asserts:
       - failedTemplate:
-          errorMessage: sharedPostgres.enabled cannot be disabled while this release owns a PostgresCluster; keep it enabled to preserve rollback compatibility, or uninstall the release to retain the database
-  - it: leaves foreign retained clusters alone when provisioning is disabled
+          errorMessage: sharedPostgres.enabled cannot be disabled after provisioning is enabled; keep it enabled to preserve rollback compatibility, or uninstall the release to retain the database
+  - it: leaves foreign release state alone when provisioning is disabled
     release: {name: backend, namespace: backend, upgrade: true}
     kubernetesProvider:
-      <<: *ownedCluster
+      <<: *ownedState
       objects:
-        - <<: *cluster
-          metadata: {name: backend-pg-aefaf86bf0, namespace: backend}
+        - <<: *state
+          metadata: {name: backend-shared-postgres, namespace: backend}
     asserts:
       - hasDocuments: {count: 0}

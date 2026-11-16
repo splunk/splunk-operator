@@ -1,0 +1,11 @@
+{{/* Keep opt-in state in the release namespace, independent of namespaceOverride. */}}
+{{- if .Values.sharedPostgres.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-shared-postgres
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "splunk-operator.labels" . | nindent 4 }}
+type: Opaque
+{{- end }}
