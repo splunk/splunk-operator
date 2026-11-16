@@ -279,12 +279,12 @@ func applyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 
 	// Ensure one defaults ConfigMap for KVService and SmartBus settings, plus
 	// a separate credential Secret (both mounted via SPLUNK_DEFAULTS_URL).
-	kvEntries, err := configworkflow.ResolveKVServiceClientConfig(ctx, client, cr, splcommon.SplunkIndexer)
+	kvConfig, err := configworkflow.ResolveKVServiceClientConfig(ctx, client, cr, splcommon.SplunkIndexer)
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve KVService configuration")
 		return result, err
 	}
-	defaultsConfigMap, defaultsSecret, err := ensureIndexerDefaults(ctx, client, cr, kvEntries...)
+	defaultsConfigMap, defaultsSecret, err := ensureIndexerDefaults(ctx, client, cr, kvConfig.Entries...)
 	if err != nil {
 		eventPublisher.Warning(ctx, "EnsureDefaultsFailed", "Failed to ensure defaults ConfigMap/Secret. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure defaults ConfigMap/Secret")
@@ -295,7 +295,7 @@ func applyIndexerClusterManager(ctx context.Context, client splcommon.Controller
 	}
 
 	// create or update statefulset for the indexers
-	statefulSet, err := getIndexerStatefulSet(ctx, client, cr, defaultsConfigMap.AsStatefulSetOption(), defaultsSecret.AsStatefulSetOption())
+	statefulSet, err := getIndexerStatefulSet(ctx, client, cr, defaultsConfigMap.AsStatefulSetOption(), defaultsSecret.AsStatefulSetOption(), kvConfig.AsStatefulSetOption())
 	if err != nil {
 		eventPublisher.Warning(ctx, "GetIndexerStatefulSetFailed", "Get Indexer stateful set failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")
@@ -624,12 +624,12 @@ func applyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 
 	// Ensure one defaults ConfigMap for KVService and SmartBus settings, plus
 	// a separate credential Secret (both mounted via SPLUNK_DEFAULTS_URL).
-	kvEntries, err := configworkflow.ResolveKVServiceClientConfig(ctx, client, cr, splcommon.SplunkIndexer)
+	kvConfig, err := configworkflow.ResolveKVServiceClientConfig(ctx, client, cr, splcommon.SplunkIndexer)
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to resolve KVService configuration")
 		return result, err
 	}
-	defaultsConfigMap, credentialsSecret, err := ensureIndexerDefaults(ctx, client, cr, kvEntries...)
+	defaultsConfigMap, credentialsSecret, err := ensureIndexerDefaults(ctx, client, cr, kvConfig.Entries...)
 	if err != nil {
 		eventPublisher.Warning(ctx, "EnsureDefaultsFailed", "Failed to ensure defaults ConfigMap/Secret. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure defaults ConfigMap/Secret")
@@ -640,7 +640,7 @@ func applyIndexerCluster(ctx context.Context, client splcommon.ControllerClient,
 	}
 
 	// create or update statefulset for the indexers
-	statefulSet, err := getIndexerStatefulSet(ctx, client, cr, defaultsConfigMap.AsStatefulSetOption(), credentialsSecret.AsStatefulSetOption())
+	statefulSet, err := getIndexerStatefulSet(ctx, client, cr, defaultsConfigMap.AsStatefulSetOption(), credentialsSecret.AsStatefulSetOption(), kvConfig.AsStatefulSetOption())
 	if err != nil {
 		eventPublisher.Warning(ctx, "GetIndexerStatefulSetFailed", "Get Indexer stateful set failed. Check operator logs for details.")
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update StatefulSet")

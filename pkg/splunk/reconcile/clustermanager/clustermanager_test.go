@@ -820,6 +820,7 @@ func TestApplyClusterManagerWithSmartstore(t *testing.T) {
 
 	localDefaults := reconciletest.ExpectLocalKVStoreDefaultsCalls(t, &current, createCalls, updateCalls)
 	localDefaults.AsStatefulSetOption()(ss)
+	ss.Spec.Template.Spec.Containers[0].Env = append([]corev1.EnvVar{{Name: splcommon.KVServiceEnabledEnvName, Value: "false"}}, ss.Spec.Template.Spec.Containers[0].Env...)
 	spltest.ReconcileTesterWithoutRedundantCheck(t, "TestApplyClusterManagerWithSmartstore-0", &current, revised, createCalls, updateCalls, reconcile, true, secret, &smartstoreConfigMap, ss, pod)
 
 	current.Status.BundlePushTracker.NeedToPushManagerApps = true

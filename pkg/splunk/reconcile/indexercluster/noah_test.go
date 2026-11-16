@@ -1283,6 +1283,7 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 		},
 	}
 	resources.SetVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	cr.Spec.ExtraEnv = []corev1.EnvVar{{Name: splcommon.KVServiceEnabledEnvName, Value: "true"}}
 	splunkCredential := t.Name()
 	namespaceSecret, err := splutil.ApplyNamespaceScopedSecretObject(ctx, client, cr.Namespace)
 	require.NoError(t, err)
@@ -1370,6 +1371,7 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 		env[item.Name] = item
 	}
 	assert.Equal(t, "true", env[resources.NoahEnabledEnvName].Value)
+	assert.Equal(t, "false", env[splcommon.KVServiceEnabledEnvName].Value)
 	assert.Equal(t, created.Spec.ServiceName, env[resources.HeadlessServiceEnvName].Value)
 	assert.Equal(t, "corp.example", env[resources.ClusterDomainEnvName].Value)
 	assert.Equal(t,
@@ -2734,10 +2736,10 @@ func TestNoahNamespaceKVServiceDefaultsUseSystemLocalDictionary(t *testing.T) {
 				TypeMeta:   metav1.TypeMeta{APIVersion: enterpriseApi.GroupVersion.String(), Kind: "IndexerCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "consumer", Namespace: "workload", UID: "consumer"},
 			}
-			kvEntries, err := configworkflow.ResolveKVServiceClientConfig(t.Context(), c, cr, splcommon.SplunkIndexer)
+			kvConfig, err := configworkflow.ResolveKVServiceClientConfig(t.Context(), c, cr, splcommon.SplunkIndexer)
 			require.NoError(t, err)
 			noahSpec := enterpriseApi.NoahClusterSpec{Endpoint: "https://noah.example:8080", Tenant: "noah-tenant"}
-			configMap, secret, err := ensureNoahIndexerDefaults(t.Context(), c, cr, noahSpec, "test-key", kvEntries...)
+			configMap, secret, err := ensureNoahIndexerDefaults(t.Context(), c, cr, noahSpec, "test-key", kvConfig.Entries...)
 			require.NoError(t, err)
 			var credentials struct {
 				Splunk struct {
@@ -2762,7 +2764,7 @@ func TestNoahNamespaceKVServiceDefaultsUseSystemLocalDictionary(t *testing.T) {
 			assert.Equal(t, noahSpec.Tenant, server.Stanzas["noahService"]["tenant"])
 			assert.NotContains(t, server.Stanzas["noahService"], "pass4SymmKey")
 			if enabled {
-				assert.Equal(t, splcommon.StanzaFields{"defaultKVStoreType": "external", "kvserviceConnectionString": "http://splunk-shared-kvservice-service.backend:8066"}, server.Stanzas["kvstore"])
+				assert.Equal(t, splcommon.StanzaFields{"kvserviceConnectionString": "http://splunk-shared-kvservice-service.backend:8066"}, server.Stanzas["kvstore"])
 				assert.Equal(t, splcommon.StanzaFields{"tenant": "kvtenant", "mvl-enabled": "true"}, server.Stanzas["scs"])
 				assert.NotContains(t, server.Stanzas["kvstore"], "kvserviceScope")
 				assert.NotContains(t, server.Stanzas["scs"], "environment")

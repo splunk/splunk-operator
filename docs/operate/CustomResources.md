@@ -147,15 +147,24 @@ spec:
 
 ### KV Store Default Type
 
-SOK writes `defaultKVStoreType` in `$SPLUNK_HOME/etc/system/local/server.conf` for supported
-Enterprise consumers: `external` when the workload Namespace enables KVService,
-and `local` otherwise. Disabled KVService consumers also receive
-`postgresMigrateOnStartup = false`. IngestorCluster and SHC deployers do not
-receive these client defaults.
+SOK supplies `SPLUNK_KVSTORE_DEFAULT_TYPE=local` on Standalone, Indexer, Search
+Head, Cluster Manager/Master, License Manager/Master, Monitoring Console, and
+SHC Deployer workloads for backward compatibility with 10.6 images using older
+Ansible. Ingestor and backend roles receive no injected default; new roles must
+explicitly opt in to this compatibility policy. Updated Ansible
+applies that input on 10.6.x for either enablement value and skips its writes on
+managed 10.9 workloads, which always use updated Ansible.
 
-KVService client settings are delivered through generated defaults. SOK does not
-inject KVService client environment variables or reserve their names in
-`spec.extraEnv`; normal environment variable uniqueness validation still applies.
+SOK sets `SPLUNK_KVSERVICE_ENABLED=true/false` for supported Enterprise consumers.
+When enabled, generated defaults supply the connection settings and omit
+`defaultKVStoreType` and `postgresMigrateOnStartup`, preserving Splunk's backend
+choice. When disabled, they write `defaultKVStoreType = local` and
+`postgresMigrateOnStartup = false` to `$SPLUNK_HOME/etc/system/local/server.conf`.
+IngestorCluster and SHC deployers do not receive these client defaults.
+
+The enablement flag is operator-owned and reserved in `spec.extraEnv`. See
+[KVService configuration](KVService.md#enterprise-client-configuration)
+for the image compatibility requirements.
 
 For external KVService configuration, see [Namespace KVService configuration](#namespace-kvservice-configuration).
 

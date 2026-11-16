@@ -1529,8 +1529,9 @@ func TestKVStoreDefaultTypeEnv(t *testing.T) {
 	}
 	sts, err := getSplunkStatefulSet(ctx, client, cr, &cr.Spec.CommonSplunkSpec, SplunkStandalone, 1, nil, nil)
 	require.NoError(t, err)
-	_, found := getStatefulSetEnvValue(sts, "SPLUNK_KVSTORE_DEFAULT_TYPE")
-	require.False(t, found)
+	value, found := getStatefulSetEnvValue(sts, splcommon.KVStoreDefaultTypeEnvName)
+	require.True(t, found)
+	require.Equal(t, "local", value)
 
 	ingestor := &enterpriseApi.IngestorCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1542,6 +1543,36 @@ func TestKVStoreDefaultTypeEnv(t *testing.T) {
 	require.NoError(t, err)
 	_, found = getStatefulSetEnvValue(sts, "SPLUNK_KVSTORE_DEFAULT_TYPE")
 	require.False(t, found)
+}
+
+func TestLegacyKVStoreDefaultPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		role InstanceType
+		want string
+	}{
+		{SplunkStandalone, "local"},
+		{SplunkDeployer, "local"},
+		{SplunkIngestor, "external"},
+		{"future-role", "external"},
+	} {
+		t.Run(string(tc.role), func(t *testing.T) {
+			client := spltest.NewMockClient()
+			client.AddObject(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: splutil.GetProbeConfigMapName("test"), Namespace: "test"}})
+			cr := &enterpriseApi.Standalone{ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "test"}}
+			cr.Spec.ExtraEnv = []corev1.EnvVar{
+				{Name: splcommon.KVStoreDefaultTypeEnvName, Value: "external"},
+				{Name: "UNRELATED", Value: "kept"},
+			}
+			sts, err := getSplunkStatefulSet(t.Context(), client, cr, &cr.Spec.CommonSplunkSpec, tc.role, 1, nil, nil)
+			require.NoError(t, err)
+			value, found := getStatefulSetEnvValue(sts, splcommon.KVStoreDefaultTypeEnvName)
+			require.True(t, found)
+			require.Equal(t, tc.want, value)
+			value, found = getStatefulSetEnvValue(sts, "UNRELATED")
+			require.True(t, found)
+			require.Equal(t, "kept", value)
+		})
+	}
 }
 
 // TestConfigMapVolAnnotationAbsentWhenNoVolumes verifies that no ConfigMapRevAnnotationPrefix annotations

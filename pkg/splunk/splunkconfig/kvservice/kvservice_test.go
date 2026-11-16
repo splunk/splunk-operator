@@ -35,7 +35,8 @@ func TestConnectionString(t *testing.T) {
 				want = "http://" + address
 			}
 			require.Equal(t, want, stanzas["kvstore"]["kvserviceConnectionString"])
-			require.Equal(t, "external", stanzas["kvstore"]["defaultKVStoreType"])
+			require.NotContains(t, stanzas["kvstore"], "defaultKVStoreType")
+			require.NotContains(t, stanzas["kvstore"], "postgresMigrateOnStartup")
 			require.Equal(t, "true", stanzas["scs"]["mvl-enabled"])
 			require.NotContains(t, stanzas["kvstore"], "kvserviceScope")
 			require.NotContains(t, stanzas["scs"], "environment")

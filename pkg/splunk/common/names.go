@@ -23,6 +23,12 @@ const (
 	// KVServiceCrName is the fixed name for the shared KVService CR.
 	KVServiceCrName = "splunk-kvservice"
 
+	// KVServiceEnabledEnvName carries the namespace-selected KVService policy to the image.
+	KVServiceEnabledEnvName = "SPLUNK_KVSERVICE_ENABLED"
+
+	// KVStoreDefaultTypeEnvName retains the local default for older 10.6 Ansible images.
+	KVStoreDefaultTypeEnvName = "SPLUNK_KVSTORE_DEFAULT_TYPE"
+
 	// namespace scoped secret name
 	namespaceScopedSecretNameTemplateStr = "splunk-%s-secret"
 

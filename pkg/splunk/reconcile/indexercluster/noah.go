@@ -207,11 +207,11 @@ func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerC
 	}
 
 	noahSpec := podManager.runtime.Spec()
-	kvEntries, err := configworkflow.ResolveKVServiceClientConfig(ctx, client, cr, splcommon.SplunkIndexer)
+	kvConfig, err := configworkflow.ResolveKVServiceClientConfig(ctx, client, cr, splcommon.SplunkIndexer)
 	if err != nil {
 		return nil, enterpriseApi.PhaseError, fmt.Errorf("resolve KVService configuration: %w", err)
 	}
-	defaultsConfigMap, defaultsSecret, err := ensureNoahIndexerDefaults(ctx, client, cr, noahSpec, string(podManager.runtime.Credential()), kvEntries...)
+	defaultsConfigMap, defaultsSecret, err := ensureNoahIndexerDefaults(ctx, client, cr, noahSpec, string(podManager.runtime.Credential()), kvConfig.Entries...)
 	if err != nil {
 		return nil, enterpriseApi.PhaseError, fmt.Errorf("ensure indexer defaults: %w", err)
 	}
@@ -219,6 +219,7 @@ func applyNoahIndexerResources(ctx context.Context, client splcommon.ControllerC
 	statefulSet, err := getIndexerStatefulSet(ctx, client, cr,
 		defaultsConfigMap.AsStatefulSetOption(),
 		defaultsSecret.AsStatefulSetOption(),
+		kvConfig.AsStatefulSetOption(),
 		withNoahIndexerLabels(cr.Name, cr.Spec.NoahClusterRef.Name),
 		resources.WithNoahIndexerIdentity(os.Getenv(resources.ClusterDomainEnvName)),
 	)

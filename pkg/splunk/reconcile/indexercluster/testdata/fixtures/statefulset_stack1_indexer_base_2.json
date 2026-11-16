@@ -96,6 +96,10 @@
             ],
             "env": [
               {
+                "name": "SPLUNK_KVSTORE_DEFAULT_TYPE",
+                "value": "local"
+              },
+              {
                 "name": "SPLUNK_CLUSTER_MASTER_URL",
                 "value": "splunk-manager1-cluster-manager-service"
               },

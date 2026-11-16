@@ -201,7 +201,7 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 	owner := splcommon.AsOwner(cr, true)
 	// Keep dictionary-format defaults and credentials for the existing Noah image.
 	// Noah and KVService stanzas share system/local/server.conf.
-	kvEntries, err := configworkflow.ResolveKVServiceClientConfig(ctx, client, cr, splcommon.SplunkSearchHead)
+	kvConfig, err := configworkflow.ResolveKVServiceClientConfig(ctx, client, cr, splcommon.SplunkSearchHead)
 	if err != nil {
 		return enterpriseApi.PhaseError, deployerPhase, nil, err
 	}
@@ -212,7 +212,7 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 
 	identityOption := resources.WithNoahPodIdentity(os.Getenv(resources.ClusterDomainEnvName))
 
-	searchHeadConfigMap, err := ensureNoahSearchHeadDefaults(ctx, client, cr, noahSpec, &owner, kvEntries...)
+	searchHeadConfigMap, err := ensureNoahSearchHeadDefaults(ctx, client, cr, noahSpec, &owner, kvConfig.Entries...)
 	if err != nil {
 		return enterpriseApi.PhaseError, deployerPhase, nil, fmt.Errorf("ensure Noah search-head defaults: %w", err)
 	}
@@ -220,6 +220,7 @@ func applySearchHeadClusterNoah(ctx context.Context, client splcommon.Controller
 		identityOption,
 		searchHeadConfigMap.AsStatefulSetOption(),
 		credentialsSecret.AsStatefulSetOption(),
+		kvConfig.AsStatefulSetOption(),
 	)
 	if err != nil {
 		return enterpriseApi.PhaseError, deployerPhase, nil, fmt.Errorf("build Noah search-head StatefulSet: %w", err)

@@ -107,6 +107,10 @@
             ],
             "env": [
               {
+                "name": "SPLUNK_KVSTORE_DEFAULT_TYPE",
+                "value": "local"
+              },
+              {
                 "name": "SPLUNK_HOME",
                 "value": "/opt/splunk"
               },

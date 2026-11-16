@@ -22,6 +22,7 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/config"
+	"github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
@@ -54,6 +55,10 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *fie
 	// Validate extraEnv uniqueness by Name
 	seenEnvNames := make(map[string]int) // map name -> first index seen
 	for i, env := range spec.ExtraEnv {
+		if env.Name == common.KVServiceEnabledEnvName {
+			allErrs = append(allErrs, field.Forbidden(fldPath.Child("extraEnv").Index(i).Child("name"),
+				"SPLUNK_KVSERVICE_ENABLED is managed by the operator from namespace KVService configuration"))
+		}
 		if firstIdx, exists := seenEnvNames[env.Name]; exists {
 			allErrs = append(allErrs, field.Duplicate(
 				fldPath.Child("extraEnv").Index(i).Child("name"),

@@ -26,6 +26,7 @@ var _ splunkconfig.ConfFeature = (*feature)(nil)
 
 // Conf builds client settings from the resolved connection string and tenant.
 // An empty connection string selects local KV Store.
+// With a connection string, Splunk owns backend selection and startup migration.
 // The caller selects placement; the KVService workflow uses system/local.
 func Conf(connectionString, tenant string) splunkconfig.ConfFeature {
 	return &feature{connectionString: connectionString, tenant: tenant}
@@ -38,18 +39,18 @@ func (f *feature) Contribute(role common.InstanceType) (splunkconfig.ConfSet, er
 	case common.SplunkStandalone, common.SplunkIndexer, common.SplunkSearchHead,
 		common.SplunkClusterManager, common.SplunkLicenseManager, common.SplunkMonitoringConsole,
 		common.SplunkClusterMaster, common.SplunkLicenseMaster:
-		settings := common.StanzaFields{"defaultKVStoreType": "local"}
+		settings := common.StanzaFields{}
 		stanzas := common.ConfFileStanzas{"kvstore": settings}
 		if f.connectionString != "" {
 			endpoint, err := util.ParseKVServiceAddress(f.connectionString)
 			if err != nil {
 				return splunkconfig.ConfSet{}, err
 			}
-			settings["defaultKVStoreType"] = "external"
 			settings["kvserviceConnectionString"] = endpoint.String()
 			stanzas["scs"] = common.StanzaFields{"tenant": f.tenant, "mvl-enabled": "true"}
 		} else {
 			// Preserve local KV Store startup behavior when KVService is disabled.
+			settings["defaultKVStoreType"] = "local"
 			settings["postgresMigrateOnStartup"] = "false"
 		}
 		return splunkconfig.ConfSet{NonSensitive: []common.ConfFileEntry{{

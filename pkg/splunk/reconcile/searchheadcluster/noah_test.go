@@ -72,6 +72,10 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 
 	ctx := t.Context()
 	client := spltest.NewMockClientWithNamespaces("test", "default")
+	client.AddObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+		Name: "test", Labels: map[string]string{splcommon.LabelKVService: "enabled"},
+		Annotations: map[string]string{splcommon.AnnotationKVServiceAddr: "splunk-shared-kvservice-service.backend:8066"},
+	}})
 	client.AddObject(noahClusterForSHCTest("test", "noah", "noah-auth"))
 	client.AddObject(&corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "noah-auth", Namespace: "test"},
@@ -101,6 +105,7 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 		},
 	}
 	resources.SetVolumeDefaults(&cr.Spec.CommonSplunkSpec)
+	cr.Spec.ExtraEnv = []corev1.EnvVar{{Name: splcommon.KVServiceEnabledEnvName, Value: "false"}}
 
 	dependency := reconcileutil.ResolveNoahDependency(ctx, client, cr, &cr.Status.Conditions, cr.Spec.NoahClusterRef)
 	require.NotNil(t, dependency.Runtime)
@@ -123,6 +128,7 @@ func TestApplySearchHeadClusterNoahCreatesIdentityAwareStatefulSets(t *testing.T
 		env[item.Name] = item
 	}
 	assert.Equal(t, "true", env[resources.NoahEnabledEnvName].Value, "search-head must have Noah pod identity")
+	assert.Equal(t, "true", env[splcommon.KVServiceEnabledEnvName].Value)
 	assert.Equal(t, searchHeadStatefulSet.Spec.ServiceName, env[resources.HeadlessServiceEnvName].Value, "stable identity must derive from the search head's own headless service, not Pod IP")
 	assert.Equal(t, "corp.example", env[resources.ClusterDomainEnvName].Value)
 	require.NotNil(t, env[resources.PodNameEnvName].ValueFrom, "identity must survive Pod IP changes via the downward API, not a literal IP")
@@ -367,11 +373,11 @@ func TestNoahNamespaceKVServiceDefaultsUseSystemLocalDictionary(t *testing.T) {
 				TypeMeta:   metav1.TypeMeta{APIVersion: enterpriseApi.GroupVersion.String(), Kind: "SearchHeadCluster"},
 				ObjectMeta: metav1.ObjectMeta{Name: "consumer", Namespace: "workload", UID: "consumer"},
 			}
-			kvEntries, err := configworkflow.ResolveKVServiceClientConfig(t.Context(), c, cr, splcommon.SplunkSearchHead)
+			kvConfig, err := configworkflow.ResolveKVServiceClientConfig(t.Context(), c, cr, splcommon.SplunkSearchHead)
 			require.NoError(t, err)
 			noahSpec := enterpriseApi.NoahClusterSpec{Endpoint: "https://noah.example:8080", Tenant: "noah-tenant"}
 			owner := splcommon.AsOwner(cr, true)
-			configMap, err := ensureNoahSearchHeadDefaults(t.Context(), c, cr, noahSpec, &owner, kvEntries...)
+			configMap, err := ensureNoahSearchHeadDefaults(t.Context(), c, cr, noahSpec, &owner, kvConfig.Entries...)
 			require.NoError(t, err)
 			var defaults struct {
 				Splunk struct {
@@ -387,7 +393,7 @@ func TestNoahNamespaceKVServiceDefaultsUseSystemLocalDictionary(t *testing.T) {
 			assert.Equal(t, noahSpec.Tenant, server.Stanzas["noahService"]["tenant"])
 			assert.NotContains(t, server.Stanzas["noahService"], "pass4SymmKey")
 			if enabled {
-				assert.Equal(t, splcommon.StanzaFields{"defaultKVStoreType": "external", "kvserviceConnectionString": "http://splunk-shared-kvservice-service.backend:8066"}, server.Stanzas["kvstore"])
+				assert.Equal(t, splcommon.StanzaFields{"kvserviceConnectionString": "http://splunk-shared-kvservice-service.backend:8066"}, server.Stanzas["kvstore"])
 				assert.Equal(t, splcommon.StanzaFields{"tenant": "kvtenant", "mvl-enabled": "true"}, server.Stanzas["scs"])
 				assert.NotContains(t, server.Stanzas["kvstore"], "kvserviceScope")
 				assert.NotContains(t, server.Stanzas["scs"], "environment")

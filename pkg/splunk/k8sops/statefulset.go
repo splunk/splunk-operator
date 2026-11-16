@@ -919,6 +919,7 @@ func GetSplunkStatefulSet(ctx context.Context, client splcommon.ControllerClient
 	// make Splunk Enterprise object the owner
 	statefulSet.SetOwnerReferences(append(statefulSet.GetOwnerReferences(), splcommon.AsOwner(cr, true)))
 
+	resources.WithLegacyKVStoreDefault(instanceType)(statefulSet)
 	resources.ApplyStatefulSetOptions(statefulSet, opts...)
 
 	return statefulSet, nil

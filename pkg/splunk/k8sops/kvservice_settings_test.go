@@ -101,6 +101,7 @@ func TestGetSplunkStatefulSetKVServiceSystemLocalDefaults(t *testing.T) {
 			tc.cr.GetObjectKind().SetGroupVersionKind(gv.WithKind(reflect.TypeOf(tc.cr).Elem().Name()))
 			defaultsConfigMap, err := configworkflow.EnsureKVServiceDefaults(t.Context(), c, tc.cr, tc.role)
 			require.NoError(t, err)
+			tc.spec.ExtraEnv = []corev1.EnvVar{{Name: "SPLUNK_KVSERVICE_ENABLED", Value: "false"}}
 			sts, err := k8sops.GetSplunkStatefulSet(t.Context(), c, tc.cr, tc.spec, tc.role, 1, nil, defaultsConfigMap.AsStatefulSetOption())
 			require.NoError(t, err)
 			var cmName string
@@ -124,7 +125,7 @@ func TestGetSplunkStatefulSetKVServiceSystemLocalDefaults(t *testing.T) {
 			assert.Equal(t, "server", conf.ConfFileName)
 			assert.Empty(t, conf.Value.Directory, "use the implicit system/local target")
 			assert.Equal(t, splcommon.ConfFileStanzas{
-				"kvstore": {"defaultKVStoreType": "external", "kvserviceConnectionString": "http://splunk-shared-kvservice-service.backend:8066"},
+				"kvstore": {"kvserviceConnectionString": "http://splunk-shared-kvservice-service.backend:8066"},
 				"scs":     {"tenant": "customer", "mvl-enabled": "true"},
 			}, conf.Value.Stanzas)
 			env := map[string]string{}
@@ -133,7 +134,9 @@ func TestGetSplunkStatefulSetKVServiceSystemLocalDefaults(t *testing.T) {
 				env[v.Name] = v.Value
 			}
 			assert.Contains(t, env["SPLUNK_DEFAULTS_URL"], "/mnt/sok-defaults/conf-defaults.yml")
-			for _, name := range []string{"SPLUNK_KVSTORE_DEFAULT_TYPE", "SPLUNK_KVSERVICE_MODE", "SPLUNK_KVSERVICE_SCOPE", "SPLUNK_SCS_TENANT", "SPLUNK_SCS_ENVIRONMENT"} {
+			assert.Equal(t, "true", env["SPLUNK_KVSERVICE_ENABLED"])
+			assert.Equal(t, "local", env[splcommon.KVStoreDefaultTypeEnvName])
+			for _, name := range []string{"SPLUNK_KVSERVICE_MODE", "SPLUNK_KVSERVICE_SCOPE", "SPLUNK_SCS_TENANT", "SPLUNK_SCS_ENVIRONMENT"} {
 				assert.NotContains(t, env, name)
 			}
 		})
@@ -237,6 +240,9 @@ func TestGetSplunkStatefulSetWithoutKVServiceKeepsLocalDefaults(t *testing.T) {
 	c := kvServiceClientFixture(t)
 	c.AddObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "workload"}})
 	cr := &enterpriseApi.Standalone{ObjectMeta: metav1.ObjectMeta{Name: "local", Namespace: "workload"}}
+	cr.Spec.ExtraEnv = []corev1.EnvVar{{Name: "SPLUNK_KVSERVICE_ENABLED", ValueFrom: &corev1.EnvVarSource{
+		ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "override"}, Key: "enabled"},
+	}}, {Name: splcommon.KVStoreDefaultTypeEnvName, Value: "external"}}
 	defaults, err := configworkflow.EnsureKVServiceDefaults(t.Context(), c, cr, k8sops.SplunkStandalone)
 	require.NoError(t, err)
 	sts, err := k8sops.GetSplunkStatefulSet(t.Context(), c, cr, &cr.Spec.CommonSplunkSpec, k8sops.SplunkStandalone, 1, nil, defaults.AsStatefulSetOption())
@@ -246,7 +252,8 @@ func TestGetSplunkStatefulSetWithoutKVServiceKeepsLocalDefaults(t *testing.T) {
 	for _, v := range sts.Spec.Template.Spec.Containers[0].Env {
 		env[v.Name] = v.Value
 	}
-	assert.NotContains(t, env, "SPLUNK_KVSTORE_DEFAULT_TYPE")
+	assert.Equal(t, "local", env[splcommon.KVStoreDefaultTypeEnvName])
+	assert.Equal(t, "false", env["SPLUNK_KVSERVICE_ENABLED"])
 	assert.Contains(t, env["SPLUNK_DEFAULTS_URL"], "/mnt/sok-defaults/conf-defaults.yml")
 	var cm corev1.ConfigMap
 	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Namespace: "workload", Name: defaults.Name}, &cm))
@@ -271,6 +278,7 @@ func TestNamespaceKVServiceChangesUpdateAndRestoreLocalPodDefaults(t *testing.T)
 		return sts, defaults.Name
 	}
 	initial, initialName := build()
+	assert.Contains(t, initial.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{Name: "SPLUNK_KVSERVICE_ENABLED", Value: "true"})
 	var namespace corev1.Namespace
 	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "workload"}, &namespace))
 	namespace.Annotations[splcommon.AnnotationKVServiceAddr] = "splunk-replacement-kvservice-service.platform:8066"
@@ -297,6 +305,7 @@ func TestNamespaceKVServiceChangesUpdateAndRestoreLocalPodDefaults(t *testing.T)
 	for _, item := range disabled.Spec.Template.Spec.Containers[0].Env {
 		env[item.Name] = item.Value
 	}
-	assert.NotContains(t, env, "SPLUNK_KVSTORE_DEFAULT_TYPE")
+	assert.Equal(t, "local", env[splcommon.KVStoreDefaultTypeEnvName])
+	assert.Equal(t, "false", env["SPLUNK_KVSERVICE_ENABLED"])
 	assert.Contains(t, env["SPLUNK_DEFAULTS_URL"], "/mnt/sok-defaults/")
 }
