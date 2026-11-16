@@ -6,8 +6,8 @@ nav_order: 0.3
 
 # Shared PostgreSQL with Helm
 
-`sharedPostgres.enabled` provisions one release-owned PostgreSQL cluster. It is
-opt-in; Enterprise-only installations keep it disabled.
+Enable `sharedPostgres.enabled` to provision a shared PostgreSQL backend for
+KVService and other database consumers. Each enabled Helm release owns one cluster.
 
 ## Prerequisites
 
