@@ -111,7 +111,7 @@ cert-manager even when SOK uses another webhook certificate mechanism.
 
 PostgreSQL RBAC follows the gate in both access modes. Bundling creates no databases or
 backup policy by itself. Enable [the shared PostgreSQL cluster](../postgresql/shared-cluster.md)
-to provision release-owned workloads, backups and optional KVService wiring.
+to provision release-owned PostgreSQL workloads and backups.
 Dedicated workloads remain covered by the [PostgreSQL quickstart](../postgresql/quickstart.md).
 PG17/PG18/PgBouncer runtime compatibility remains subject to installation validation.
 

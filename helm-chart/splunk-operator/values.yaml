@@ -324,11 +324,6 @@ sharedPostgres:
       secretAccessKey: ""
   # Existing immutable recovery source API; use a separate release to restore to a replacement cluster.
   bootstrapFrom: {}
-  # Additional application DatabaseDefinition entries (maximum 10); KVService manages its own tenants.
+  # Additional application DatabaseDefinition entries (maximum 10).
   # Each entry defaults to deletionPolicy: Retain.
   databases: []
-  kvService:
-    enabled: false
-    # Also enable splunkOperator.featureGates.KVService; supply an approved KVService image.
-    # The chart sets spec.postgres.clusterRef; the remaining CommonWorkloadSpec fields go here.
-    spec: {}

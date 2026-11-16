@@ -34,12 +34,6 @@
 {{- if and $cfg.monitoring.connectionPoolerMetrics (not $cfg.connectionPooler.enabled) -}}
 {{- fail "sharedPostgres.monitoring.connectionPoolerMetrics requires connectionPooler.enabled" -}}
 {{- end -}}
-{{- if and $cfg.kvService.enabled (not (include "splunk-operator.featureGateEnabled" (dict "ctx" . "gate" "KVService" "stage" "Alpha" "default" false))) -}}
-{{- fail "sharedPostgres.kvService.enabled requires the KVService feature gate" -}}
-{{- end -}}
-{{- if and $cfg.kvService.enabled (not $cfg.kvService.spec.image) -}}
-{{- fail "sharedPostgres.kvService.spec.image must supply an approved KVService image" -}}
-{{- end -}}
 {{- if $cfg.backup.enabled -}}
 {{- $_ := required "sharedPostgres.backup.schedule is required" $cfg.backup.schedule -}}
 {{- else if not $cfg.backup.acknowledgeNoBackups -}}

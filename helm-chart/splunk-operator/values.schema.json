@@ -210,17 +210,6 @@
         },
         "bootstrapFrom": {
           "type": "object"
-        },
-        "kvService": {
-          "type": "object",
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "spec": {
-              "type": "object"
-            }
-          }
         }
       }
     }

@@ -21,9 +21,11 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: configure sharedPostgres.backup.enabled or explicitly set sharedPostgres.backup.acknowledgeNoBackups=true
-  - it: provisions one retained HA cluster and class with no backend installation requirement
+  - it: provisions only the retained PostgreSQL cluster and class
     asserts:
       - hasDocuments: {count: 2}
+      - isKind: {of: PostgresCluster}
+        documentIndex: 1
       - equal: {path: spec.instances, value: 3}
         documentIndex: 1
       - equal: {path: 'spec.cnpg.affinity.podAntiAffinityType', value: required}
@@ -105,18 +107,6 @@ tests:
     asserts:
       - isKind: {of: PostgresDatabase}
       - equal: {path: 'spec.databases[0].deletionPolicy', value: Retain}
-      - equal: {path: 'metadata.annotations["helm.sh/resource-policy"]', value: keep}
-  - it: wires KVService to this release's shared cluster
-    release: {name: backend, namespace: backend}
-    set:
-      sharedPostgres.kvService.enabled: true
-      sharedPostgres.kvService.spec.image: example.com/kvservice:tested
-      sharedPostgres.kvService.spec.postgres.clusterRef.name: wrong-cluster
-      splunkOperator.featureGates.KVService: true
-    documentIndex: 2
-    asserts:
-      - isKind: {of: KVService}
-      - matchRegex: {path: spec.postgres.clusterRef.name, pattern: '^backend-pg-[0-9a-f]{10}$'}
       - equal: {path: 'metadata.annotations["helm.sh/resource-policy"]', value: keep}
   - it: passes replacement-cluster recovery to the existing API
     set:

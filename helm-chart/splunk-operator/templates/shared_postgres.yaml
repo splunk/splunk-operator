@@ -90,20 +90,4 @@ spec:
     - {{- toYaml (merge (deepCopy .) (dict "deletionPolicy" "Retain")) | nindent 6 }}
     {{- end }}
 {{- end }}
-{{- if $cfg.kvService.enabled }}
----
-apiVersion: enterprise.splunk.com/v4
-kind: KVService
-metadata:
-  name: {{ $name }}-kv
-  namespace: {{ $namespace | quote }}
-  labels:
-    {{- include "splunk-operator.labels" . | nindent 4 }}
-  annotations:
-    helm.sh/resource-policy: keep
-spec:
-  {{- $spec := deepCopy $cfg.kvService.spec -}}
-  {{- $_ := set $spec "postgres" (dict "clusterRef" (dict "name" $name)) -}}
-  {{- toYaml $spec | nindent 2 }}
-{{- end }}
 {{- end }}

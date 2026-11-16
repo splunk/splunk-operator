@@ -77,3 +77,10 @@ Restore-only releases still need the object-store destination and credentials
 when using `bootstrapFrom.objectStorage` or snapshot `walArchive` recovery, even
 with scheduled backups disabled. Select storage, placement and backup policy
 before installation.
+
+## Database consumers
+
+KVService is deployed separately by its owner. Configure its
+`spec.postgres.clusterRef.name` with the shared `PostgresCluster` name in the same
+namespace. Read the generated name from the release's resources; see
+[KVService configuration](../operate/KVService.md#namespace-driven-tenant-provisioning).
