@@ -18,6 +18,7 @@ package core
 
 import (
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,6 +26,32 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/yaml"
 )
+
+func TestHelmBackupRetentionUnitsMatchTheAPI(t *testing.T) {
+	data, err := os.ReadFile("../../../../helm-chart/splunk-operator/values.schema.json")
+	require.NoError(t, err)
+	var value any
+	require.NoError(t, yaml.Unmarshal(data, &value))
+	for _, key := range []string{"properties", "sharedPostgres", "properties", "backup", "properties", "retentionPolicy", "pattern"} {
+		object, ok := value.(map[string]any)
+		require.True(t, ok, key)
+		value = object[key]
+	}
+	pattern, ok := value.(string)
+	require.True(t, ok)
+	data, err = os.ReadFile("../../../../config/crd/bases/platform.splunk.com_postgresclusterclasses.yaml")
+	require.NoError(t, err)
+	var crd apiextv1.CustomResourceDefinition
+	require.NoError(t, yaml.Unmarshal(data, &crd))
+	apiPattern := crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["spec"].Properties["cnpg"].Properties["backup"].Properties["barmanObjectStore"].Properties["retentionPolicy"].Pattern
+	require.Equal(t, apiPattern, pattern)
+	for _, valid := range []string{"1d", "30d"} {
+		assert.Regexp(t, regexp.MustCompile(pattern), valid)
+	}
+	for _, invalid := range []string{"0d", "1w", "1m", "-1d"} {
+		assert.NotRegexp(t, regexp.MustCompile(pattern), invalid)
+	}
+}
 
 func TestBaseAndBundleSchemasExposeTheSamePlacementPolicy(t *testing.T) {
 	var schemas []apiextv1.CustomResourceDefinition

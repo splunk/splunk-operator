@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "sharedPostgres": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "postgresVersion": {
+          "type": "string",
+          "enum": [
+            "17",
+            "18"
+          ]
+        },
+        "instances": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "storage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "storageClass": {
+          "type": "string"
+        },
+        "resources": {
+          "type": "object"
+        },
+        "affinity": {
+          "type": "object",
+          "properties": {
+            "enablePodAntiAffinity": {
+              "type": "boolean"
+            },
+            "podAntiAffinityType": {
+              "type": "string",
+              "enum": [
+                "required",
+                "preferred"
+              ]
+            },
+            "topologyKey": {
+              "type": "string",
+              "minLength": 1
+            },
+            "nodeSelector": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "tolerations": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "images": {
+          "type": "object",
+          "properties": {
+            "postgresql": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^.+:[^@]+@sha256:[0-9a-f]{64}$"
+              }
+            },
+            "pgbouncer": {
+              "type": "string",
+              "pattern": "^.+:[^@]+@sha256:[0-9a-f]{64}$"
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "connectionPooler": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "readWrite": {
+              "type": "boolean"
+            },
+            "readOnly": {
+              "type": "boolean"
+            },
+            "instances": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "session",
+                "transaction"
+              ]
+            },
+            "config": {
+              "type": "object"
+            }
+          }
+        },
+        "monitoring": {
+          "type": "object",
+          "properties": {
+            "postgresqlMetrics": {
+              "type": "boolean"
+            },
+            "connectionPoolerMetrics": {
+              "type": "boolean"
+            }
+          }
+        },
+        "backup": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "acknowledgeNoBackups": {
+              "type": "boolean"
+            },
+            "credentials": {
+              "type": "object",
+              "properties": {
+                "existingSecret": {
+                  "type": "string"
+                },
+                "accessKeyIdKey": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "secretAccessKeyKey": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "accessKeyId": {
+                  "type": "string"
+                },
+                "secretAccessKey": {
+                  "type": "string"
+                }
+              }
+            },
+            "schedule": {
+              "type": "string"
+            },
+            "destinationPath": {
+              "type": "string"
+            },
+            "endpointURL": {
+              "type": "string"
+            },
+            "retentionPolicy": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*d$"
+            },
+            "target": {
+              "type": "string",
+              "enum": [
+                "primary",
+                "prefer-standby"
+              ]
+            }
+          }
+        },
+        "databases": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*$",
+                "maxLength": 30
+              },
+              "deletionPolicy": {
+                "type": "string",
+                "enum": [
+                  "Retain",
+                  "Delete"
+                ]
+              }
+            }
+          }
+        },
+        "bootstrapFrom": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

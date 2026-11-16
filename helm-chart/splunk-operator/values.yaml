@@ -263,3 +263,67 @@ extraEnvs: []
 #    valueFrom:
 #      fieldRef:
 #        fieldPath: status.podIP
+
+# One shared PostgreSQL cluster owned by this Helm release. See docs/postgresql/shared-cluster.md.
+sharedPostgres:
+  enabled: false
+  # Select 18 explicitly only when compatibility with future non-Kubernetes migrations is unnecessary.
+  postgresVersion: "17"
+  instances: 3
+  storage: 100Gi
+  # Empty selects the cluster's default StorageClass for new volumes.
+  storageClass: ""
+  resources:
+    requests: {cpu: "2", memory: 8Gi}
+    limits: {cpu: "4", memory: 16Gi}
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+    topologyKey: kubernetes.io/hostname
+    nodeSelector: {}
+    tolerations: []
+  images:
+    postgresql:
+      "17": registry-1.docker.io/splunk/postgresok-postgresql:17.10-splunk.1-ci.a1b7ebc9e8ad@sha256:d5d86314dbe7a2d1c1db3a37af3b21c2362d98026252cfa3fdec4f829ef31124
+      "18": registry-1.docker.io/splunk/postgresok-postgresql:18.1-splunk.1-ci.a1b7ebc9e8ad@sha256:c2c5451783e970f5e198007934d18065c8b362c2702ec80899e054f66dfebc9a
+    pgbouncer: registry-1.docker.io/splunk/postgresok-pgbouncer:pgbouncer-1-26-0-splunk.1-ci.a1b7ebc9e8ad@sha256:7156f136f47e0cdee12d2b0a8ee117090454d5d323b0f7312ef2fc9176e19c51
+    imagePullSecrets: []
+  connectionPooler:
+    enabled: true
+    readWrite: true
+    readOnly: false
+    instances: 3
+    mode: transaction
+    config: {}
+  monitoring:
+    postgresqlMetrics: true
+    connectionPoolerMetrics: true
+  postgresqlConfig: {}
+  pgHBA:
+    - hostnossl all all 0.0.0.0/0 reject
+    - hostnossl all all ::/0 reject
+    - hostssl all all 0.0.0.0/0 scram-sha-256
+    - hostssl all all ::/0 scram-sha-256
+  backup:
+    enabled: false
+    # Required when backup.enabled=false. Setting this accepts the absence of backups.
+    acknowledgeNoBackups: false
+    schedule: "0 2 * * *"
+    destinationPath: ""
+    endpointURL: ""
+    retentionPolicy: 30d
+    target: prefer-standby
+    wal: {compression: gzip}
+    credentials:
+      # Prefer an externally managed Secret. For a single Helm install, supply
+      # accessKeyId and secretAccessKey through a protected values file instead.
+      existingSecret: ""
+      accessKeyIdKey: accessKeyId
+      secretAccessKeyKey: secretAccessKey
+      accessKeyId: ""
+      secretAccessKey: ""
+  # Existing immutable recovery source API; use a separate release to restore to a replacement cluster.
+  bootstrapFrom: {}
+  # Additional application DatabaseDefinition entries (maximum 10).
+  # Each entry defaults to deletionPolicy: Retain.
+  databases: []
