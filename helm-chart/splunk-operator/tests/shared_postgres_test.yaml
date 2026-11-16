@@ -68,14 +68,17 @@ tests:
     set:
       <<: *enabled
       sharedPostgres.storageClass: encrypted
-      sharedPostgres.storage: 200Gi
+      sharedPostgres.storage: "1000"
+      namespaceOverride: "123"
       sharedPostgres.resources.requests.cpu: "4"
       sharedPostgres.affinity.nodeSelector: {pool: database}
       sharedPostgres.affinity.tolerations: [{key: database, operator: Exists}]
     asserts:
       - equal: {path: 'spec.cnpg.storageClass', value: encrypted}
         documentIndex: 0
-      - equal: {path: spec.storage, value: 200Gi}
+      - equal: {path: spec.storage, value: "1000"}
+        documentIndex: 1
+      - equal: {path: metadata.namespace, value: "123"}
         documentIndex: 1
       - equal: {path: spec.resources.requests.cpu, value: "4"}
         documentIndex: 1
@@ -89,11 +92,15 @@ tests:
       sharedPostgres.backup.enabled: true
       sharedPostgres.backup.destinationPath: s3://customer/backups/
       sharedPostgres.backup.endpointURL: https://s3.example.com
-      sharedPostgres.backup.credentials.existingSecret: customer-backup
+      sharedPostgres.backup.credentials.existingSecret: "123"
+      sharedPostgres.backup.credentials.accessKeyIdKey: "null"
+      sharedPostgres.backup.credentials.secretAccessKeyKey: "true"
     asserts:
       - equal: {path: spec.backup, value: {enabled: true, schedule: "0 2 * * *"}}
         documentIndex: 1
-      - equal: {path: 'spec.cnpg.backup.barmanObjectStore.s3Credentials.accessKeyId.name', value: customer-backup}
+      - equal:
+          path: spec.cnpg.backup.barmanObjectStore.s3Credentials
+          value: {accessKeyId: {name: "123", key: "null"}, secretAccessKey: {name: "123", key: "true"}}
         documentIndex: 0
       - equal: {path: 'spec.cnpg.backup.barmanObjectStore.destinationPath', value: "s3://customer/backups/"}
         documentIndex: 0

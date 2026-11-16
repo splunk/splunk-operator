@@ -103,12 +103,12 @@ cnpg:
     {{- toYaml $cfg.affinity | nindent 4 }}
   connectionPooler:
     instances: {{ $cfg.connectionPooler.instances }}
-    mode: {{ $cfg.connectionPooler.mode }}
+    mode: {{ $cfg.connectionPooler.mode | quote }}
     config:
       {{- toYaml $cfg.connectionPooler.config | nindent 6 }}
   {{- if $cfg.backup.destinationPath }}
   backup:
-    target: {{ $cfg.backup.target }}
+    target: {{ $cfg.backup.target | quote }}
     barmanObjectStore:
       destinationPath: {{ $cfg.backup.destinationPath | quote }}
       {{- with $cfg.backup.endpointURL }}
@@ -119,11 +119,11 @@ cnpg:
         {{- toYaml $cfg.backup.wal | nindent 8 }}
       s3Credentials:
         accessKeyId:
-          name: {{ default (printf "%s-backup" $name) $cfg.backup.credentials.existingSecret }}
-          key: {{ $cfg.backup.credentials.accessKeyIdKey }}
+          name: {{ default (printf "%s-backup" $name) $cfg.backup.credentials.existingSecret | quote }}
+          key: {{ $cfg.backup.credentials.accessKeyIdKey | quote }}
         secretAccessKey:
-          name: {{ default (printf "%s-backup" $name) $cfg.backup.credentials.existingSecret }}
-          key: {{ $cfg.backup.credentials.secretAccessKeyKey }}
+          name: {{ default (printf "%s-backup" $name) $cfg.backup.credentials.existingSecret | quote }}
+          key: {{ $cfg.backup.credentials.secretAccessKeyKey | quote }}
   {{- end }}
 {{- end -}}
 

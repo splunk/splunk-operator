@@ -34,7 +34,7 @@ apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresCluster
 metadata:
   name: {{ $name }}
-  namespace: {{ $namespace }}
+  namespace: {{ $namespace | quote }}
   labels:
     {{- include "splunk-operator.labels" . | nindent 4 }}
   annotations:
@@ -43,7 +43,7 @@ spec:
   class: {{ $name }}
   postgresVersion: {{ $cfg.postgresVersion | quote }}
   instances: {{ $cfg.instances }}
-  storage: {{ $cfg.storage }}
+  storage: {{ $cfg.storage | quote }}
   resources:
     {{- toYaml $cfg.resources | nindent 4 }}
   postgresqlConfig:
@@ -77,7 +77,7 @@ apiVersion: platform.splunk.com/v1alpha1
 kind: PostgresDatabase
 metadata:
   name: {{ $name }}-apps
-  namespace: {{ $namespace }}
+  namespace: {{ $namespace | quote }}
   labels:
     {{- include "splunk-operator.labels" . | nindent 4 }}
   annotations:
@@ -96,7 +96,7 @@ apiVersion: enterprise.splunk.com/v4
 kind: KVService
 metadata:
   name: {{ $name }}-kv
-  namespace: {{ $namespace }}
+  namespace: {{ $namespace | quote }}
   labels:
     {{- include "splunk-operator.labels" . | nindent 4 }}
   annotations:
