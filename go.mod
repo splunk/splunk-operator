@@ -2,6 +2,13 @@ module github.com/splunk/splunk-operator
 
 go 1.27.2
 
+// The binary is built with GOFIPS140=v1.0.0 so the FIPS 140-3 validated module is
+// linked and available, but FIPS mode is left OFF by default. Enforcement (fips140=on)
+// restricts TLS to FIPS-approved versions/cipher suites, which breaks some Splunk
+// upgrade paths. Default off here (per-key, so an unrelated GODEBUG env var cannot
+// accidentally re-enable it); operators opt in with GODEBUG=fips140=on at runtime.
+godebug fips140=off
+
 require (
 	cloud.google.com/go/storage v1.71.0
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.24.0

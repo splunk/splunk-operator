@@ -223,8 +223,13 @@ func main() {
 		slog.String("log_level", logging.LevelToString(logCfg.Level)),
 		slog.String("log_format", logCfg.Format),
 		slog.Bool("log_add_source", logCfg.AddSource))
+	// Report the Go FIPS 140-3 Cryptographic Module status. When the binary is
+	// built with GOFIPS140=v1.0.0, fips140.Enabled() is true and the module
+	// performs its integrity and known-answer self-tests at init. Logging it here
+	// provides runtime evidence that the FIPS-validated crypto path is active.
 	slog.Info("Go Cryptographic Module FIPS 140-3 status",
 		slog.Bool("fips140_enabled", fips140.Enabled()),
+		slog.Bool("fips140_enforced", fips140.Enforced()),
 		slog.String("fips140_module_version", fips140.Version()))
 
 	baseOptions := ctrl.Options{

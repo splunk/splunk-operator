@@ -17,8 +17,9 @@ package testenv
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"os"
 	"os/exec"
 	"path"
@@ -46,13 +47,34 @@ const (
 )
 
 func init() {
-	rand.Seed(time.Now().UnixNano())
 	opts := zap.Options{
 		Development: true,
 		TimeEncoder: zapcore.RFC3339NanoTimeEncoder,
 	}
 	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseFlagOptions(&opts)).WithName("util"))
 
+}
+
+// randIntn returns a cryptographically secure random int in [0, n) for test data
+// generation. It fails the current spec via ginkgo.Fail on a crypto/rand failure,
+// which does not happen in practice.
+func randIntn(n int) int {
+	idx, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
+	if err != nil {
+		ginkgo.Fail(fmt.Sprintf("crypto/rand failure: %v", err))
+	}
+	return int(idx.Int64())
+}
+
+// randInt63 returns a cryptographically secure non-negative random int64 in
+// [0, 2^63) for test data generation. It fails the current spec via ginkgo.Fail
+// on a crypto/rand failure.
+func randInt63() int64 {
+	idx, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 63))
+	if err != nil {
+		ginkgo.Fail(fmt.Sprintf("crypto/rand failure: %v", err))
+	}
+	return idx.Int64()
 }
 
 // GetEnvWithDefault returns the value of the environment variable named by key,
@@ -70,9 +92,9 @@ func RandomDNSName(n int) string {
 	for i := range b {
 		// Must start with letter
 		if i == 0 {
-			b[i] = letterBytes[rand.Intn(25)]
+			b[i] = letterBytes[randIntn(25)]
 		} else {
-			b[i] = letterBytes[rand.Intn(len(letterBytes))]
+			b[i] = letterBytes[randIntn(len(letterBytes))]
 		}
 	}
 	return string(b)
@@ -82,7 +104,7 @@ func RandomDNSName(n int) string {
 func RandomHex(n int) string {
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = splcommon.HexBytes[rand.Intn(len(splcommon.HexBytes))]
+		b[i] = splcommon.HexBytes[randIntn(len(splcommon.HexBytes))]
 	}
 	return string(b)
 }

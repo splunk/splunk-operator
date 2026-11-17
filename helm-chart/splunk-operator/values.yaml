@@ -245,6 +245,16 @@ splunkOperator:
   telemetry:
     test: true
 
+  # FIPS 140-3 mode for the operator's own cryptography (TLS, hashing, key
+  # generation). The operator image always links the Go FIPS 140-3 validated
+  # module, but enforcement is OFF by default because it restricts TLS to
+  # FIPS-approved settings, which breaks some Splunk upgrade paths.
+  # Set enabled: true (e.g. for FedRAMP/GovCloud) to run the operator with
+  # GODEBUG=fips140=on. This only governs the operator process; it does not
+  # configure FIPS inside the managed Splunk pods.
+  fips:
+    enabled: false
+
 # Array with extra yaml to deploy with the chart. Evaluated as a template
 extraManifests: []
 # extraManifests:
