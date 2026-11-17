@@ -27,6 +27,7 @@ func TestNoahIndexerConf(t *testing.T) {
 	require.Len(t, entries, 1)
 
 	server := entries[0]
+	assert.Equal(t, map[string]string{"site": "site0"}, map[string]string(server.Value.Stanzas["general"]))
 	assert.Equal(t, "server", server.ConfFileName)
 	assert.Empty(t, server.Value.Directory)
 	assert.Equal(t, map[string]string{
@@ -53,6 +54,7 @@ func TestNoahSearchHeadConf(t *testing.T) {
 	require.Len(t, entries, 1)
 
 	server := entries[0]
+	assert.Equal(t, map[string]string{"site": "site0"}, map[string]string(server.Value.Stanzas["general"]))
 	assert.Equal(t, "server", server.ConfFileName)
 	assert.Equal(t, map[string]string{
 		"disabled":               "false",

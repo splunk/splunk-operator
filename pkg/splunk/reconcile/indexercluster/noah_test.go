@@ -1347,6 +1347,7 @@ func TestApplyNoahIndexerResourcesCreatesIdentityAwareStatefulSet(t *testing.T) 
 	}, defaultsConfigMap))
 	assert.Contains(t, defaultsConfigMap.Data["conf-defaults.yml"], "https://noah.test.svc:8080")
 	assert.Contains(t, defaultsConfigMap.Data["conf-defaults.yml"], "tenant: axolotl")
+	assert.Contains(t, defaultsConfigMap.Data["conf-defaults.yml"], "site: site0")
 	assert.NotContains(t, defaultsConfigMap.Data["conf-defaults.yml"], "unit-test-noah-key")
 
 	var defaultsSecretName string

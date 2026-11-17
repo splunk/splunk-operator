@@ -16,6 +16,9 @@ package splunkconfig
 
 import "github.com/splunk/splunk-operator/pkg/splunk/common"
 
+// Pin a site until pod AZ-to-site mapping is supported; this avoids IMDS discovery.
+const noahSite = "site0"
+
 // NoahIndexerConf returns the non-sensitive server.conf settings required to
 // select Noah before splunkd starts. Credentials and pod-specific identity are
 // delivered separately and must not be included in this shared configuration.
@@ -27,6 +30,7 @@ func NoahIndexerConf(serviceURL, tenant string) []common.ConfFileEntry {
 				// TODO: Restore the SOK app directory once splunk-ansible resolves the
 				// configured server.conf entry in its Noah pre-auth and post-config paths.
 				Stanzas: common.ConfFileStanzas{
+					"general": {"site": noahSite},
 					"noahService": {
 						"disabled":        "false",
 						"uri":             serviceURL,
@@ -76,6 +80,7 @@ func NoahSearchHeadConf(serviceURL, tenant string) []common.ConfFileEntry {
 			ConfFileName: "server",
 			Value: common.ConfFileValue{
 				Stanzas: common.ConfFileStanzas{
+					"general": {"site": noahSite},
 					"noahService": {
 						"disabled":               "false",
 						"uri":                    serviceURL,

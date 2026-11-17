@@ -12,6 +12,7 @@ nav_order: 6
 Separation between ingestion and indexing services within Splunk Operator for Kubernetes enables the operator to manage ingestion and indexing as separate tiers while connecting them through a durable remote queue.
 
 This separation enables:
+
 - **Independent scaling:** Match resource allocation to ingestion or indexing workload.
 - **Data durability:** Off‑load buffer management and retry logic to a durable message queue.
 - **Operational clarity:** Separate monitoring dashboards for ingestion throughput vs indexing latency.
@@ -32,26 +33,27 @@ Queue stores the remote queue information shared by an `IngestorCluster` and an 
 
 Queue inputs can be found in the table below. The supported provider is `sqs`.
 
-| Key        | Type    | Required | Description                                       |
-| ---------- | ------- | -------- | ------------------------------------------------- |
-| provider   | string | Yes | Provider of message queue (Allowed value: `sqs`) |
-| sqs   | SQS | Yes if provider = `sqs` | SQS message queue inputs |
+| Key      | Type   | Required                | Description                                      |
+| -------- | ------ | ----------------------- | ------------------------------------------------ |
+| provider | string | Yes                     | Provider of message queue (Allowed value: `sqs`) |
+| sqs      | SQS    | Yes if provider = `sqs` | SQS message queue inputs                         |
 
 SQS message queue inputs can be found in the table below.
 
-| Key        | Type    | Required | Description                                       |
-| ---------- | ------- | -------- | ------------------------------------------------- |
-| name   | string | Yes | Name of the physical queue |
-| authRegion   | string | No | Region used for authentication and endpoint resolution |
-| endpoint   | string | No | AWS SQS service endpoint. If omitted, SOK resolves it from `authRegion` |
-| dlq   | string | Yes | Name of the physical dead-letter queue |
-| secretKeyRef | object | No | Per-key selectors for AWS credentials. When not set, IRSA / workload identity is assumed. Contains `awsAccessKey` and `awsSecretKey`, each a `SecretKeySelector` (`name`, `key`). |
+| Key          | Type   | Required | Description                                                                                                                                                                       |
+| ------------ | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| name         | string | Yes      | Name of the physical queue                                                                                                                                                        |
+| authRegion   | string | No       | Region used for authentication and endpoint resolution                                                                                                                            |
+| endpoint     | string | No       | AWS SQS service endpoint. If omitted, SOK resolves it from `authRegion`                                                                                                           |
+| dlq          | string | Yes      | Name of the physical dead-letter queue                                                                                                                                            |
+| secretKeyRef | object | No       | Per-key selectors for AWS credentials. When not set, IRSA / workload identity is assumed. Contains `awsAccessKey` and `awsSecretKey`, each a `SecretKeySelector` (`name`, `key`). |
 
 The provider, queue name, auth region, endpoint, and dead-letter queue are immutable after the `Queue` is created. `secretKeyRef` can be changed. When `secretKeyRef` is omitted, the pods must use IRSA or another workload identity mechanism. When it is set, the referenced Secrets must be kept in the same namespace as the resource that uses them. SOK reads the selected keys and delivers the credentials to the referenced tiers through a generated, immutable Secret. SOK watches the referenced Secrets. Changing credential data creates a new generated Secret and rolls the affected pods declaratively.
 
 The `Queue` controller does not validate connectivity to the external queues. A `Ready` Queue status means that the Kubernetes resource has been reconciled. Access and queue health must be verified separately.
 
 ## Example
+
 ```
 apiVersion: enterprise.splunk.com/v4
 kind: Queue
@@ -86,26 +88,27 @@ ObjectStorage stores the large messages that exceed the underlying queue message
 
 ObjectStorage inputs can be found in the table below. The supported provider is `s3`.
 
-| Key        | Type    | Required | Description                                       |
-| ---------- | ------- | -------- | ------------------------------------------------- |
-| provider   | string | Yes | Provider of object storage (Allowed value: `s3`) |
-| s3   | S3 | Yes if provider = `s3` | S3 object storage inputs |
+| Key      | Type   | Required               | Description                                      |
+| -------- | ------ | ---------------------- | ------------------------------------------------ |
+| provider | string | Yes                    | Provider of object storage (Allowed value: `s3`) |
+| s3       | S3     | Yes if provider = `s3` | S3 object storage inputs                         |
 
 S3 object storage inputs can be found in the table below.
 
-| Key        | Type    | Required | Description                                       |
-| ---------- | ------- | -------- | ------------------------------------------------- |
-| path   | string | Yes | Remote storage location for messages that are larger than the underlying maximum message size |
-| endpoint   | string | No | S3-compatible service endpoint. If omitted, SOK resolves the endpoint from the Queue `authRegion` |
-| encryptionScheme | string | No | Remote-storage encryption scheme: `sse-s3`, `sse-c`, or `none` |
-| kmsEndpoint | string | No | KMS endpoint used with `encryptionScheme: sse-c`. Resolved from the Queue region when omitted |
-| kmsKeyId | string | No | KMS key identifier |
+| Key              | Type   | Required | Description                                                                                       |
+| ---------------- | ------ | -------- | ------------------------------------------------------------------------------------------------- |
+| path             | string | Yes      | Remote storage location for messages that are larger than the underlying maximum message size     |
+| endpoint         | string | No       | S3-compatible service endpoint. If omitted, SOK resolves the endpoint from the Queue `authRegion` |
+| encryptionScheme | string | No       | Remote-storage encryption scheme: `sse-s3`, `sse-c`, or `none`                                    |
+| kmsEndpoint      | string | No       | KMS endpoint used with `encryptionScheme: sse-c`. Resolved from the Queue region when omitted     |
+| kmsKeyId         | string | No       | KMS key identifier                                                                                |
 
 All `ObjectStorage` spec inputs are immutable after the resource is created. `kmsKeyId` is required when `encryptionScheme` is `sse-c`.
 
 The `ObjectStorage` controller does not create or validate connectivity to the external bucket. A `Ready` ObjectStorage status means that the Kubernetes resource has been reconciled.
 
 ## Example
+
 ```
 apiVersion: enterprise.splunk.com/v4
 kind: ObjectStorage
@@ -126,11 +129,11 @@ IngestorCluster manages the ingestion tier. Its Splunk pods receive events and p
 
 In addition to common spec inputs, the IngestorCluster resource provides the following Spec configuration parameters.
 
-| Key        | Type    | Required | Description                                       |
-| ---------- | ------- | -------- | ------------------------------------------------- |
-| replicas   | integer | No | The number of ingestion pods (defaults to 1) |
-| queueRef   | corev1.ObjectReference | Yes | Message queue reference |
-| objectStorageRef   | corev1.ObjectReference | Yes | Object storage reference |
+| Key              | Type                   | Required | Description                                  |
+| ---------------- | ---------------------- | -------- | -------------------------------------------- |
+| replicas         | integer                | No       | The number of ingestion pods (defaults to 1) |
+| queueRef         | corev1.ObjectReference | Yes      | Message queue reference                      |
+| objectStorageRef | corev1.ObjectReference | Yes      | Object storage reference                     |
 
 ## Example
 
@@ -144,7 +147,7 @@ kind: IngestorCluster
 metadata:
   name: ingestor
 spec:
-  serviceAccount: ingestor-sa 
+  serviceAccount: ingestor-sa
   replicas: 3
   queueRef:
     name: queue
@@ -160,11 +163,11 @@ IndexerCluster supports index-only mode. When both references are set, its Splun
 
 In addition to common spec inputs, the IndexerCluster resource provides the following Spec configuration parameters.
 
-| Key        | Type    | Required | Description                                       |
-| ---------- | ------- | -------- | ------------------------------------------------- |
-| replicas   | integer | Yes | The number of indexer peers. Must be at least 3 |
-| queueRef   | corev1.ObjectReference | No | Message queue reference |
-| objectStorageRef   | corev1.ObjectReference | No | Object storage reference |
+| Key              | Type                   | Required | Description                                     |
+| ---------------- | ---------------------- | -------- | ----------------------------------------------- |
+| replicas         | integer                | Yes      | The number of indexer peers. Must be at least 3 |
+| queueRef         | corev1.ObjectReference | No       | Message queue reference                         |
+| objectStorageRef | corev1.ObjectReference | No       | Object storage reference                        |
 
 ## Example
 
@@ -212,6 +215,14 @@ It is the user's responsibility to configure the connections between these resou
 SOK delivers the structural configuration separately from credentials. When `secretKeyRef` is configured, the referenced Secrets must be kept in the same namespace as the resource that uses them. When it is omitted, the pods are expected to use IRSA or another workload identity mechanism. The exact configuration files, resources, and delivery paths are implementation details managed by SOK.
 
 Changes to the `Queue` or `ObjectStorage` references regenerate the configuration and update the corresponding StatefulSet declaratively. Changes to a source credential Secret are watched, and SOK creates a new credential configuration and rolls the affected pods.
+
+# Temporary site0 configuration for Linus testing
+
+SOK sets `[general] site = site0` in
+`/opt/splunk/etc/system/local/server.conf` for Noah-backed indexers and search
+heads through the existing Ansible configuration writer. This avoids Noah's
+IMDS availability-zone lookup until pod AZ-to-site mapping is supported.
+Classic multisite deployments are unchanged.
 
 # Configuration File References
 
@@ -276,7 +287,7 @@ ingestorCluster:
   enabled: true
   name: ingestor
   replicaCount: 3
-  serviceAccount: ingestor-sa 
+  serviceAccount: ingestor-sa
   queueRef:
     name: queue
   objectStorageRef:
@@ -293,7 +304,7 @@ indexerCluster:
   enabled: true
   name: indexer
   replicaCount: 3
-  serviceAccount: ingestor-sa 
+  serviceAccount: ingestor-sa
   clusterManagerRef:
     name: cm
   queueRef:
@@ -311,7 +322,7 @@ To access the configured SQS queue and S3 bucket, provide both tiers with a serv
 The example presented below creates the `ingestor-sa` service account by using the `eksctl` utility and attaches a customer-managed policy named `ExamplePolicy`. Define the policy with the minimum permissions required for your environment and use case.
 
 ```
-eksctl create iamserviceaccount \                                                                                                                                          
+eksctl create iamserviceaccount \
   --name ingestor-sa \
   --cluster ind-ing-sep-demo \
   --region us-west-2 \
@@ -334,7 +345,7 @@ HorizontalPodAutoscaler is a Kubernetes resource and is not managed by SOK. It c
 
 The example presented below configures a HorizontalPodAutoscaler named ingestor-hpa in the default namespace (the same namespace as the resource it manages) to scale the `IngestorCluster` named `ingestor`. With average utilization set to 50%, the HPA scales the target between 3 and 10 replicas.
 
-```                             
+```
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
