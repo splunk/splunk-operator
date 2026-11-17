@@ -87,6 +87,12 @@ spec:
               value: {{ .Values.splunkOperator.clusterDomain | default "cluster.local" }}
             - name: SPLUNK_GENERAL_TERMS
               value: {{ .Values.splunkOperator.splunkGeneralTerms | default "" }}
+{{- if .Values.splunkOperator.fips.enabled }}
+            # Enable FIPS 140-3 enforcement in the operator. The binary links the
+            # validated module at build time and defaults to off; this turns it on.
+            - name: GODEBUG
+              value: "fips140=on"
+{{- end }}
 {{- with .Values.extraEnvs }}
 {{- toYaml . | trim | nindent 12 }}
 {{- end }}

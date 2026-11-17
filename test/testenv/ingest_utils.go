@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"os"
 	"path"
@@ -67,11 +66,10 @@ func CreateMockLogfile(logFile string, totalLines int) error {
 
 	// Simulate a log every second.  This could be adjusted however for this simple case its probably sufficient
 	timestamp = timestamp.Add(time.Second * time.Duration(-totalLines))
-	random := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// Write each line to the file
 	for i := 0; i < totalLines; i++ {
-		_, err = fmt.Fprintf(writer, "%s %s %s %s randomNumber=%d\n", timestamp.Format("01-02-2006 15:04:05.000"), level, component, msg, random.Int63())
+		_, err = fmt.Fprintf(writer, "%s %s %s %s randomNumber=%d\n", timestamp.Format("01-02-2006 15:04:05.000"), level, component, msg, randInt63())
 		if err != nil {
 			logf.Log.Error(err, "Failed File Write", "logFile", logFile)
 			return err

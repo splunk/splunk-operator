@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os/exec"
 	"reflect"
 	"sort"
@@ -2169,8 +2168,7 @@ func (testenv *TestCaseEnv) TriggerTelemetrySubmission(ctx context.Context, depl
 	)
 
 	// Generate a random number
-	rand.Seed(time.Now().UnixNano())
-	randomNumber := rand.Intn(1000)
+	randomNumber := randIntn(1000)
 
 	// Create the JSON value
 	jsonValue, err := json.Marshal(map[string]int{"value": randomNumber})

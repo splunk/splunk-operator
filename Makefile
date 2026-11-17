@@ -68,6 +68,15 @@ BUNDLE_IMG ?= ${IMAGE_TAG_BASE}-bundle:v${VERSION}
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 
+# GOFIPS140 pins the Go 1.24+ native FIPS 140-3 Cryptographic Module version
+# linked into the manager binary and the test binaries. It is exported so every
+# recipe in this Makefile and its includes -- along with the scripts and ginkgo
+# runs they spawn -- compiles against the same frozen, submitted-for-validation
+# module. Docker builds do not inherit the host environment, so those pass it
+# explicitly via --build-arg.
+GOFIPS140 ?= v1.0.0
+export GOFIPS140
+
 # SPLUNK_PROVISION_IMG is the dedicated splunk-provision init image injected into
 # Splunk pods (see injectSplunkProvision in pkg/splunk/enterprise/configuration.go).
 # TODO(SPL-306631): remove once splunk-provision is available in the Splunk docker image.
@@ -254,7 +263,7 @@ docker-push: ## Push docker image with the manager.
 PLATFORMS ?= linux/amd64,linux/arm64
 
 docker-build: #test ## Build docker image with the manager.
-	docker build --build-arg GO_VERSION=$(GO_VERSION) -t ${IMG} .
+	docker build --build-arg GO_VERSION=$(GO_VERSION) --build-arg GOFIPS140=${GOFIPS140} -t ${IMG} .
 
 docker-buildx:
 	@if [ -z "${IMG}" ]; then \
@@ -286,6 +295,7 @@ docker-buildx:
 	    docker buildx build --push \
 	        --platform="${PLATFORMS}" \
 	        --build-arg GO_VERSION=$(GO_VERSION) \
+	        --build-arg GOFIPS140=${GOFIPS140} \
 	        $$BASE_IMAGE_ARG \
 	        $$BASE_IMAGE_VERSION_ARG \
 	        $$BUILDER_IMAGE_ARG \

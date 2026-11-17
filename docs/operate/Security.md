@@ -240,3 +240,39 @@ The Splunk Operator for Kubernetes has been tested on FIPS 140-3 enabled Kuberne
 The operator binary is also built using Go's native FIPS 140-3 build mode (`GOFIPS140=v1.0.0`), which links in the CMVP-validated Go Cryptographic Module (Certificate #5247). See [Go's FIPS 140-3 documentation](https://go.dev/doc/security/fips140) for details.
 
 The Splunk Operator is FIPS 140-3 compatible. It is not FIPS 140-3 certified or compliant.
+
+### FIPS-validated cryptography in the operator binary
+
+The operator binary is compiled with the Go 1.24+ native FIPS 140-3 Cryptographic Module. The build pins `GOFIPS140=v1.0.0`, which links the frozen, CMVP-validated module (Certificate #5247); do not use `latest`, which advances when a new validated module ships. All cryptography the operator performs — TLS handshakes, hashing, certificate handling, and key generation — is routed through this validated module. The operator does not use any custom cryptography; all crypto is sourced from the Go standard library.
+
+Although the validated module is linked, FIPS enforcement is **off by default**. The binary sets `godebug fips140=off` in `go.mod`, so out of the box the operator uses standard (non-restricted) crypto. FIPS mode (`fips140=on`) restricts `crypto/tls` to only FIPS 140-3 approved protocol versions, cipher suites, signature algorithms, and key-exchange mechanisms, which can break connectivity on some Splunk upgrade paths — hence it is not enabled by default.
+
+#### Enabling FIPS mode
+
+To run the operator in FIPS mode (for example in FedRAMP/GovCloud environments), set the `fips140` GODEBUG option to `on`. This only governs the operator process; it does not configure FIPS inside the managed Splunk pods.
+
+- **Helm**: set `splunkOperator.fips.enabled: true`. The chart injects `GODEBUG=fips140=on` into the controller-manager container.
+- **Raw manifests / OLM**: add an environment variable to the `manager` container:
+
+  ```yaml
+  env:
+    - name: GODEBUG
+      value: "fips140=on"
+  ```
+
+When enabled, the module performs its integrity self-check and known-answer self-tests at initialization. Setting `GODEBUG=fips140=only` is **not** recommended for production environments: it can surface unhandled errors and false positives/negatives.
+
+You can confirm the operator's FIPS status by inspecting the manager logs at startup (`fips140_enabled` is `false` by default, `true` once enabled):
+
+```
+Go Cryptographic Module FIPS 140-3 status fips140_enabled=false fips140_enforced=false fips140_module_version=v1.0.0
+```
+
+The build settings baked into the binary can also be inspected directly — note the validated module is always linked, while the default mode is off:
+
+```bash
+go version -m <manager-binary> | grep -iE 'GOFIPS140|fips140'
+# build  -tags=fips140v1.0
+# build  DefaultGODEBUG=fips140=off
+# build  GOFIPS140=v1.0.0
+```
