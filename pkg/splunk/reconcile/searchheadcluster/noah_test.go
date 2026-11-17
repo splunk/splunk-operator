@@ -392,6 +392,7 @@ func TestNoahNamespaceKVServiceDefaultsUseSystemLocalDictionary(t *testing.T) {
 			assert.Equal(t, noahSpec.Endpoint, server.Stanzas["noahService"]["uri"])
 			assert.Equal(t, noahSpec.Tenant, server.Stanzas["noahService"]["tenant"])
 			assert.NotContains(t, server.Stanzas["noahService"], "pass4SymmKey")
+			assert.Equal(t, splcommon.StanzaFields{"site": "site0"}, server.Stanzas["general"])
 			if enabled {
 				assert.Equal(t, splcommon.StanzaFields{"kvserviceConnectionString": "http://splunk-shared-kvservice-service.backend:8066"}, server.Stanzas["kvstore"])
 				assert.Equal(t, splcommon.StanzaFields{"tenant": "kvtenant", "mvl-enabled": "true"}, server.Stanzas["scs"])
