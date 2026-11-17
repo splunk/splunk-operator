@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -74,19 +75,31 @@ type cutoverSQL interface {
 	VerifyTargetDurability(context.Context, *cnpgv1.Cluster, cutoverIdentity) (bool, error)
 }
 
+// committedBackupHandoff transfers backup and WAL ownership.
+type committedBackupHandoff interface {
+	TransferBackupOwnership(context.Context, mvutypes.Intent, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error)
+}
+
 // BlueGreenSwitchover advances exactly one durable cutover step per reconcile.
 // Every rollback decision rereads the canonical commit record. After commit,
 // the only available path repairs projections and opens green.
 type BlueGreenSwitchover struct {
-	client    client.Client
-	reader    client.Reader
-	key       types.NamespacedName
-	owner     *platformv1alpha1.PostgresCluster
-	plan      BlueGreenCandidatePlan
-	access    cutoverAccess
-	sql       cutoverSQL
-	endpoints cutoverEndpoints
-	now       func() time.Time
+	client        client.Client
+	reader        client.Reader
+	key           types.NamespacedName
+	owner         *platformv1alpha1.PostgresCluster
+	plan          BlueGreenCandidatePlan
+	access        cutoverAccess
+	sql           cutoverSQL
+	endpoints     cutoverEndpoints
+	now           func() time.Time
+	backupHandoff committedBackupHandoff
+}
+
+// WithBackupHandoff starts backup transfer at commit.
+func (s *BlueGreenSwitchover) WithBackupHandoff(handoff committedBackupHandoff) *BlueGreenSwitchover {
+	s.backupHandoff = handoff
+	return s
 }
 
 func NewBlueGreenSwitchover(c client.Client, reader client.Reader, key types.NamespacedName, owner *platformv1alpha1.PostgresCluster, plan BlueGreenCandidatePlan) (*BlueGreenSwitchover, error) {
@@ -336,6 +349,17 @@ func (s *BlueGreenSwitchover) afterCommit(ctx context.Context, intent mvutypes.I
 	w := status.Switchover
 	if w == nil || w.ControlIdentity == nil || w.FenceVerifiedAt == nil || w.DeadlineAt == nil {
 		return s.pending(status, "Waiting for the committed attempt's durable access-fence proof."), errors.New("committed attempt has incomplete cutover access receipts")
+	}
+	if s.backupHandoff != nil {
+		before := status.DeepCopy()
+		// Reserve time for endpoint recovery when source shutdown stalls.
+		handoffCtx, cancelHandoff := context.WithTimeout(ctx, cutoverRecoveryTimeout/3)
+		_, handoffErr := s.backupHandoff.TransferBackupOwnership(handoffCtx, intent, status)
+		cancelHandoff()
+		if !reflect.DeepEqual(before.Completion, status.Completion) {
+			return s.pending(status, "Recording committed backup handoff progress."), handoffErr
+		}
+		// Keep routing and green access recovery running during backup failures.
 	}
 	if w.TargetAvailableAt != nil {
 		return s.finishAvailability(ctx, status)

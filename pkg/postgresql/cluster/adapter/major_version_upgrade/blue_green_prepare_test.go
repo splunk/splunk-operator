@@ -136,9 +136,21 @@ func TestBlueGreenPreparerReconcilesSourceArtifactsIdempotently(t *testing.T) {
 	sourcePod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: sourceName + "-1", Namespace: namespace, Labels: map[string]string{"cnpg.io/cluster": sourceName}}}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(source, database, sourceSecret, sourcePod).Build()
 	targetStorage := resource.MustParse("10Gi")
-	preparer := NewBlueGreenPreparer(client, types.NamespacedName{Name: parent.Name, Namespace: namespace}, parent, identityadapter.NewIdentityResolver(), BlueGreenPreflightPlan{TargetConfiguration: &platformv1alpha1.PostgresClusterSpec{Storage: &targetStorage}})
+	preparer := NewBlueGreenPreparer(client, types.NamespacedName{Name: parent.Name, Namespace: namespace}, parent, identityadapter.NewIdentityResolver(), BlueGreenPreflightPlan{WALArchiveConfigured: true, TargetConfiguration: &platformv1alpha1.PostgresClusterSpec{Storage: &targetStorage}})
 	preparer.preflight = successfulSourcePreflight{}
 	intent := mvutypes.Intent{Strategy: mvutypes.MajorUpgradeFlowBlueGreen, AttemptID: "attempt-1", SourcePgVersion: "17.1", TargetPgVersion: "18"}
+	preparer.plan.WALArchiveConfigured = false
+	_, err := preparer.Prepare(t.Context(), intent)
+	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowPending)
+	require.ErrorContains(t, err, "snapshot-only")
+	pending, err := bluegreen.New(mvutypes.Preflight, preparer, nil, nil).Advance(t.Context(), intent)
+	require.NoError(t, err)
+	require.Equal(t, "TargetWALArchiveNotConfigured", pending.Report.Reason)
+	require.Contains(t, pending.Report.Message, "Barman WAL archiving")
+	publications := &cnpgv1.PublicationList{}
+	require.NoError(t, client.List(t.Context(), publications))
+	require.Empty(t, publications.Items, "missing WAL protection must be detected before source mutation")
+	preparer.plan.WALArchiveConfigured = true
 	entry, err := bluegreen.New(mvutypes.PreUpgradeBackup, preparer, nil, nil).Advance(t.Context(), intent)
 	require.NoError(t, err)
 	assert.Equal(t, string(mvutypes.Preflight), entry.Report.Phase)

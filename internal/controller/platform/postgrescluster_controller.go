@@ -190,6 +190,11 @@ func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedN
 		if err != nil {
 			return nil, fmt.Errorf("construct blue/green cancellation: %w", err)
 		}
+		completion, err := majorupgradeadapter.NewBlueGreenCompletion(switchover, cancellation.BlueGreenReplicationTeardown, mergedConfig)
+		if err != nil {
+			return nil, fmt.Errorf("construct blue/green completion: %w", err)
+		}
+		switchover.WithBackupHandoff(completion)
 		var notifier *majorupgradeadapter.UpgradeNotifier
 		if cluster != nil {
 			notifier = majorupgradeadapter.NewUpgradeNotifier(&recorderEventEmitter{r.Recorder}, cluster)
@@ -198,11 +203,11 @@ func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedN
 		candidate := majorupgradeadapter.NewBlueGreenCandidatePreparerWithReader(r.Client, reader, key, cluster, blueGreenCandidatePlan)
 		if !providerConfigured {
 			return majorversionupgrade.NewMajorUpgradeUseCase(infoStore, nil, driver, notifier, preparer, candidate, switchover).
-				WithBlueGreenCanceller(cancellation), nil
+				WithBlueGreenCanceller(cancellation).WithBlueGreenCompletion(completion), nil
 		}
 		rollback := majorupgradeadapter.NewRollbackCapabilityAdapter(r.Client, r.Scheme, key, backupMethod, backupPluginName)
 		return majorversionupgrade.NewMajorUpgradeUseCase(infoStore, rollback, driver, notifier, preparer, candidate, switchover).
-			WithBlueGreenCanceller(cancellation), nil
+			WithBlueGreenCanceller(cancellation).WithBlueGreenCompletion(completion), nil
 	}
 }
 
@@ -220,6 +225,7 @@ func blueGreenUpgradePlans(mergedConfig *clustercore.MergedConfig, targetImage s
 		return preflight, candidate
 	}
 	preflight.TargetConfiguration, preflight.TargetImage = mergedConfig.Spec.DeepCopy(), targetImage
+	preflight.WALArchiveConfigured = mergedConfig.CNPG != nil && mergedConfig.CNPG.Backup != nil && mergedConfig.CNPG.Backup.BarmanObjectStore != nil
 	candidate.TargetConfiguration, candidate.TargetImage = mergedConfig.Spec.DeepCopy(), targetImage
 	if mergedConfig.Spec.Instances != nil {
 		candidate.TargetInstances = int(*mergedConfig.Spec.Instances)

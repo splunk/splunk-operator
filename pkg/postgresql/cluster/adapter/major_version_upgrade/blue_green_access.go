@@ -152,7 +152,7 @@ func (a *blueGreenAccess) Credentials(ctx context.Context, status *platformv1alp
 	if err := a.validateControlSecret(secret, status.AttemptID); err != nil {
 		return cutoverIdentity{}, err
 	}
-	return cutoverIdentity{Role: identity.RoleName, Password: string(secret.Data[replicationSecretPasswordKey]), AttemptID: status.AttemptID}, nil
+	return cutoverIdentity{Role: identity.RoleName, Password: string(secret.Data[replicationSecretPasswordKey]), AttemptID: status.AttemptID, LogicalName: a.key.Name}, nil
 }
 
 func (a *blueGreenAccess) PrepareControl(ctx context.Context, blue, green *cnpgv1.Cluster, databases []declaredDatabase, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {

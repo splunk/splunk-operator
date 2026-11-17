@@ -62,7 +62,7 @@ func (s *postgresSwitchoverSQL) verifyFenceHosts(ctx context.Context, cluster *c
 		}
 		var valid bool
 		err = withCutoverConn(ctx, conn, func(conn pginfra.Conn) error {
-			if err := verifyControlDatabase(ctx, conn, id); err != nil {
+			if err := verifyControlDatabase(ctx, conn, id, "postgres"); err != nil {
 				return err
 			}
 			if err := queryCutoverBoolean(ctx, conn, &valid, controlHelperCallSQL(controlFenceFunction)); err != nil {
@@ -170,7 +170,7 @@ func (s *postgresSwitchoverSQL) drainHosts(ctx context.Context, cluster *cnpgv1.
 		var complete bool
 		err = withCutoverConn(ctx, conn, func(conn pginfra.Conn) error {
 			var err error
-			complete, err = drainCutoverInstance(ctx, conn, id, terminate)
+			complete, err = drainCutoverInstance(ctx, conn, id, terminate, "postgres")
 			return err
 		})
 		if err != nil {
@@ -181,8 +181,8 @@ func (s *postgresSwitchoverSQL) drainHosts(ctx context.Context, cluster *cnpgv1.
 	return drained, nil
 }
 
-func drainCutoverInstance(ctx context.Context, conn pginfra.Conn, id cutoverIdentity, terminate bool) (bool, error) {
-	if err := verifyControlDatabase(ctx, conn, id); err != nil {
+func drainCutoverInstance(ctx context.Context, conn pginfra.Conn, id cutoverIdentity, terminate bool, database string) (bool, error) {
+	if err := verifyControlDatabase(ctx, conn, id, database); err != nil {
 		return false, err
 	}
 	// Capture startup locks in a separate round trip before activity can be

@@ -293,7 +293,7 @@ func (s *postgresTeardownSQL) DropAttemptRoles(ctx context.Context, cluster *cnp
 // privileges. RESTRICT fails closed on objects the workflow did not create.
 func revokeInDatabase(ctx context.Context, conn pginfra.Conn, roles []string) error {
 	schema := pginfra.QuoteIdentifier(candidateGuardSchema)
-	for _, helper := range cutoverHelpers(cutoverIdentity{}) {
+	for _, helper := range cutoverHelpers(cutoverIdentity{}, "") {
 		if _, err := conn.Exec(ctx, "DROP FUNCTION IF EXISTS "+schema+"."+pginfra.QuoteIdentifier(helper.name)+"()"); err != nil {
 			return err
 		}

@@ -18,12 +18,24 @@ package majorversionupgradetypes
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// PostgresMajorVersion returns the major component, or zero for invalid input.
+func PostgresMajorVersion(version string) int {
+	major, _, _ := strings.Cut(version, ".")
+	parsed, err := strconv.Atoi(major)
+	if err != nil {
+		return 0
+	}
+	return parsed
+}
 
 type Intent struct {
 	Strategy        string

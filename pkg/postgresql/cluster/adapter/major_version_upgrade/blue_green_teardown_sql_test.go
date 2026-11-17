@@ -233,7 +233,7 @@ func TestTeardownSQLDropsRolesAndControlSchema(t *testing.T) {
 	for _, database := range []string{"orders", "postgres"} {
 		assert.Contains(t, h.primary.execs, database+": DROP SCHEMA IF EXISTS "+schema+" RESTRICT")
 		assert.Contains(t, h.primary.execs, database+": DROP OWNED BY "+pginfra.QuoteIdentifier("sok_bg_control"))
-		for _, helper := range cutoverHelpers(cutoverIdentity{}) {
+		for _, helper := range cutoverHelpers(cutoverIdentity{}, "") {
 			assert.Contains(t, h.primary.execs, database+": DROP FUNCTION IF EXISTS "+schema+"."+pginfra.QuoteIdentifier(helper.name)+"()")
 		}
 	}
@@ -329,9 +329,10 @@ func TestTeardownSQLPinsInstanceBeforeExecutingSQL(t *testing.T) {
 			conn, err := connectTeardownInstance(t.Context(), f.client, f.parent, source, "blue-rw.default.svc.cluster.local", "postgres", func(_ context.Context, _ *cnpgv1.Cluster, host, _ string) (pginfra.Conn, error) {
 				assert.Equal(t, "10.0.0.1", host, "connect directly to the recorded environment's instance")
 				var replaced client.Object
-				if replacement == "cluster" {
+				switch replacement {
+				case "cluster":
 					replaced = source.DeepCopy()
-				} else if replacement == "pod" {
+				case "pod":
 					replaced = pod.DeepCopy()
 				}
 				if replaced != nil {

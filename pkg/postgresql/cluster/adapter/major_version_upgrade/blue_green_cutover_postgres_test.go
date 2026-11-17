@@ -96,7 +96,7 @@ func TestCutoverSQLAgainstPostgres(t *testing.T) {
 	require.NoError(t, queryOne(t.Context(), restricted, &durable, targetStandbyDurabilitySQL, finalGreenLSN))
 	assert.False(t, durable, "a promoted target must not satisfy a stale standby proof")
 	verifyCutoverPublicationSQLAgainstPostgres(t, bootstrap, restricted, database)
-	require.NoError(t, verifyControlDatabase(t.Context(), restricted, id))
+	require.NoError(t, verifyControlDatabase(t.Context(), restricted, id, database))
 	require.NoError(t, verifyCandidateDMLGuards(t.Context(), restricted))
 	var fenced bool
 	require.NoError(t, queryOne(t.Context(), restricted, &fenced, `SELECT splunk_operator_bluegreen.cutover_fence_file_valid()`))
@@ -176,13 +176,85 @@ func TestCutoverSQLAgainstPostgres(t *testing.T) {
 	assert.Equal(t, sequences, actual)
 	_, err = bootstrap.Exec(t.Context(), "GRANT SELECT (subconninfo) ON pg_catalog.pg_subscription TO "+pginfra.QuoteIdentifier(id.Role))
 	require.NoError(t, err)
-	require.ErrorIs(t, verifyControlDatabase(t.Context(), restricted, id), mvutypes.ErrCandidateInvalid, "unrequested catalog-column access must invalidate control proof")
+	require.ErrorIs(t, verifyControlDatabase(t.Context(), restricted, id, database), mvutypes.ErrCandidateInvalid, "unrequested catalog-column access must invalidate control proof")
 	_, err = bootstrap.Exec(t.Context(), "REVOKE SELECT (subconninfo) ON pg_catalog.pg_subscription FROM "+pginfra.QuoteIdentifier(id.Role))
 	require.NoError(t, err)
-	require.NoError(t, verifyControlDatabase(t.Context(), restricted, id))
+	require.NoError(t, verifyControlDatabase(t.Context(), restricted, id, database))
 	_, err = bootstrap.Exec(t.Context(), "GRANT SELECT ON public.orders TO "+pginfra.QuoteIdentifier(id.Role))
 	require.NoError(t, err)
-	require.ErrorIs(t, verifyControlDatabase(t.Context(), restricted, id), mvutypes.ErrCandidateInvalid, "unexpected grants must be rejected before normalization")
+	require.ErrorIs(t, verifyControlDatabase(t.Context(), restricted, id, database), mvutypes.ErrCandidateInvalid, "unexpected grants must be rejected before normalization")
+}
+
+// TestCommittedSourceTeardownAgainstPostgres checks cleanup isolation.
+func TestCommittedSourceTeardownAgainstPostgres(t *testing.T) {
+	dsn := os.Getenv("SPLUNK_OPERATOR_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("set SPLUNK_OPERATOR_TEST_POSTGRES_DSN to a disposable PostgreSQL superuser database")
+	}
+	ctx := t.Context()
+	admin, err := pgx.Connect(ctx, dsn)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = admin.Close(context.WithoutCancel(ctx)) })
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	database := "bg_completion_" + suffix
+	id := cutoverIdentity{Role: "bg_completion_control_" + suffix, Password: "disposable-only", AttemptID: "completion-" + suffix, LogicalName: "orders"}
+	publisher := replicationRoleName(id.AttemptID)
+	slot, foreignSlot := replicationSlotName(id.LogicalName, database), "other_"+suffix
+	_, err = admin.Exec(ctx, "CREATE DATABASE "+pginfra.QuoteIdentifier(database))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		cleanup := context.WithoutCancel(ctx)
+		for _, name := range []string{slot, foreignSlot} {
+			_, _ = admin.Exec(cleanup, `SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name=$1`, name)
+		}
+		_, _ = admin.Exec(cleanup, "DROP DATABASE IF EXISTS "+pginfra.QuoteIdentifier(database)+" WITH (FORCE)")
+		for _, role := range []string{id.Role, publisher} {
+			_, _ = admin.Exec(cleanup, "DROP ROLE IF EXISTS "+pginfra.QuoteIdentifier(role))
+		}
+	})
+	config, err := pgx.ParseConfig(dsn)
+	require.NoError(t, err)
+	config.Database = database
+	bootstrap, err := pgx.ConnectConfig(ctx, config)
+	require.NoError(t, err)
+	defer bootstrap.Close(ctx)
+	conn := livePreflightSQLConn{Conn: bootstrap}
+	require.NoError(t, prepareControlRole(ctx, conn, id))
+	_, err = bootstrap.Exec(ctx, "CREATE SCHEMA "+candidateGuardSchema+" AUTHORIZATION postgres")
+	require.NoError(t, err)
+	require.NoError(t, installCutoverHelper(ctx, conn, retireReplicationHelper(id, database), id))
+	_, err = bootstrap.Exec(ctx, "GRANT USAGE ON SCHEMA "+candidateGuardSchema+" TO "+pginfra.QuoteIdentifier(id.Role))
+	require.NoError(t, err)
+	_, err = bootstrap.Exec(ctx, "CREATE ROLE "+pginfra.QuoteIdentifier(publisher)+" LOGIN REPLICATION PASSWORD 'temporary'")
+	require.NoError(t, err)
+	for _, name := range []string{publicationName(id.LogicalName, database), "unrelated_publication"} {
+		_, err = bootstrap.Exec(ctx, "CREATE PUBLICATION "+pginfra.QuoteIdentifier(name)+" FOR ALL TABLES")
+		require.NoError(t, err)
+	}
+	for _, name := range []string{slot, foreignSlot} {
+		_, err = bootstrap.Exec(ctx, `SELECT pg_create_logical_replication_slot($1,'pgoutput')`, name)
+		require.NoError(t, err)
+	}
+	config.User, config.Password = id.Role, id.Password
+	control, err := pgx.ConnectConfig(ctx, config)
+	require.NoError(t, err)
+	defer control.Close(ctx)
+	restricted := livePreflightSQLConn{Conn: control}
+	for range 2 {
+		var removed bool
+		require.NoError(t, queryOne(ctx, restricted, &removed, controlHelperCallSQL(controlRetireReplicationFunction)))
+		assert.True(t, removed)
+	}
+	var surviving int64
+	require.NoError(t, queryOne(ctx, conn, &surviving, `SELECT count(*) FROM pg_replication_slots WHERE slot_name=$1`, foreignSlot))
+	assert.EqualValues(t, 1, surviving)
+	require.NoError(t, queryOne(ctx, conn, &surviving, `SELECT count(*) FROM pg_publication WHERE pubname='unrelated_publication'`))
+	assert.EqualValues(t, 1, surviving)
+	var disabled bool
+	require.NoError(t, queryOne(ctx, conn, &disabled, `SELECT NOT rolcanlogin AND rolpassword IS NULL FROM pg_authid WHERE rolname=$1`, publisher))
+	assert.True(t, disabled)
+	_, err = restricted.Exec(ctx, "DROP PUBLICATION unrelated_publication")
+	require.Error(t, err, "the control role must not gain general publication administration")
 }
 
 func verifyCutoverPublicationSQLAgainstPostgres(t *testing.T, admin *pgx.Conn, restricted pginfra.Conn, database string) {

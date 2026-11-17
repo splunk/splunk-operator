@@ -18,8 +18,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"slices"
-	"strconv"
-	"strings"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	cnpgpostgres "github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
@@ -67,8 +65,9 @@ type BlueGreenPreparer struct {
 // source claim and frozen in its fingerprint. Later class changes cannot
 // silently change green within the same attempt.
 type BlueGreenPreflightPlan struct {
-	TargetConfiguration *platformv1alpha1.PostgresClusterSpec
-	TargetImage         string
+	TargetConfiguration  *platformv1alpha1.PostgresClusterSpec
+	TargetImage          string
+	WALArchiveConfigured bool
 }
 
 func NewBlueGreenPreparer(c client.Client, key types.NamespacedName, cluster *platformv1alpha1.PostgresCluster, resolver clusteridentity.ClusterCardResolver, plan BlueGreenPreflightPlan) *BlueGreenPreparer {
@@ -84,6 +83,9 @@ func (p *BlueGreenPreparer) Prepare(ctx context.Context, intent mvutypes.Intent)
 		return nil, err
 	}
 	previous := previousBlueGreenStatus(intent)
+	if !p.plan.WALArchiveConfigured {
+		return previous, fmt.Errorf("%w: %w", mvutypes.ErrUpgradeFlowPending, mvutypes.ErrTargetWALArchiveMissing)
+	}
 	databases, checks, err := p.inspectSource(ctx, intent, cluster, previous)
 	if err != nil {
 		return nil, err
@@ -477,8 +479,7 @@ func (p *BlueGreenPreparer) generation() int64 {
 }
 
 func (p *BlueGreenPreparer) validateLogicalSlotSupport(intent mvutypes.Intent) error {
-	major, err := strconv.Atoi(strings.SplitN(intent.SourcePgVersion, ".", 2)[0])
-	if err != nil || major < 17 {
+	if mvutypes.PostgresMajorVersion(intent.SourcePgVersion) < 17 {
 		return fmt.Errorf("%w: source PostgreSQL %q does not support native logical-slot failover without an explicitly managed extension", mvutypes.ErrUpgradeFlowFailed, intent.SourcePgVersion)
 	}
 	return nil

@@ -10,12 +10,14 @@ The `blueGreen` strategy creates a target-major CNPG environment, imports the
 managed schema, and copies data using logical replication. Applications continue
 using blue until a separate switchover gate authorizes an interruption.
 
-This implementation reaches **Target Available** and then waits in
-`PostUpgradeBackup`. Before Endpoint Committed, an attempt can also be
-[cancelled](#cancel-an-attempt). Target-major recoverability, post-commit
-replication teardown, `Completed`, and retained-environment cleanup belong to
-subsequent workflow stages. Keep the upgrade configuration and retained
-environment in place at these boundaries.
+After **Target Available**, the workflow verifies a target-major recovery
+baseline, records `Recoverable`, removes temporary replication and credentials,
+and reaches `Completed`. Blue remains fenced and retained. Explicit retained
+environment cleanup and its deletion lifecycle are separate stages; keep the
+upgrade configuration in place until cleanup is available and completes.
+
+Before Endpoint Committed, an attempt can also be
+[cancelled](#cancel-an-attempt).
 
 ### Prepare a candidate
 
@@ -24,6 +26,11 @@ including a healthy source, configured backup protection, and a supported
 single-major upgrade. Clients must consume the operator's cluster or database
 access ConfigMaps; an application pinned to a blue Service will not follow the
 handoff.
+
+The class must configure Barman object storage for the target WAL archive.
+Volume snapshots can coexist with it, but snapshot-only protection cannot prove
+the required WAL baseline and keeps new attempts waiting in preflight. Configure
+this protection before requesting a blue/green upgrade.
 
 Before granting `allow`, ensure `spec.images.postgresql` includes pinned images
 for both the source and target majors. Retain existing
@@ -110,6 +117,35 @@ blue after this write. Target Available is later: it proves the child
 publication barrier and effective green access. A deterministic
 `PostgresEndpointsPublished` Event is created once per attempt after that proof.
 
+At commit, backup and WAL production start transferring to green. The operator
+removes owned blue backup schedules, drains active backups, and restarts
+surviving blue processes with archiving disabled behind their access fence.
+Only after confirming source shutdown does it enable green protection, using
+the class policy and green's own archive identity. This transfer retries safely
+after a restart without running both environments as producers. Backup waits
+do not prevent endpoint repair or green access recovery.
+
+### Recoverability and completion
+
+Green creates a workflow-owned target-major backup through the effective
+class-configured backend. A completed backup alone is insufficient: the operator
+also verifies the target's PostgreSQL major and system identity and fresh WAL
+archive progress covering the backup's ending WAL. The source-major recovery
+anchor remains under normal retention.
+
+Only after this evidence is durably `Recoverable` does the operator remove the
+attempt's subscriptions, publications, logical slots, and replication source
+configuration. Teardown waits for pending CNPG apply operations and is safe to
+repeat. Temporary credentials on green are removed; CNPG disables the source
+control and publisher passwords without reopening ordinary source access. The
+inert source control declarations and SQL helpers remain with retained blue
+until environment cleanup, with their password Secrets removed.
+
+`Completed` requires current green health and ordinary read/write access, every
+endpoint projection on green, verified recoverability, and successful teardown.
+Application restart, acknowledgment, or observed reconnection is never required.
+Backup and teardown time are separate from the interruption window.
+
 ### Observe progress
 
 Inspect the latest `status.postgresMajorUpgradeStatus` entry:
@@ -128,11 +164,17 @@ Inspect the latest `status.postgresMajorUpgradeStatus` entry:
 | `blueGreen.gates.cancellation` | Latched cancellation request and each completed cancellation step |
 | `blueGreen.rebuildRequired` | Why the attempt can no longer be reused by a retry |
 | `blueGreen.conditions` | Whether cancellation, retry, and cleanup are currently available |
+| `blueGreen.completion.startedAt`, `sourceStoppedAt` | Backup/archive handoff and verified blue producer shutdown |
+| `blueGreen.recoverability.targetBackupName` | Workflow-owned target recovery anchor |
+| `blueGreen.recoverability.backupVerifiedAt`, `walArchiveBaselineVerifiedAt` | Verified backup and WAL baseline |
+| `blueGreen.completion.replicationRemovedAt` | Verified replication teardown |
+| `blueGreen.completion.sourceCredentialsRetiredAt`, `credentialsRemovedAt` | Source password retirement and attempt Secret removal |
 
-Fields without a `blueGreen` prefix in the table are under
-`blueGreen.switchover`. Phase `PostUpgradeBackup` at this implementation boundary
-means green is available and the target-major recoverability stage is pending;
-it does not mean the full upgrade is `Completed`. The parent
+Abbreviated fields share the prefix of the first field in their row. The fence,
+drain, final LSN, sequence, and parity fields are under `blueGreen.switchover`.
+Phase `PostUpgradeBackup` means green is available and target-major recoverability
+is pending. `Recoverable` means backup and WAL evidence are verified while
+teardown proceeds. Neither is full upgrade completion. The parent
 `PostgresCluster.status.phase` returns to operational `Ready` after live green
 health, managed roles, and metrics converge; this permits ordinary database
 reconciliation while the upgrade entry remains in `PostUpgradeBackup`.
@@ -170,6 +212,19 @@ authentication, identity, or fence contradiction still prevents progression. An 
 ambiguous canonical record never grants permission to restore blue. A receipt
 can recover an earlier commit; it cannot authorize the first green publication.
 
+A failed or delayed target backup or WAL check blocks teardown while green
+continues serving. Correct the backend first. If an immutable backup request
+has failed, set a newer `platform.splunk.com/major-upgrade-retry-at` timestamp
+after the commit time to request a fresh backup within the same attempt. The
+operator preserves earlier requests and anchors. Once recoverability is verified,
+its anchor is fixed; later retry annotations do not replace it.
+
+An attempt prepared by an older operator without the restricted replication
+retirement helper can restore green access but fails closed during source teardown.
+Green stays authoritative; do not open blue or bypass helper ownership checks to
+finish it. Escalate for an explicitly authorized recovery of the recorded source
+control overlay.
+
 Blue remains fenced and retained after Target Available. `PostgresDatabase`
 creation, deletion, and spec changes remain frozen until `Completed` or
 `Cancelled`, as does the broader cluster configuration. Status and metadata
@@ -178,10 +233,9 @@ repoint applications or remove blue's fence to recover a committed attempt.
 
 Deleting a parent with `clusterDeletionPolicy: Retain` is blocked while an
 unfinished blue/green attempt owns replication or access artifacts. The operator
-keeps its finalizer, environment ownership, and recovery credentials. Verified
-replication teardown and source restoration are required before retention can
-finish; automatic cancellation and teardown belong to the subsequent lifecycle
-stages. Do not remove the finalizer to bypass this guard.
+keeps its finalizer, environment ownership, and required recovery material. The
+normal cleanup and finalization lifecycle remains separate from production
+completion. Do not remove the finalizer to bypass this guard.
 
 The protocol targets zero data loss for the supported, frozen managed database
 inventory. The timeout bounds the operator's interruption work; client

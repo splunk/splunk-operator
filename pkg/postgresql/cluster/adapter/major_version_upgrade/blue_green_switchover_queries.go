@@ -26,7 +26,7 @@ type cutoverHelper struct{ name, body string }
 
 // Helpers accept no caller-controlled SQL, identifiers, or process IDs. Their
 // owner is postgres, but only the attempt identity may execute them.
-func cutoverHelpers(id cutoverIdentity) []cutoverHelper {
+func cutoverHelpers(id cutoverIdentity, database string) []cutoverHelper {
 	fenceRules := cutoverFenceRules(id.Role, replicationRoleName(id.AttemptID))
 	caller := "IF session_user <> " + quoteSQLStringLiteral(id.Role) + " THEN RAISE EXCEPTION 'invalid cutover identity'; END IF;\n"
 	return []cutoverHelper{
@@ -48,6 +48,7 @@ AND (SELECT array_agg(type || ':' || array_to_string(database,',') || ':' || arr
 FROM (SELECT * FROM pg_catalog.pg_hba_file_rules WHERE type LIKE 'host%'
 AND user_name NOT IN (ARRAY['streaming_replica']::text[],ARRAY['cnpg_pooler_pgbouncer']::text[]) ORDER BY rule_number LIMIT ` + strconv.Itoa(len(fenceRules)) + `) rules)
 = ` + fenceRuleProofSQL(fenceRules) + `; END;`},
+		retireReplicationHelper(id, database),
 	}
 }
 

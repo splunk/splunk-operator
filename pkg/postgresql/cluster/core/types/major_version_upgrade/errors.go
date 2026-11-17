@@ -47,6 +47,7 @@ var (
 	ErrBlueGreenStrategyUnavailable       = errors.New("blue/green major upgrade strategy is not implemented")
 	ErrRollbackCapabilityMissing          = errors.New("major upgrade rollback capability port is not configured")
 	ErrBackupProviderMissing              = errors.New("major upgrade backup provider is not configured")
+	ErrTargetWALArchiveMissing            = errors.New("blue/green completion requires class-configured Barman WAL archiving; snapshot-only protection cannot establish the target recovery baseline")
 	ErrRollbackCapabilityUnavailable      = errors.New("major upgrade rollback capability is unavailable")
 	ErrUpgradeFlowFailed                  = errors.New("major upgrade flow failed")
 	ErrUpgradeVerificationFailed          = errors.New("major upgrade verification failed")

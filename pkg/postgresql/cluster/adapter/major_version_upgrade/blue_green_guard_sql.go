@@ -55,7 +55,7 @@ func verifyCutoverGuardState(ctx context.Context, conn pginfra.Conn, switchover 
 func (s *postgresSwitchoverSQL) RemoveGuards(ctx context.Context, target *cnpgv1.Cluster, databases []declaredDatabase, id cutoverIdentity) error {
 	for _, db := range databases {
 		if err := s.withConn(ctx, target, "", db.name, id, func(conn pginfra.Conn) error {
-			if err := verifyControlDatabase(ctx, conn, id); err != nil {
+			if err := verifyControlDatabase(ctx, conn, id, db.name); err != nil {
 				return err
 			}
 			var present bool

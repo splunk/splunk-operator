@@ -124,21 +124,25 @@ const (
 // activeBackupProviders returns the providers configured for an enabled backup, in a stable
 // order. Empty when backup is disabled or no provider is configured.
 func (b *backupModel) activeBackupProviders() []backupProvider {
-	if !b.backupEnabled() || b.mergedConfig.CNPG == nil || b.mergedConfig.CNPG.Backup == nil {
+	return activeBackupProviders(b.mergedConfig, b.contracts.EnvironmentNamer.EnvironmentName(b.cluster.Name, b.contracts.CNPGCluster.Name))
+}
+
+func activeBackupProviders(cfg *MergedConfig, environment string) []backupProvider {
+	if !backupIsEnabled(cfg) || cfg.CNPG == nil || cfg.CNPG.Backup == nil {
 		return nil
 	}
 	var providers []backupProvider
-	if b.mergedConfig.CNPG.Backup.VolumeSnapshot != nil {
+	if cfg.CNPG.Backup.VolumeSnapshot != nil {
 		providers = append(providers, backupProvider{
 			kind:   providerVolumeSnapshot,
-			sbName: scheduledBackupName(b.contracts.EnvironmentNamer.EnvironmentName(b.cluster.Name, b.contracts.CNPGCluster.Name)),
+			sbName: scheduledBackupName(environment),
 			method: backuptypes.BackupMethodVolumeSnapshot,
 		})
 	}
-	if b.mergedConfig.CNPG.Backup.BarmanObjectStore != nil {
+	if cfg.CNPG.Backup.BarmanObjectStore != nil {
 		providers = append(providers, backupProvider{
 			kind:       providerObjectStore,
-			sbName:     objectStoreBackupName(b.contracts.EnvironmentNamer.EnvironmentName(b.cluster.Name, b.contracts.CNPGCluster.Name)),
+			sbName:     objectStoreBackupName(environment),
 			method:     backuptypes.BackupMethodPlugin,
 			pluginName: barmanCloudPluginName,
 		})
@@ -263,14 +267,27 @@ func (b *backupModel) Reconcile(ctx context.Context) error {
 
 // scheduleSpec builds the backend-agnostic ScheduleSpec for a provider from the merged config.
 func (b *backupModel) scheduleSpec(provider backupProvider) backuptypes.ScheduleSpec {
+	return backupScheduleSpec(b.mergedConfig, b.contracts.CNPGCluster.Name, b.cluster.Namespace, provider)
+}
+
+// BackupSchedulesForEnvironment builds the class-configured backup schedules.
+func BackupSchedulesForEnvironment(cfg *MergedConfig, environment, namespace string) []backuptypes.ScheduleSpec {
+	var schedules []backuptypes.ScheduleSpec
+	for _, provider := range activeBackupProviders(cfg, environment) {
+		schedules = append(schedules, backupScheduleSpec(cfg, environment, namespace, provider))
+	}
+	return schedules
+}
+
+func backupScheduleSpec(cfg *MergedConfig, environment, namespace string, provider backupProvider) backuptypes.ScheduleSpec {
 	return backuptypes.ScheduleSpec{
 		Name:            provider.sbName,
-		Namespace:       b.cluster.Namespace,
-		CNPGClusterName: b.contracts.CNPGCluster.Name,
+		Namespace:       namespace,
+		CNPGClusterName: environment,
 		// Schedule has a kubebuilder default but may be nil when constructed programmatically.
-		Schedule: ptr.Deref(b.mergedConfig.Spec.Backup.Schedule, ""),
+		Schedule: ptr.Deref(cfg.Spec.Backup.Schedule, ""),
 		// Target has a kubebuilder default but may be nil when constructed programmatically.
-		Target:     ptr.Deref(b.mergedConfig.CNPG.Backup.Target, "prefer-standby"),
+		Target:     ptr.Deref(cfg.CNPG.Backup.Target, "prefer-standby"),
 		Method:     provider.method,
 		PluginName: provider.pluginName,
 	}

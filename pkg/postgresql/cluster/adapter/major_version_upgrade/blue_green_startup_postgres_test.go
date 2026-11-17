@@ -156,7 +156,7 @@ func TestCutoverDrainWaitsForInitializingBackendAgainstPostgres(t *testing.T) {
 	require.Error(t, err, "fresh connections must already be fenced")
 	require.True(t, intentionalFenceDenial(err), "a timeout or another connection failure is not proof of the fence")
 	for _, terminate := range []bool{false, true} {
-		drained, err := drainCutoverInstance(ctx, livePreflightSQLConn{Conn: control}, id, terminate)
+		drained, err := drainCutoverInstance(ctx, livePreflightSQLConn{Conn: control}, id, terminate, database)
 		require.NoError(t, err)
 		assert.False(t, drained, "an initializing backend must block the final source position, even after termination of visible sessions")
 	}
@@ -183,7 +183,7 @@ func TestCutoverDrainWaitsForInitializingBackendAgainstPostgres(t *testing.T) {
 		_, err = started.conn.Exec(ctx, "INSERT INTO public.orders VALUES (1)")
 		require.NoError(t, err, "NOLOGIN does not revoke a connection that already passed its startup login check")
 	}}
-	drained, err := drainCutoverInstance(ctx, handoff, id, false)
+	drained, err := drainCutoverInstance(ctx, handoff, id, false, database)
 	require.NoError(t, err)
 	require.NotNil(t, started.conn, "the startup transition must occur between the production barrier's observations")
 	defer started.conn.Close(ctx)
@@ -192,7 +192,7 @@ func TestCutoverDrainWaitsForInitializingBackendAgainstPostgres(t *testing.T) {
 	require.NoError(t, observer.QueryRow(ctx, "SELECT pg_catalog.pg_current_wal_lsn() > $1::pg_lsn", sourcePosition).Scan(&later))
 	require.True(t, later, "accepting the earlier source position would omit the late committed write")
 	require.Eventually(t, func() bool {
-		drained, err := drainCutoverInstance(ctx, livePreflightSQLConn{Conn: control}, id, true)
+		drained, err := drainCutoverInstance(ctx, livePreflightSQLConn{Conn: control}, id, true, database)
 		return err == nil && drained
 	}, 5*time.Second, 10*time.Millisecond)
 }

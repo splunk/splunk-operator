@@ -192,10 +192,15 @@ func (o *objectStoreModel) deleteObjectStoreForEnvironment(ctx context.Context, 
 // must be updated in lockstep — a mismatch produces an ObjectStore the plugin
 // rejects rather than a compile error. See ObjectStoreGVK for the pinned version.
 func (o *objectStoreModel) buildObjectStore(name string, cfg *platformv1alpha1.CNPGBarmanObjectStoreConfig) *unstructured.Unstructured {
+	return BuildObjectStore(name, o.cluster.Namespace, cfg)
+}
+
+// BuildObjectStore builds the class-configured ObjectStore for an environment.
+func BuildObjectStore(name, namespace string, cfg *platformv1alpha1.CNPGBarmanObjectStoreConfig) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(ObjectStoreGVK)
 	obj.SetName(name)
-	obj.SetNamespace(o.cluster.Namespace)
+	obj.SetNamespace(namespace)
 
 	spec := map[string]any{
 		"configuration": map[string]any{

@@ -20,8 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
-	"strings"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/logging"
@@ -46,6 +44,7 @@ type blueGreenStrategy struct {
 	candidate  bluegreen.CandidatePreparer
 	switchover bluegreen.Switchover
 	canceller  bluegreen.Canceller
+	completion bluegreen.Completion
 }
 
 func (s pgUpgradeStrategy) Advance(ctx context.Context, _ mvutypes.Intent) (mvutypes.Progress, error) {
@@ -56,7 +55,7 @@ func (s pgUpgradeStrategy) Advance(ctx context.Context, _ mvutypes.Intent) (mvut
 func (pgUpgradeStrategy) RequiresPreUpgradeBackup(mvutypes.Intent) bool { return true }
 
 func (s blueGreenStrategy) Advance(ctx context.Context, intent mvutypes.Intent) (mvutypes.Progress, error) {
-	outcome, err := bluegreen.New(s.phase, s.preparer, s.candidate, s.switchover).WithCanceller(s.canceller).Advance(ctx, intent)
+	outcome, err := bluegreen.New(s.phase, s.preparer, s.candidate, s.switchover).WithCanceller(s.canceller).WithCompletion(s.completion).Advance(ctx, intent)
 	return mvutypes.Progress{Report: outcome.Report, BlueGreen: outcome.BlueGreen}, err
 }
 
@@ -76,10 +75,17 @@ type MajorUpgradeUseCase struct {
 	blueGreenCandidate  bluegreen.CandidatePreparer
 	blueGreenSwitchover bluegreen.Switchover
 	blueGreenCanceller  bluegreen.Canceller
+	blueGreenCompletion bluegreen.Completion
 	notifier            pgupgradeflow.Notifier
 
 	intent mvutypes.Intent
 	active bool
+}
+
+// WithBlueGreenCompletion sets the committed recovery runtime.
+func (h *MajorUpgradeUseCase) WithBlueGreenCompletion(completion bluegreen.Completion) *MajorUpgradeUseCase {
+	h.blueGreenCompletion = completion
+	return h
 }
 
 // NewMajorUpgradeUseCase wires both strategies through one constructor.
@@ -329,8 +335,8 @@ func reportCause(err error, report reconciliationtypes.Report) error {
 }
 
 func (h *MajorUpgradeUseCase) validateIntent() error {
-	src := majorVersion(h.intent.SourcePgVersion)
-	tgt := majorVersion(h.intent.TargetPgVersion)
+	src := mvutypes.PostgresMajorVersion(h.intent.SourcePgVersion)
+	tgt := mvutypes.PostgresMajorVersion(h.intent.TargetPgVersion)
 	if tgt <= 0 {
 		// Target major is unparseable: nothing meaningful to validate yet.
 		return nil
@@ -353,15 +359,6 @@ func (h *MajorUpgradeUseCase) validateIntent() error {
 	return nil
 }
 
-func majorVersion(version string) int {
-	major, _, _ := strings.Cut(version, ".")
-	parsed, err := strconv.Atoi(major)
-	if err != nil {
-		return 0
-	}
-	return parsed
-}
-
 func (h *MajorUpgradeUseCase) readIntent(ctx context.Context) (mvutypes.Intent, bool, error) {
 	if h.store == nil {
 		return mvutypes.Intent{}, false, errors.Join(mvutypes.ErrStateTemporarilyUnavailable, errors.New("major upgrade info store is not configured"))
@@ -374,7 +371,7 @@ func (h *MajorUpgradeUseCase) strategyFor(intent mvutypes.Intent) upgradeStrateg
 	case mvutypes.MajorUpgradeFlowPgUpgrade:
 		return pgUpgradeStrategy{flow: pgupgradeflow.NewPgUpgradeFlow(h.pgUpgrade, phaseForIntent(intent.State, intent))}
 	case mvutypes.MajorUpgradeFlowBlueGreen:
-		return blueGreenStrategy{phase: phaseForIntent(intent.State, intent), preparer: h.blueGreen, candidate: h.blueGreenCandidate, switchover: h.blueGreenSwitchover, canceller: h.blueGreenCanceller}
+		return blueGreenStrategy{phase: phaseForIntent(intent.State, intent), preparer: h.blueGreen, candidate: h.blueGreenCandidate, switchover: h.blueGreenSwitchover, canceller: h.blueGreenCanceller, completion: h.blueGreenCompletion}
 	default:
 		return nil
 	}

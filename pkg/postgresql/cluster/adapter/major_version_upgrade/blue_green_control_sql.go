@@ -33,6 +33,7 @@ func (s *postgresSwitchoverSQL) PrepareControl(ctx context.Context, cluster *cnp
 	if id.Role == "" || id.Password == "" || id.AttemptID == "" || s == nil || s.client == nil || s.bootstrap == nil {
 		return fmt.Errorf("%w: incomplete cutover control identity", mvutypes.ErrUpgradeFlowFailed)
 	}
+	id.LogicalName = s.logicalName
 	sequenceWrites, err := s.sequenceWrites(cluster, id)
 	if err != nil {
 		return err
@@ -95,7 +96,7 @@ func (s *postgresSwitchoverSQL) installControlDatabase(ctx context.Context, conn
 	}
 	// Do not overwrite workflow SQL on retry. A partial first bootstrap may
 	// leave a subset of helpers, but every existing helper must match exactly.
-	for _, helper := range cutoverHelpers(id) {
+	for _, helper := range cutoverHelpers(id, database) {
 		var exists bool
 		if err := queryOne(ctx, conn, &exists, controlGuardFunctionExistsSQL, candidateGuardSchema+"."+helper.name+"()"); err != nil {
 			return err
@@ -155,7 +156,7 @@ func (s *postgresSwitchoverSQL) installControlDatabase(ctx context.Context, conn
 			return err
 		}
 	}
-	if err := verifyControlDatabase(ctx, conn, id); err != nil {
+	if err := verifyControlDatabase(ctx, conn, id, database); err != nil {
 		return err
 	}
 	return verifyControlSequenceGrants(ctx, conn, id, writeSequences)
@@ -231,7 +232,7 @@ func verifyControlHelper(ctx context.Context, conn pginfra.Conn, helper cutoverH
 
 // verifyControlDatabase proves the owned control overlay is unchanged. Any
 // mismatch is drift of the attempt's cutover role, so it is rebuild evidence.
-func verifyControlDatabase(ctx context.Context, conn pginfra.Conn, id cutoverIdentity) error {
+func verifyControlDatabase(ctx context.Context, conn pginfra.Conn, id cutoverIdentity, database string) error {
 	var safe bool
 	if err := queryCutoverBoolean(ctx, conn, &safe, controlRoleSQL, id.Role); err != nil {
 		return err
@@ -245,12 +246,22 @@ func verifyControlDatabase(ctx context.Context, conn pginfra.Conn, id cutoverIde
 	if !safe {
 		return fmt.Errorf("%w: cutover role membership changed", mvutypes.ErrCandidateInvalid)
 	}
-	for _, helper := range cutoverHelpers(id) {
+	for _, helper := range cutoverHelpers(id, database) {
+		// Older attempts can recover access without the retirement helper.
+		if helper.name == controlRetireReplicationFunction {
+			var exists bool
+			if err := queryOne(ctx, conn, &exists, controlGuardFunctionExistsSQL, candidateGuardSchema+"."+helper.name+"()"); err != nil {
+				return err
+			}
+			if !exists {
+				continue
+			}
+		}
 		if err := verifyControlHelper(ctx, conn, helper, id); err != nil {
 			return err
 		}
 	}
-	if err := queryCutoverBoolean(ctx, conn, &safe, controlSchemaProofSQL, candidateGuardSchema, id.Role, []string{controlTerminateFunction, controlRemoveGuardsFunction, controlFenceFunction, candidateGuardFunction}); err != nil {
+	if err := queryCutoverBoolean(ctx, conn, &safe, controlSchemaProofSQL, candidateGuardSchema, id.Role, []string{controlTerminateFunction, controlRemoveGuardsFunction, controlFenceFunction, candidateGuardFunction, controlRetireReplicationFunction}); err != nil {
 		return err
 	}
 	if !safe {
@@ -266,6 +277,7 @@ func verifyControlDatabase(ctx context.Context, conn pginfra.Conn, id cutoverIde
 }
 
 func (s *postgresSwitchoverSQL) VerifyControl(ctx context.Context, cluster *cnpgv1.Cluster, id cutoverIdentity) error {
+	id.LogicalName = s.logicalName
 	sequenceWrites, err := s.sequenceWrites(cluster, id)
 	if err != nil {
 		return err
@@ -280,7 +292,7 @@ func (s *postgresSwitchoverSQL) VerifyControl(ctx context.Context, cluster *cnpg
 	}
 	for _, name := range names {
 		if err := s.withConn(ctx, cluster, "", name, id, func(conn pginfra.Conn) error {
-			if err := verifyControlDatabase(ctx, conn, id); err != nil {
+			if err := verifyControlDatabase(ctx, conn, id, name); err != nil {
 				return err
 			}
 			return verifyControlSequenceGrants(ctx, conn, id, sequenceWrites)
