@@ -110,7 +110,7 @@ func NormalizeCutoverProgress(progress Progress) Progress {
 	}
 	phase := SwitchingOver
 	if stage == CutoverHandedOff {
-		if progress.Report.Phase == string(Completed) || progress.Report.Phase == string(PostUpgradeBackup) {
+		if progress.Report.Phase == string(Completed) || progress.Report.Phase == string(PostUpgradeBackup) || progress.Report.Phase == string(Recoverable) {
 			return progress
 		}
 		phase = PostUpgradeBackup

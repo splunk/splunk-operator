@@ -811,10 +811,8 @@ func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, cluste
 		annotations = buildPostgresScrapeAnnotations()
 	}
 	live.InheritedMetadata = &cnpgv1.EmbeddedObjectMetadata{Annotations: annotations}
-	live.Backup = nil
-	if backupIsEnabled(specCfg) && specCfg.CNPG != nil && specCfg.CNPG.Backup != nil && specCfg.CNPG.Backup.VolumeSnapshot != nil {
-		live.Backup = buildCNPGBackupConfiguration(specCfg)
-	}
+	backup, plugins := BackupConfigurationForEnvironment(specCfg, clusterName)
+	live.Backup = backup
 	// Preserve plugins owned by other controllers/users: drop only our managed
 	// barman entry from the live spec, then append the desired one (if any).
 	filtered := make([]cnpgv1.PluginConfiguration, 0, len(live.Plugins))
@@ -823,7 +821,7 @@ func buildCNPGClusterSpec(live cnpgv1.ClusterSpec, specCfg *MergedConfig, cluste
 			filtered = append(filtered, p)
 		}
 	}
-	live.Plugins = append(filtered, buildCNPGPlugins(specCfg, clusterName)...)
+	live.Plugins = append(filtered, plugins...)
 
 	// Preserve externalClusters owned by other controllers/users: drop only our managed recovery
 	// entry from the live spec, then append the desired one (only present for object-store recovery).
@@ -886,6 +884,15 @@ func buildCNPGPlugins(cfg *MergedConfig, clusterName string) []cnpgv1.PluginConf
 			},
 		},
 	}
+}
+
+// BackupConfigurationForEnvironment builds an environment's backup and plugin settings.
+func BackupConfigurationForEnvironment(cfg *MergedConfig, name string) (*cnpgv1.BackupConfiguration, []cnpgv1.PluginConfiguration) {
+	var backup *cnpgv1.BackupConfiguration
+	if backupIsEnabled(cfg) && cfg.CNPG != nil && cfg.CNPG.Backup != nil && cfg.CNPG.Backup.VolumeSnapshot != nil {
+		backup = buildCNPGBackupConfiguration(cfg)
+	}
+	return backup, buildCNPGPlugins(cfg, name)
 }
 
 func objectStoreName(clusterName string) string {

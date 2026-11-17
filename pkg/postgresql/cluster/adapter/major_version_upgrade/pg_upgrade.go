@@ -20,8 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
-	"strings"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
@@ -141,9 +139,8 @@ func cnpgUpgradeConverted(cluster *cnpgv1.Cluster, targetMajor int) bool {
 }
 
 func (d *PgUpgradeDriver) targetMajorVersion() (int, error) {
-	major, _, _ := strings.Cut(d.targetPgVersion, ".")
-	parsed, err := strconv.Atoi(major)
-	if err != nil || parsed <= 0 {
+	parsed := mvutypes.PostgresMajorVersion(d.targetPgVersion)
+	if parsed <= 0 {
 		return 0, errors.Join(
 			mvutypes.ErrUpgradeFlowFailed,
 			fmt.Errorf("invalid PostgreSQL target version %q", d.targetPgVersion),

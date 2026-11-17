@@ -38,7 +38,7 @@ func TestCutoverControlBootstrapConstrainsPrivilegedHelpers(t *testing.T) {
 	}}
 	boundary := &postgresSwitchoverSQL{}
 	require.NoError(t, boundary.installControlDatabase(t.Context(), conn, `db"name`, id, true))
-	assert.Equal(t, 3, conn.commits)
+	assert.Equal(t, 4, conn.commits)
 	assert.Zero(t, conn.rollbacks)
 	all := strings.Join(conn.execs, "\n")
 	assert.Contains(t, all, "SECURITY DEFINER SET search_path = pg_catalog")
@@ -50,13 +50,14 @@ func TestCutoverControlBootstrapConstrainsPrivilegedHelpers(t *testing.T) {
 	assert.Contains(t, all, `GRANT SELECT, UPDATE ON SEQUENCE "strange""schema"."seq';drop role postgres;" TO "sok_bgc_attempt"`)
 	assert.Contains(t, all, "GRANT SELECT (oid,subname,subenabled,subfailover,subslotname,subdbid)")
 	assert.NotContains(t, all, "subconninfo")
-	for _, helper := range cutoverHelpers(id) {
+	for _, helper := range cutoverHelpers(id, `db"name`) {
 		assert.Contains(t, helper.body, "session_user <> E'sok_bgc_attempt'")
 		assert.NotContains(t, helper.body, "EXECUTE $1")
+		assert.Contains(t, all, "AS "+quoteSQLStringLiteral(helper.body), "installation must bind the helper to its database")
 	}
-	assert.Contains(t, cutoverHelpers(id)[0].body, "client_addr IS NOT NULL OR usename <> 'postgres'")
-	assert.Contains(t, cutoverHelpers(id)[0].body, "backend_type = 'client backend'")
-	assert.Contains(t, cutoverHelpers(id)[2].body, "LIMIT 4")
+	assert.Contains(t, cutoverHelpers(id, "orders")[0].body, "client_addr IS NOT NULL OR usename <> 'postgres'")
+	assert.Contains(t, cutoverHelpers(id, "orders")[0].body, "backend_type = 'client backend'")
+	assert.Contains(t, cutoverHelpers(id, "orders")[2].body, "LIMIT 4")
 }
 
 func TestCutoverControlBootstrapRefusesToReplaceAnAlteredHelper(t *testing.T) {

@@ -43,7 +43,7 @@ func TestCutoverDrainRequeriesAfterTermination(t *testing.T) {
 				}
 				return [][]any{{true}}, nil
 			}}
-			drained, err := drainCutoverInstance(t.Context(), conn, id, true)
+			drained, err := drainCutoverInstance(t.Context(), conn, id, true, "postgres")
 			require.NoError(t, err)
 			assert.Equal(t, !remaining, drained)
 		})
@@ -55,7 +55,7 @@ func TestCutoverDrainReadOnlyPassDoesNotTerminateSessions(t *testing.T) {
 		assert.NotContains(t, sql, `SELECT "splunk_operator_bluegreen"."cutover_terminate_sessions"()`)
 		return [][]any{{true}}, nil
 	}}
-	drained, err := drainCutoverInstance(t.Context(), conn, cutoverIdentity{Role: "control", AttemptID: "attempt-1"}, false)
+	drained, err := drainCutoverInstance(t.Context(), conn, cutoverIdentity{Role: "control", AttemptID: "attempt-1"}, false, "postgres")
 	require.NoError(t, err)
 	assert.True(t, drained)
 	assert.Empty(t, conn.execs)

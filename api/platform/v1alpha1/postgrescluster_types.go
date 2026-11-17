@@ -752,6 +752,10 @@ type PostgresBlueGreenUpgradeStatus struct {
 	// +optional
 	Recoverability *BlueGreenRecoverabilityStatus `json:"recoverability,omitempty"`
 
+	// Completion records committed progress.
+	// +optional
+	Completion *BlueGreenCompletionStatus `json:"completion,omitempty"`
+
 	// Cleanup progresses independently of production completion because a
 	// retained environment is not a lossless rollback target.
 	// +optional
@@ -1323,6 +1327,29 @@ type BlueGreenRecoverabilityStatus struct {
 
 	// +optional
 	WALArchiveBaselineVerifiedAt *metav1.Time `json:"walArchiveBaselineVerifiedAt,omitempty"`
+}
+
+// BlueGreenCompletionStatus records write-once post-commit progress.
+type BlueGreenCompletionStatus struct {
+	// Source archive shutdown and restart.
+	// +optional
+	StartedAt *metav1.Time `json:"startedAt,omitempty"`
+
+	// Source backup/WAL archiving stopped.
+	// +optional
+	SourceStoppedAt *metav1.Time `json:"sourceStoppedAt,omitempty"`
+
+	// Replication removed on both sides.
+	// +optional
+	ReplicationRemovedAt *metav1.Time `json:"replicationRemovedAt,omitempty"`
+
+	// Source attempt passwords disabled.
+	// +optional
+	SourceCredentialsRetiredAt *metav1.Time `json:"sourceCredentialsRetiredAt,omitempty"`
+
+	// Temporary credential Secrets removed.
+	// +optional
+	CredentialsRemovedAt *metav1.Time `json:"credentialsRemovedAt,omitempty"`
 }
 
 // BlueGreenCleanupState is the independent retained-environment cleanup

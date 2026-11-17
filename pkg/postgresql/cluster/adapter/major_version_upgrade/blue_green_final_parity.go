@@ -155,7 +155,7 @@ func (s *postgresSwitchoverSQL) verifyFrozenCatalogs(ctx context.Context, cluste
 		}
 		var schema, access string
 		if err := s.withConn(ctx, cluster, "", db.name, id, func(conn pginfra.Conn) error {
-			if err := verifyControlDatabase(ctx, conn, id); err != nil {
+			if err := verifyControlDatabase(ctx, conn, id, db.name); err != nil {
 				return err
 			}
 			if err := verifyControlSequenceGrants(ctx, conn, id, side == sideGreen); err != nil {

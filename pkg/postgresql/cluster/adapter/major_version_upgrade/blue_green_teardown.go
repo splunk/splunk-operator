@@ -409,6 +409,19 @@ func (t *BlueGreenReplicationTeardown) deleteOwned(ctx context.Context, list cli
 			}
 			continue
 		}
+		if mvutypes.CutoverStageOfStatus(status).Committed() {
+			// Wait for CNPG apply; cancellation's database probe cannot reach fenced blue.
+			switch object := object.(type) {
+			case *cnpgv1.Publication:
+				if object.Status.ObservedGeneration != object.Generation || object.Status.Applied == nil || !*object.Status.Applied {
+					continue
+				}
+			case *cnpgv1.Subscription:
+				if object.Status.ObservedGeneration != object.Generation || object.Status.Applied == nil || !*object.Status.Applied {
+					continue
+				}
+			}
+		}
 		if publication, ok := object.(*cnpgv1.Publication); ok &&
 			(publication.Status.ObservedGeneration != publication.Generation || publication.Status.Applied == nil || !*publication.Status.Applied) {
 			// Wait until CNPG has finished its apply operation before removing

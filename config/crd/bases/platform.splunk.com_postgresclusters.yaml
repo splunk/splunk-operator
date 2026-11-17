@@ -1310,6 +1310,30 @@ spec:
                               type: object
                               x-kubernetes-map-type: atomic
                           type: object
+                        completion:
+                          description: Completion records committed progress.
+                          properties:
+                            credentialsRemovedAt:
+                              description: Temporary credential Secrets removed.
+                              format: date-time
+                              type: string
+                            replicationRemovedAt:
+                              description: Replication removed on both sides.
+                              format: date-time
+                              type: string
+                            sourceCredentialsRetiredAt:
+                              description: Source attempt passwords disabled.
+                              format: date-time
+                              type: string
+                            sourceStoppedAt:
+                              description: Source backup/WAL archiving stopped.
+                              format: date-time
+                              type: string
+                            startedAt:
+                              description: Source archive shutdown and restart.
+                              format: date-time
+                              type: string
+                          type: object
                         conditions:
                           description: |-
                             Conditions describe whether a stage gate can be consumed. They do not

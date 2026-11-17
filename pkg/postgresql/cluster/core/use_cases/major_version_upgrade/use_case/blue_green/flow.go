@@ -52,6 +52,11 @@ type Switchover interface {
 	RevalidateCandidate(context.Context, mvutypes.Intent, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error)
 }
 
+// Completion establishes green recovery and retires replication.
+type Completion interface {
+	AdvanceCompletion(context.Context, mvutypes.Intent, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (Outcome, error)
+}
+
 // Outcome is the single durable result of one source-preparation transition.
 type Outcome struct {
 	Report    reconciliationTypes.Report
@@ -65,6 +70,13 @@ type Flow struct {
 	candidate  CandidatePreparer
 	switchover Switchover
 	canceller  Canceller
+	completion Completion
+}
+
+// WithCompletion sets the post-commit runtime.
+func (f Flow) WithCompletion(completion Completion) Flow {
+	f.completion = completion
+	return f
 }
 
 func New(phase mvutypes.Status, preparer Preparer, candidate CandidatePreparer, switchover Switchover) Flow {
@@ -128,6 +140,9 @@ func (f Flow) advance(ctx context.Context, intent mvutypes.Intent) (Outcome, err
 		return f.advanceCancellation(ctx, intent, status)
 	}
 	if mvutypes.CutoverStageOfStatus(status).OwnsRecovery() {
+		if mvutypes.CutoverStageOfStatus(status) == mvutypes.CutoverHandedOff && f.completion != nil {
+			return f.completion.AdvanceCompletion(ctx, intent, status)
+		}
 		return f.advanceSwitchover(ctx, intent, status)
 	}
 	if status != nil && status.Switchover != nil && status.Switchover.SourceFenceRestoredAt != nil {
@@ -164,7 +179,12 @@ func (f Flow) advance(ctx context.Context, intent mvutypes.Intent) (Outcome, err
 	status, err := f.preparer.Prepare(ctx, intent)
 	if err != nil {
 		if sourcePreparationRetryable(err) {
-			return pendingOutcome(status), nil
+			outcome := pendingOutcome(status)
+			if errors.Is(err, mvutypes.ErrTargetWALArchiveMissing) {
+				outcome.Report.Reason = "TargetWALArchiveNotConfigured"
+				outcome.Report.Message = mvutypes.ErrTargetWALArchiveMissing.Error()
+			}
+			return outcome, nil
 		}
 		if !mvutypes.IsTerminalFlowFailure(err) && !errors.Is(err, mvutypes.ErrInvalidUpgradeIntent) {
 			return retryableFailureOutcome(status, err), err

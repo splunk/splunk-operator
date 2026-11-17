@@ -55,7 +55,7 @@ func TestPrecommitControlDriftRequiresRebuild(t *testing.T) {
 			conn := &cutoverSQLTestConn{query: func(sql string, _ []any) ([][]any, error) {
 				return [][]any{{!drifted(sql)}}, nil
 			}}
-			drift := verifyControlDatabase(t.Context(), conn, cutoverIdentity{Role: "control", AttemptID: "attempt"})
+			drift := verifyControlDatabase(t.Context(), conn, cutoverIdentity{Role: "control", AttemptID: "attempt"}, "postgres")
 			require.ErrorIs(t, drift, mvutypes.ErrCandidateInvalid)
 
 			f := newCutoverFixture(t)

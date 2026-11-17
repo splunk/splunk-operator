@@ -39,7 +39,7 @@ func TestFenceProofUsesTheExactAppliedOverlayInOrder(t *testing.T) {
 	for _, line := range applied[:len(applied)-1] {
 		expected = append(expected, quoteSQLStringLiteral(strings.Join(strings.Fields(line), ":")))
 	}
-	helper := cutoverHelpers(cutoverIdentity{Role: control, AttemptID: status.AttemptID})[2]
+	helper := cutoverHelpers(cutoverIdentity{Role: control, AttemptID: status.AttemptID}, "postgres")[2]
 	require.Contains(t, helper.body, "= ARRAY["+strings.Join(expected, ",")+"];")
 }
 

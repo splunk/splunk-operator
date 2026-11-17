@@ -504,6 +504,29 @@ func TestMajorUpgradeUseCasePostUpgradeBackupCompletesWhenBaselineReady(t *testi
 	}
 }
 
+func TestMajorUpgradeUseCaseValidatesMinorQualifiedVersions(t *testing.T) {
+	for _, test := range []struct {
+		source, target     string
+		allowJump, invalid bool
+	}{
+		{"17.5", "18.1", false, false},
+		{"18.1", "17.9", false, true},
+		{"17.5", "19.1", false, true},
+		{"17.5", "19.1", true, false},
+		{"unknown", "18.1", false, true},
+	} {
+		t.Run(fmt.Sprintf("%s to %s allow jump %t", test.source, test.target, test.allowJump), func(t *testing.T) {
+			useCase := &MajorUpgradeUseCase{intent: mvutypes.Intent{SourcePgVersion: test.source, TargetPgVersion: test.target, Policy: mvutypes.UpgradePolicy{AllowDirectMultiMajorJump: test.allowJump}}}
+			err := useCase.validateIntent()
+			if test.invalid {
+				require.ErrorIs(t, err, mvutypes.ErrInvalidUpgradeIntent)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestMajorUpgradeUseCaseActFailsTerminalOnDowngrade(t *testing.T) {
 	intent := mvutypes.Intent{
 		Strategy:        mvutypes.MajorUpgradeFlowPgUpgrade,

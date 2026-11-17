@@ -106,6 +106,61 @@ func TestRetainedSourceVerifiesObservedUnreadyPodsAtTheirIPs(t *testing.T) {
 	assert.Contains(t, *calls, pod.Status.PodIP, "a stale empty healthy list cannot omit an addressable owned instance")
 }
 
+func TestRetainedSourceControlHelperCompatibility(t *testing.T) {
+	for _, test := range []struct {
+		name, invalidHelper string
+		retirementPresent   bool
+		fenceReady          bool
+	}{
+		{"legacy helpers", controlRetireReplicationFunction, false, true},
+		{"current helpers", "", true, true},
+		{"altered retirement helper", controlRetireReplicationFunction, true, false},
+		{"missing fence helper", controlFenceFunction, false, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			sql, blue, status, _, _ := retainedSourceSQLFixture(t)
+			require.NotNil(t, status.Switchover.ControlIdentity.PreparedAt)
+			require.NoError(t, sql.client.Update(t.Context(), blue))
+			status.DatabaseReplication = []platformv1alpha1.BlueGreenDatabaseReplicationStatus{{DatabaseName: "orders"}}
+			connect := sql.connect
+			var retirementCalls int
+			sql.connect = func(ctx context.Context, host, database, user, password, serverName string, ca []byte) (pginfra.Conn, error) {
+				conn, err := connect(ctx, host, database, user, password, serverName, ca)
+				if err == nil {
+					conn.(*cutoverSQLTestConn).query = func(query string, args []any) ([][]any, error) {
+						switch query {
+						case controlGuardFunctionExistsSQL:
+							return [][]any{{test.retirementPresent}}, nil
+						case controlHelperProofSQL:
+							return [][]any{{args[1] != test.invalidHelper}}, nil
+						case controlHelperCallSQL(controlRetireReplicationFunction):
+							retirementCalls++
+						}
+						return [][]any{{true}}, nil
+					}
+				}
+				return conn, err
+			}
+			access, err := newBlueGreenAccess(sql.client, sql.client, client.ObjectKeyFromObject(sql.owner), sql.owner, sql)
+			require.NoError(t, err)
+			ready, err := access.FenceBlue(t.Context(), blue, status)
+			assert.Equal(t, test.fenceReady, ready)
+			if test.fenceReady {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
+			}
+			if test.invalidHelper == controlRetireReplicationFunction {
+				completion := &postgresCompletionSQL{switchover: sql, access: access}
+				removed, err := completion.RemoveSourceReplication(t.Context(), blue, status)
+				require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
+				assert.False(t, removed)
+				assert.Zero(t, retirementCalls, "cleanup requires the exact retirement helper")
+			}
+		})
+	}
+}
+
 func TestRetainedSourceSkipsTransportLossButRejectsContradictoryAccess(t *testing.T) {
 	for _, test := range []struct {
 		name    string

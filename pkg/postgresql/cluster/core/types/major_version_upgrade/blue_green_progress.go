@@ -23,7 +23,9 @@ import (
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 // ValidateBlueGreenProgress defines the domain policy for replacing durable
@@ -45,6 +47,9 @@ func ValidateBlueGreenProgress(intent Intent, progress Progress) error {
 		return err
 	}
 	if err := validateCancellationReceipt(intent.AttemptID, progress.BlueGreen); err != nil {
+		return err
+	}
+	if err := validateCompletionProgress(intent, progress); err != nil {
 		return err
 	}
 
@@ -145,6 +150,9 @@ func validateExistingBlueGreenProgress(attemptID string, current, proposed *plat
 		return err
 	}
 	if err := validateCancellationSteps(attemptID, current, proposed); err != nil {
+		return err
+	}
+	if err := preserveCompletionReceipts(current, proposed); err != nil {
 		return err
 	}
 	if previous := current.SourcePreparation; previous != nil && previous.CompletedAt != nil {
@@ -339,4 +347,84 @@ func sameObjectReference(left, right *corev1.ObjectReference) bool {
 		return left == nil && right == nil
 	}
 	return *left == *right
+}
+
+// BlueGreenRecoverable requires a verified target backup and WAL baseline.
+func BlueGreenRecoverable(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool {
+	if bg == nil || bg.Recoverability == nil {
+		return false
+	}
+	r := bg.Recoverability
+	backupNamed := r.TargetBackupName != nil && *r.TargetBackupName != ""
+	return backupNamed && r.BackupVerifiedAt != nil && r.WALArchiveBaselineVerifiedAt != nil
+}
+
+// validateCompletionProgress enforces checkpoint prerequisites, including report-only updates.
+func validateCompletionProgress(intent Intent, progress Progress) error {
+	bg := progress.BlueGreen
+	if bg == nil {
+		for _, entry := range intent.State {
+			if MatchesIntent(entry, intent) {
+				bg = entry.BlueGreen
+			}
+		}
+	}
+	phase := Status(progress.Report.Phase)
+	if bg == nil || bg.Completion == nil {
+		if phase == Recoverable || phase == Completed {
+			return fmt.Errorf("blue/green completion requires post-commit receipts")
+		}
+		return nil
+	}
+	c := bg.Completion
+	if !CutoverStageOfStatus(bg).Committed() || c.StartedAt == nil {
+		return fmt.Errorf("blue/green completion requires a durable green commit and start time")
+	}
+	recoveryStarted := false
+	if r := bg.Recoverability; r != nil {
+		recoveryStarted = r.BackupVerifiedAt != nil || r.WALArchiveBaselineVerifiedAt != nil
+	}
+	if recoveryStarted && c.SourceStoppedAt == nil {
+		return fmt.Errorf("target recovery evidence requires source producer shutdown")
+	}
+	requiresRecovery := phase == Recoverable || c.ReplicationRemovedAt != nil
+	if requiresRecovery && !BlueGreenRecoverable(bg) {
+		return fmt.Errorf("replication teardown requires verified target backup and WAL")
+	}
+	if c.SourceCredentialsRetiredAt != nil && c.ReplicationRemovedAt == nil {
+		return fmt.Errorf("blue/green credential retirement precedes replication teardown")
+	}
+	if c.CredentialsRemovedAt != nil && c.SourceCredentialsRetiredAt == nil {
+		return fmt.Errorf("blue/green credential retirement precedes replication teardown")
+	}
+	readyToComplete := BlueGreenRecoverable(bg) && c.CredentialsRemovedAt != nil && CutoverStageOfStatus(bg) == CutoverHandedOff
+	if phase == Completed && !readyToComplete {
+		return fmt.Errorf("blue/green completion requires target availability, recoverability, and credential removal")
+	}
+	return nil
+}
+
+// preserveCompletionReceipts prevents changing saved checkpoints.
+func preserveCompletionReceipts(previous, next *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error {
+	// Nil old fields permit new checkpoints; populated fields must stay equal.
+	if !equality.Semantic.DeepDerivative(previous.Completion, next.Completion) {
+		return fmt.Errorf("blue/green progress cannot remove or rewrite completion receipts")
+	}
+	if r := previous.Recoverability; r != nil {
+		if !recoveryAnchorPreserved(r, next.Recoverability) {
+			return fmt.Errorf("blue/green progress cannot change its target recovery backup")
+		}
+		if !equality.Semantic.DeepDerivative(r, next.Recoverability) {
+			return fmt.Errorf("blue/green progress cannot rewrite completion evidence")
+		}
+	}
+	return nil
+}
+
+// recoveryAnchorPreserved keeps a recorded backup name unchanged.
+func recoveryAnchorPreserved(previous, next *platformv1alpha1.BlueGreenRecoverabilityStatus) bool {
+	if next == nil {
+		return false
+	}
+	return previous.TargetBackupName == nil || ptr.Equal(previous.TargetBackupName, next.TargetBackupName)
 }

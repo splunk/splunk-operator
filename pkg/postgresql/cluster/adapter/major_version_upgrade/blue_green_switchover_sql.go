@@ -49,6 +49,7 @@ func newPostgresSwitchoverSQL(c client.Client, logicalName string, owner *platfo
 type cutoverIdentity struct {
 	Role, Password string
 	AttemptID      string
+	LogicalName    string
 }
 
 type cutoverConnector func(context.Context, string, string, string, string, string, []byte) (pginfra.Conn, error)

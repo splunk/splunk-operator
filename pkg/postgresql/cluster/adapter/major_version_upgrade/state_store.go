@@ -320,6 +320,12 @@ func stateWithProgress(intent mvutypes.Intent, progress mvutypes.Progress) []pla
 	}
 	applyBaseline(&current, progress.Report, progress.Baseline)
 	applyBlueGreenProgress(&current, intent, progress)
+	if bg := current.BlueGreen; bg != nil && bg.Recoverability != nil && bg.Recoverability.BackupVerifiedAt != nil && bg.Recoverability.TargetBackupName != nil {
+		if current.BackupNames == nil {
+			current.BackupNames = &platformv1alpha1.UpgradeBackupNames{}
+		}
+		current.BackupNames.PostUpgrade = new(*bg.Recoverability.TargetBackupName)
+	}
 	applyConditions(&current, intent, progress.Report)
 	applyBlueGreenGateConditions(&current)
 	return stateWithCurrentEntry(intent.State, intent, current)
