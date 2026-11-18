@@ -1,0 +1,121 @@
+suite: shared PostgreSQL upgrade protection
+templates: [templates/shared_postgres.yaml]
+release: {name: backend, namespace: backend, upgrade: true}
+set:
+  sharedPostgres.enabled: true
+  sharedPostgres.backup.acknowledgeNoBackups: true
+  splunkOperator.featureGates.PostgresController: true
+kubernetesProvider:
+  scheme:
+    v1/Secret: {gvr: {version: v1, resource: secrets}, namespaced: true}
+    platform.splunk.com/v1alpha1/PostgresCluster:
+      gvr: {group: platform.splunk.com, version: v1alpha1, resource: postgresclusters}
+      namespaced: true
+    platform.splunk.com/v1alpha1/PostgresClusterClass:
+      gvr: {group: platform.splunk.com, version: v1alpha1, resource: postgresclusterclasses}
+      namespaced: false
+tests:
+  - it: creates a missing class before admitting the cluster with webhooks enabled
+    set:
+      splunkOperator.featureGates.ValidationWebhook: true
+    documentIndex: 0
+    asserts:
+      - equal: {path: 'metadata.annotations["helm.sh/hook"]', value: 'pre-install,pre-upgrade'}
+      - equal: {path: 'metadata.annotations["helm.sh/hook-delete-policy"]', value: hook-failed}
+      - equal: {path: 'metadata.annotations["meta.helm.sh/release-name"]', value: backend}
+      - equal: {path: 'metadata.annotations["meta.helm.sh/release-namespace"]', value: backend}
+  - it: rejects a changed default major version against an existing cluster
+    kubernetesProvider:
+      objects:
+        - &existingCluster
+          apiVersion: platform.splunk.com/v1alpha1
+          kind: PostgresCluster
+          metadata:
+            name: backend-pg-aefaf86bf0
+            namespace: backend
+            annotations: &releaseOwner
+              meta.helm.sh/release-name: backend
+              meta.helm.sh/release-namespace: backend
+          spec: {postgresVersion: "18"}
+    asserts:
+      - failedTemplate:
+          errorMessage: shared PostgreSQL major-version changes require the documented explicit major-upgrade workflow; restore the existing sharedPostgres.postgresVersion value
+  - it: rejects another release's existing cluster
+    kubernetesProvider:
+      objects:
+        - <<: *existingCluster
+          metadata:
+            name: backend-pg-aefaf86bf0
+            namespace: backend
+            annotations:
+              meta.helm.sh/release-name: foreign
+              meta.helm.sh/release-namespace: backend
+          spec: {postgresVersion: "17"}
+    asserts:
+      - failedTemplate:
+          errorMessage: shared PostgreSQL resource backend-pg-aefaf86bf0 belongs to another release; use its original release name and namespace
+  - it: reinstalls the same major using its original ownership
+    kubernetesProvider:
+      objects:
+        - <<: *existingCluster
+          spec: {postgresVersion: "17"}
+    asserts:
+      - hasDocuments: {count: 2}
+  - it: rejects changing an existing immutable class policy before applying resources
+    set:
+      sharedPostgres.storageClass: changed-storage
+    kubernetesProvider:
+      objects:
+        - &existingClass
+          apiVersion: platform.splunk.com/v1alpha1
+          kind: PostgresClusterClass
+          metadata:
+            name: backend-pg-aefaf86bf0
+            annotations:
+              <<: *releaseOwner
+              platform.splunk.com/helm-class-policy: 5f517e5f53d6a680370471e07cac0b3951081c40e4e776dd682d7b74517f60b0
+    asserts:
+      - failedTemplate:
+          errorMessage: "shared PostgreSQL class policy is immutable: keep storageClass, affinity, pooler policy and backup destination/Secret references unchanged, or restore into a replacement cluster"
+  - it: updates operational values without replacing or modifying the retained class
+    set:
+      sharedPostgres.storage: 200Gi
+      sharedPostgres.instances: 4
+      sharedPostgres.resources.requests.cpu: "4"
+    kubernetesProvider:
+      objects:
+        - *existingClass
+        - &ownedState
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: backend-shared-postgres
+            namespace: backend
+            annotations:
+              <<: *releaseOwner
+              platform.splunk.com/shared-postgres-namespace: backend
+              platform.splunk.com/shared-postgres-name: backend-pg-aefaf86bf0
+    documentIndex: 0
+    asserts:
+      - equal: {path: spec.storage, value: 200Gi}
+      - equal: {path: spec.instances, value: 4}
+      - equal: {path: spec.resources.requests.cpu, value: "4"}
+      - equal: {path: spec.class, value: backend-pg-aefaf86bf0}
+      - hasDocuments: {count: 1}
+      - isKind: {of: PostgresCluster}
+  - it: rejects disabling an owned backend
+    set: {sharedPostgres.enabled: false}
+    kubernetesProvider:
+      objects: [*ownedState]
+    asserts:
+      - failedTemplate:
+          errorMessage: sharedPostgres.enabled cannot be disabled after provisioning is enabled; keep it enabled to preserve rollback compatibility, or uninstall the release to retain the database
+  - it: rejects disabling an owned backend with a workload namespace override
+    set:
+      sharedPostgres.enabled: false
+      namespaceOverride: other
+    kubernetesProvider:
+      objects: [*ownedState]
+    asserts:
+      - failedTemplate:
+          errorMessage: sharedPostgres.enabled cannot be disabled after provisioning is enabled; keep it enabled to preserve rollback compatibility, or uninstall the release to retain the database

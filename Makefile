@@ -662,6 +662,12 @@ helm-kuttl-test:
 	fi
 	@POSTGRES_RELEASE_MANIFEST="$(abspath $(POSTGRES_RELEASE_MANIFEST))" kubectl kuttl test --config "${KUTTL_CONFIG}" --report xml
 
+.PHONY: helm-shared-postgresql-test
+helm-shared-postgresql-test:
+	@POSTGRES_RELEASE_MANIFEST="$(abspath $(POSTGRES_RELEASE_MANIFEST))" \
+		KUTTL_CONFIG="kuttl/kuttl-test-helm-shared-postgresql.yaml" \
+		bash kuttl/tests/helm-shared-postgresql/run.sh
+
 lang:
 	@echo Running bias language linter
 	@tools/bias_language_linter.sh

@@ -1,0 +1,10 @@
+# Run via make helm-shared-postgresql-test; see docs/postgresql/shared-cluster.md.
+apiVersion: kuttl.dev/v1beta1
+kind: TestSuite
+testDirs:
+  - ./kuttl/tests/helm-shared-postgresql
+parallel: 1
+timeout: 3600
+startKIND: false
+skipDelete: true
+artifactsDir: kuttl-artifacts

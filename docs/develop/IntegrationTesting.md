@@ -27,6 +27,13 @@ Use the lowest level that can prove the behavior:
 `make test` is the combined package and controller test set. Do not use
 in-cluster E2E to prove behavior that unit or envtest coverage can establish.
 
+### Shared PostgreSQL Helm lifecycle
+
+Use `make helm-shared-postgresql-test` for the shared-cluster Helm lifecycle suite.
+The [runner](../../kuttl/tests/helm-shared-postgresql/run.sh) checks the authorized
+context, namespace and required CRDs before starting KUTTL; see the
+[shared-cluster guide](../postgresql/shared-cluster.md) for installation prerequisites.
+
 ## PostgreSQL image inputs
 
 `test/postgrescontrollers` reads image inputs when a selected spec executes; compilation

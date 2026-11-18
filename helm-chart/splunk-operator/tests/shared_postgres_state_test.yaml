@@ -1,0 +1,18 @@
+suite: shared PostgreSQL release state
+templates: [templates/shared_postgres_state.yaml]
+release: {name: backend, namespace: "123"}
+tests:
+  - it: leaves disabled releases without provisioning state
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: records opt-in in the release namespace and removes it on uninstall
+    set:
+      sharedPostgres.enabled: true
+      namespaceOverride: workloads
+    asserts:
+      - isKind: {of: Secret}
+      - equal: {path: metadata.name, value: backend-shared-postgres}
+      - equal: {path: metadata.namespace, value: "123"}
+      - equal: {path: 'metadata.annotations["platform.splunk.com/shared-postgres-namespace"]', value: workloads}
+      - equal: {path: 'metadata.annotations["platform.splunk.com/shared-postgres-name"]', value: backend-pg-e25e294c59}
+      - notExists: {path: 'metadata.annotations["helm.sh/resource-policy"]'}
