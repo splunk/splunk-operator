@@ -18,6 +18,9 @@ package shc
 import (
 	"strings"
 	"time"
+
+	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"k8s.io/utils/ptr"
 )
 
 // This file holds the pure decision logic behind searchHeadClusterPodManager's
@@ -248,4 +251,13 @@ func shouldDeferCaptainRecycle(isCaptain bool, alreadyStartedOwnRecycle bool, ot
 // clears an in-flight operation early.
 func memberOperationComplete(status, podRevision, updateRevision string) bool {
 	return status == "Up" && podRevision != "" && updateRevision != "" && podRevision == updateRevision
+}
+
+// nextCaptainTransferWindow starts a window if none exists or its member changed.
+func nextCaptainTransferWindow(existing *enterpriseApi.CaptainTransferStatus, memberName string, now time.Time) *enterpriseApi.CaptainTransferStatus {
+	if existing == nil || existing.StartTimestamp == nil || *existing.StartTimestamp == 0 ||
+		existing.MemberName == nil || *existing.MemberName != memberName {
+		return &enterpriseApi.CaptainTransferStatus{StartTimestamp: ptr.To(now.Unix()), MemberName: ptr.To(memberName)}
+	}
+	return existing
 }

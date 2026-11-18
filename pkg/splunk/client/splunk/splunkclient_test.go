@@ -270,6 +270,55 @@ func TestRemoveSearchHeadClusterMember(t *testing.T) {
 	splunkClientErrorTester(t, test)
 }
 
+func TestTransferSearchHeadCaptain(t *testing.T) {
+	targetURI := "https://splunk-test-search-head-0.splunk-test-search-head-headless.test.svc.cluster.local:8089"
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/shcluster/member/consensus/default/transfer_captaincy", nil)
+	test := func(c splunk.SplunkClient) error {
+		return c.TransferSearchHeadCaptain(targetURI)
+	}
+	splunkClientTester(t, "TestTransferSearchHeadCaptain", 200, "", wantRequest, test)
+
+	// bad response code
+	test = func(c splunk.SplunkClient) error {
+		err := c.TransferSearchHeadCaptain(targetURI)
+		if err == nil {
+			t.Errorf("TransferSearchHeadCaptain returned nil; want error")
+		}
+		return nil
+	}
+	splunkClientTester(t, "TestTransferSearchHeadCaptain", 404, "", wantRequest, test)
+
+	// Negative testing
+	test = func(c splunk.SplunkClient) error {
+		return c.TransferSearchHeadCaptain(targetURI)
+	}
+	splunkClientErrorTester(t, test)
+}
+
+func TestSetPreferredCaptain(t *testing.T) {
+	wantRequest, _ := http.NewRequest("POST", "https://localhost:8089/services/configs/conf-server/shclustering", nil)
+	test := func(c splunk.SplunkClient) error {
+		return c.SetPreferredCaptain(false)
+	}
+	splunkClientTester(t, "TestSetPreferredCaptain", 200, "", wantRequest, test)
+
+	// bad response code
+	test = func(c splunk.SplunkClient) error {
+		err := c.SetPreferredCaptain(false)
+		if err == nil {
+			t.Errorf("SetPreferredCaptain returned nil; want error")
+		}
+		return nil
+	}
+	splunkClientTester(t, "TestSetPreferredCaptain", 404, "", wantRequest, test)
+
+	// Negative testing
+	test = func(c splunk.SplunkClient) error {
+		return c.SetPreferredCaptain(false)
+	}
+	splunkClientErrorTester(t, test)
+}
+
 func TestGetclusterManagerInfo(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/cluster/manager/info?count=0&output_mode=json", nil)
 	wantInfo := splunk.ClusterManagerInfo{

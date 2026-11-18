@@ -140,6 +140,11 @@ type SearchHeadClusterStatus struct {
 	// StatefulSet controller-revision-hash of the pod that started the current detention episode.
 	// Resets the timer when a replacement pod with a new revision enters ManualDetention.
 	DetainedPodRevision string `json:"detainedPodRevision,omitempty"`
+
+	// Tracks an in-progress attempt to transfer captaincy away from a member
+	// about to be disrupted, before recycling or removing it.
+	// +optional
+	CaptainTransfer *enterpriseApi.CaptainTransferStatus `json:"captainTransfer,omitempty"`
 }
 
 // SearchHeadCluster is the Schema for a Splunk Enterprise search head cluster
