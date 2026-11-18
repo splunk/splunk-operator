@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 # Helm acceptance on an authorized disposable cluster.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../../lib/postgres.sh"
 : "${NAMESPACE:?KUTTL namespace is required}"
 : "${HELM_REPO_PATH:?Run make helm-package first}"
 : "${KUTTL_SPLUNK_OPERATOR_IMAGE:?Supply the SOK image under test}"
 : "${SPLUNK_GENERAL_TERMS:?Supply your accepted terms value; see docs/README.md}"
 : "${POSTGRES_RELEASE_MANIFEST:?Run make helm-kuttl-test with this suite config}"
-manifest=$POSTGRES_RELEASE_MANIFEST
-image() { yq -r ".artifacts[] | select(.id == \"$1\") | .public.reference" "$manifest"; }
-cnpg_image=$(image cloudnative-pg)
-barman_image=$(image plugin-barman-cloud)
-pg17_image=$(image postgresql-17)
-pg18_image=$(image postgresql-18)
-pooler_image=$(image pgbouncer)
+cnpg_image=$(release_image cloudnative-pg "$POSTGRES_RELEASE_MANIFEST")
+barman_image=$(release_image plugin-barman-cloud "$POSTGRES_RELEASE_MANIFEST")
+pg17_image=$(release_image postgresql-17 "$POSTGRES_RELEASE_MANIFEST")
+pg18_image=$(release_image postgresql-18 "$POSTGRES_RELEASE_MANIFEST")
+pooler_image=$(release_image pgbouncer "$POSTGRES_RELEASE_MANIFEST")
 chart="$HELM_REPO_PATH/splunk-operator"
 class_name="helm-backends-$NAMESPACE"
 
@@ -115,49 +114,9 @@ spec:
 EOF
 class_created=true
 exercise_sql() {
-    local namespace=$1 pg_image=$2
-    local config cluster_config secret ca_ref ca_name ca_key
-    config=$(kubectl get postgresdatabase helmdb -n "$namespace" -o jsonpath='{.status.databases[0].configMapRef.name}')
-    secret=$(kubectl get postgresdatabase helmdb -n "$namespace" -o jsonpath='{.status.databases[0].adminUserSecretRef.name}')
-    cluster_config=$(kubectl get postgrescluster helmdb -n "$namespace" -o jsonpath='{.status.resources.configMapRef.name}')
-    ca_ref=$(kubectl get configmap "$cluster_config" -n "$namespace" -o jsonpath='{.data.SERVER_CA_SECRET_REF}')
-    ca_name=${ca_ref%/*}; ca_key=${ca_ref#*/}
-    # Check direct/pooled TLS using Secret references.
+    local namespace=$1 pg_image=$2 endpoint
     for endpoint in CLUSTER_RW_ENDPOINT CLUSTER_POOLER_RW_ENDPOINT; do
-        cat <<EOF | kubectl apply -n "$namespace" -f -
-apiVersion: v1
-kind: Pod
-metadata:
-  name: helm-sql
-spec:
-  restartPolicy: Never
-  containers:
-    - name: psql
-      image: $pg_image
-      command: [psql]
-      args: ["-v", "ON_ERROR_STOP=1", "-c", "CREATE TABLE IF NOT EXISTS helmcheck (id int); INSERT INTO helmcheck VALUES (1); SELECT 1 / count(*)::int FROM helmcheck WHERE id=1;"]
-      env:
-        - name: PGHOST
-          valueFrom: {configMapKeyRef: {name: $config, key: $endpoint}}
-        - name: PGPORT
-          value: "5432"
-        - name: PGDATABASE
-          value: appdb
-        - name: PGUSER
-          valueFrom: {secretKeyRef: {name: $secret, key: username}}
-        - name: PGPASSWORD
-          valueFrom: {secretKeyRef: {name: $secret, key: password}}
-        - {name: PGSSLMODE, value: verify-full}
-        - {name: PGSSLROOTCERT, value: /ca/ca.crt}
-      volumeMounts:
-        - {name: ca, mountPath: /ca, readOnly: true}
-  volumes:
-    - name: ca
-      secret:
-        secretName: $ca_name
-        items: [{key: $ca_key, path: ca.crt}]
-EOF
-        kubectl wait pod/helm-sql -n "$namespace" --for=jsonpath='{.status.phase}'=Succeeded --timeout=180s
+        run_sql helmdb helmdb "$endpoint" 'CREATE TABLE IF NOT EXISTS helmcheck (id int); INSERT INTO helmcheck VALUES (1); SELECT 1 / count(*)::int FROM helmcheck WHERE id=1;' "$pg_image" appdb helm-sql -n "$namespace"
         kubectl logs helm-sql -n "$namespace"
         kubectl delete pod helm-sql -n "$namespace" --wait
     done
