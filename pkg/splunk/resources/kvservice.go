@@ -28,7 +28,6 @@ import (
 
 // WithLegacyKVStoreDefault supplies the local default required by older 10.6
 // Ansible images. New roles must explicitly opt in to this compatibility policy.
-// Deployers retain the legacy default without consuming KVService client settings.
 func WithLegacyKVStoreDefault(role splcommon.InstanceType) StatefulSetOption {
 	return func(statefulSet *appsv1.StatefulSet) {
 		switch role {

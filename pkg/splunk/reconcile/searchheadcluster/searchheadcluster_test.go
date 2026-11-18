@@ -29,6 +29,7 @@ import (
 	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/stretchr/testify/require"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -52,6 +53,7 @@ import (
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/appframework"
 	shcworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/shc"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/telapp"
+	"gopkg.in/yaml.v3"
 )
 
 func init() {
@@ -203,6 +205,105 @@ func TestApplySearchHeadCluster(t *testing.T) {
 		return true, err
 	}
 	spltest.SplunkDeletionTester(t, revised, deleteFunc)
+
+	t.Run("deployer KVService lifecycle", testDeployerKVServiceLifecycle)
+}
+
+func testDeployerKVServiceLifecycle(t *testing.T) {
+	ctx := t.Context()
+	scheme := pkgruntime.NewScheme()
+	require.NoError(t, enterpriseApi.AddToScheme(scheme))
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "workload"}}
+	cr := &enterpriseApi.SearchHeadCluster{
+		TypeMeta:   metav1.TypeMeta{APIVersion: enterpriseApi.GroupVersion.String(), Kind: "SearchHeadCluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: "kvservice", Namespace: namespace.Name, UID: "kvservice"},
+	}
+	c := spltest.NewFakeClientBuilder(scheme).
+		WithObjects(namespace, cr).
+		WithStatusSubresource(&enterpriseApi.SearchHeadCluster{}).
+		Build()
+	var mountedName, previousName string
+	var deployerPod *corev1.Pod
+	for _, step := range []struct {
+		name, label, address, tenant string
+	}{
+		{name: "disabled"},
+		{name: "enabled", label: "enabled", address: "splunk-shared-kvservice-service.backend:8066", tenant: "customer"},
+		{name: "address changed", label: "enabled", address: "splunk-replacement-kvservice-service.backend:8066", tenant: "customer"},
+		{name: "tenant changed", label: "enabled", address: "splunk-replacement-kvservice-service.backend:8066", tenant: "anothercustomer"},
+		{name: "label removed"},
+	} {
+		t.Run(step.name, func(t *testing.T) {
+			namespace.Labels = map[string]string{splcommon.LabelTenant: step.tenant}
+			if step.label != "" {
+				namespace.Labels[splcommon.LabelKVService] = step.label
+			}
+			namespace.Annotations = map[string]string{splcommon.AnnotationKVServiceAddr: step.address}
+			require.NoError(t, c.Update(ctx, namespace))
+			_, err := ApplySearchHeadCluster(ctx, c, cr)
+			require.NoError(t, err)
+			var sharedName string
+			for _, role := range []splcommon.InstanceType{splcommon.SplunkDeployer, splcommon.SplunkSearchHead} {
+				sts := &appsv1.StatefulSet{}
+				require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: splutil.GetSplunkStatefulsetName(role, cr.Name)}, sts))
+				env := map[string]string{}
+				for _, item := range sts.Spec.Template.Spec.Containers[0].Env {
+					env[item.Name] = item.Value
+				}
+				require.Equal(t, fmt.Sprint(step.label == "enabled"), env[splcommon.KVServiceEnabledEnvName])
+				require.Equal(t, "local", env[splcommon.KVStoreDefaultTypeEnvName])
+				require.Contains(t, env["SPLUNK_DEFAULTS_URL"], "/mnt/sok-defaults/conf-defaults.yml")
+				var cmName string
+				for _, volume := range sts.Spec.Template.Spec.Volumes {
+					if volume.Name == "mnt-sok-conf-defaults" {
+						require.NotNil(t, volume.ConfigMap)
+						cmName = volume.ConfigMap.Name
+					}
+				}
+				require.NotEmpty(t, cmName)
+				if sharedName == "" {
+					sharedName = cmName
+				} else {
+					require.Equal(t, sharedName, cmName, "members and deployer must mount the same defaults")
+				}
+				var cm corev1.ConfigMap
+				require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cmName}, &cm))
+				var data splcommon.DefaultYML
+				require.NoError(t, yaml.Unmarshal([]byte(cm.Data["conf-defaults.yml"]), &data))
+				require.Len(t, data.Splunk.Conf, 1)
+				want := splcommon.ConfFileStanzas{"kvstore": {"defaultKVStoreType": "local", "postgresMigrateOnStartup": "false"}}
+				if step.label == "enabled" {
+					want = splcommon.ConfFileStanzas{
+						"kvstore": {"kvserviceConnectionString": "http://" + step.address},
+						"scs":     {"tenant": step.tenant, "mvl-enabled": "true"},
+					}
+				}
+				require.Equal(t, want, data.Splunk.Conf[0].Value.Stanzas)
+				if step.name == "enabled" && role == splcommon.SplunkDeployer {
+					mountedName = cmName
+					deployerPod = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: sts.Name + "-0", Namespace: cr.Namespace, Labels: sts.Spec.Template.Labels}, Spec: *sts.Spec.Template.Spec.DeepCopy()}
+					require.NoError(t, c.Create(ctx, deployerPod))
+				}
+			}
+			if previousName != "" {
+				require.NotEqual(t, previousName, sharedName, "namespace changes must update both pod templates")
+			}
+			previousName = sharedName
+			if mountedName != "" {
+				var mounted corev1.ConfigMap
+				require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: mountedName}, &mounted), "keep defaults still mounted by the deployer")
+			}
+		})
+	}
+	require.NotNil(t, deployerPod)
+	require.NoError(t, c.Delete(ctx, deployerPod))
+	_, err := ApplySearchHeadCluster(ctx, c, cr)
+	require.NoError(t, err)
+	var maps corev1.ConfigMapList
+	require.NoError(t, c.List(ctx, &maps, client.InNamespace(cr.Namespace), client.MatchingLabels{resources.LabelCRKind: cr.Kind, resources.LabelCRName: cr.Name}))
+	require.Len(t, maps.Items, 1, "collect obsolete defaults once no deployer or member mounts them")
+	require.Equal(t, previousName, maps.Items[0].Name)
 }
 
 func TestGetSearchHeadStatefulSet(t *testing.T) {

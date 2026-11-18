@@ -46,13 +46,6 @@ func ExpectLocalKVStoreDefaultsCalls(t *testing.T, cr common.MetaObject, createC
 		}
 		index := len(calls)
 		for i, call := range calls {
-			if cr.GetObjectKind().GroupVersionKind().Kind == "SearchHeadCluster" {
-				if (strings.HasPrefix(call.MetaName, "*v1.StatefulSet-") && strings.HasSuffix(call.MetaName, "-search-head")) || strings.Contains(call.MetaName, "-search-head-secret-v") {
-					index = i
-					break
-				}
-				continue
-			}
 			if strings.HasPrefix(call.MetaName, "*v1.StatefulSet-") || strings.Contains(call.MetaName, "-probe-configmap") || strings.Contains(call.MetaName, "-secret-v") {
 				index = i
 				break

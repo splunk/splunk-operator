@@ -61,12 +61,14 @@ func kvServiceClientCRs() []kvServiceClientTestCase {
 	standalone := &enterpriseApi.Standalone{}
 	indexer := &enterpriseApi.IndexerCluster{}
 	searchHead := &enterpriseApi.SearchHeadCluster{}
+	deployer := &enterpriseApi.SearchHeadCluster{}
 	clusterManager := &enterpriseApi.ClusterManager{}
 	licenseManager := &enterpriseApi.LicenseManager{}
 	monitoringConsole := &enterpriseApi.MonitoringConsole{}
 	standaloneV3 := &enterpriseApiV3.Standalone{}
 	indexerV3 := &enterpriseApiV3.IndexerCluster{}
 	searchHeadV3 := &enterpriseApiV3.SearchHeadCluster{}
+	deployerV3 := &enterpriseApiV3.SearchHeadCluster{}
 	clusterMaster := &enterpriseApiV3.ClusterMaster{}
 	licenseMaster := &enterpriseApiV3.LicenseMaster{}
 	monitoringConsoleV3 := &enterpriseApiV3.MonitoringConsole{}
@@ -74,12 +76,14 @@ func kvServiceClientCRs() []kvServiceClientTestCase {
 		{"v4 Standalone", standalone, &standalone.Spec.CommonSplunkSpec, k8sops.SplunkStandalone},
 		{"v4 IndexerCluster", indexer, &indexer.Spec.CommonSplunkSpec, k8sops.SplunkIndexer},
 		{"v4 SearchHeadCluster", searchHead, &searchHead.Spec.CommonSplunkSpec, k8sops.SplunkSearchHead},
+		{"v4 SHC Deployer", deployer, &deployer.Spec.CommonSplunkSpec, k8sops.SplunkDeployer},
 		{"v4 ClusterManager", clusterManager, &clusterManager.Spec.CommonSplunkSpec, k8sops.SplunkClusterManager},
 		{"v4 LicenseManager", licenseManager, &licenseManager.Spec.CommonSplunkSpec, k8sops.SplunkLicenseManager},
 		{"v4 MonitoringConsole", monitoringConsole, &monitoringConsole.Spec.CommonSplunkSpec, k8sops.SplunkMonitoringConsole},
 		{"v3 Standalone", standaloneV3, &standaloneV3.Spec.CommonSplunkSpec, k8sops.SplunkStandalone},
 		{"v3 IndexerCluster", indexerV3, &indexerV3.Spec.CommonSplunkSpec, k8sops.SplunkIndexer},
 		{"v3 SearchHeadCluster", searchHeadV3, &searchHeadV3.Spec.CommonSplunkSpec, k8sops.SplunkSearchHead},
+		{"v3 SHC Deployer", deployerV3, &deployerV3.Spec.CommonSplunkSpec, k8sops.SplunkDeployer},
 		{"v3 ClusterMaster", clusterMaster, &clusterMaster.Spec.CommonSplunkSpec, k8sops.SplunkClusterMaster},
 		{"v3 LicenseMaster", licenseMaster, &licenseMaster.Spec.CommonSplunkSpec, k8sops.SplunkLicenseMaster},
 		{"v3 MonitoringConsole", monitoringConsoleV3, &monitoringConsoleV3.Spec.CommonSplunkSpec, k8sops.SplunkMonitoringConsole},
@@ -192,10 +196,10 @@ func TestGetKVServiceSettingsErrorsAndExcludedPods(t *testing.T) {
 	_, found, err := k8sops.GetKVServiceSettings(t.Context(), c, cr, k8sops.SplunkStandalone)
 	assert.False(t, found)
 	require.ErrorContains(t, err, "namespace access denied")
-	// Excluded roles never read namespace settings, even if the API is unavailable.
-	_, found, err = k8sops.GetKVServiceSettings(t.Context(), c, &enterpriseApi.SearchHeadCluster{}, k8sops.SplunkDeployer)
-	require.NoError(t, err)
+	_, found, err = k8sops.GetKVServiceSettings(t.Context(), c, &enterpriseApi.SearchHeadCluster{ObjectMeta: metav1.ObjectMeta{Namespace: "workload"}}, k8sops.SplunkDeployer)
+	require.ErrorContains(t, err, "namespace access denied")
 	assert.False(t, found)
+	// Excluded roles never read namespace settings, even if the API is unavailable.
 	_, found, err = k8sops.GetKVServiceSettings(t.Context(), c, &enterpriseApi.IngestorCluster{}, k8sops.SplunkIngestor)
 	require.NoError(t, err)
 	assert.False(t, found)

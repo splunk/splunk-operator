@@ -14,8 +14,9 @@ Deployment and Service on port 8066. Before creating a KVService:
 
 Namespace labels and an address annotation select KVService for v4 Standalone,
 IndexerCluster, SearchHeadCluster, ClusterManager, LicenseManager and
-MonitoringConsole, and their v3 counterparts. IngestorCluster and SearchHeadCluster
-deployers do not receive these settings.
+MonitoringConsole, and their v3 counterparts. SearchHeadCluster members and their
+deployer share the namespace-selected settings. IngestorCluster does not receive
+these settings. Noah SearchHeadClusters do not deploy a deployer.
 
 Use the Namespace example under [tenant provisioning](#namespace-driven-tenant-provisioning).
 Only `platform.splunk.com/kvservice: enabled` activates the configuration. The
