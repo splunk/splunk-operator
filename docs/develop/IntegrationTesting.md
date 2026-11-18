@@ -777,7 +777,11 @@ Tests run automatically on:
 - **Weekly schedule:** Nightly integration suite
 - **Manual trigger:**
 
-For integration test workflows, CI provisions an EKS cluster, builds and pushes operator images to ECR, then runs `make int-test`. Smoke tests run on the existing CI infrastructure without provisioning a dedicated cluster.
+For integration test workflows, CI provisions or reuses a provider-specific cluster, builds and pushes operator images, then runs the selected suite. Smoke tests run on existing CI infrastructure or an ephemeral Kraken vCluster.
+
+Integration workflow cleanup is best-effort: cleanup failures are emitted as
+warnings and recorded in the job's cleanup log, while the job result continues
+to reflect test execution and setup failures.
 
 **JUnit report naming:**
 
