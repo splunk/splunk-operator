@@ -160,7 +160,8 @@ When enabled, generated defaults supply the connection settings and omit
 `defaultKVStoreType` and `postgresMigrateOnStartup`, preserving Splunk's backend
 choice. When disabled, they write `defaultKVStoreType = local` and
 `postgresMigrateOnStartup = false` to `$SPLUNK_HOME/etc/system/local/server.conf`.
-IngestorCluster and SHC deployers do not receive these client defaults.
+SHC deployers receive the same client defaults as their search-head members.
+IngestorCluster does not receive these client defaults.
 
 The enablement flag is operator-owned and reserved in `spec.extraEnv`. See
 [KVService configuration](KVService.md#enterprise-client-configuration)

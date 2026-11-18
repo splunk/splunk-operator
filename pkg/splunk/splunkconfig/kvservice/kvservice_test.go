@@ -59,8 +59,21 @@ func TestEmptyConnectionStringSelectsLocal(t *testing.T) {
 	}, set.NonSensitive[0].Value.Stanzas)
 }
 
+func TestDeployerUsesSearchHeadClientSettings(t *testing.T) {
+	for _, address := range []string{"", "splunk-backend-kvservice-service.default:8066"} {
+		t.Run(address, func(t *testing.T) {
+			want, err := Conf(address, "tenant1").Contribute(common.SplunkSearchHead)
+			require.NoError(t, err)
+			got, err := Conf(address, "tenant1").Contribute(common.SplunkDeployer)
+			require.NoError(t, err)
+			require.NotEmpty(t, got.NonSensitive)
+			require.Equal(t, want, got)
+		})
+	}
+}
+
 func TestExcludedRolesDoNotReceiveConnectionString(t *testing.T) {
-	for _, role := range []common.InstanceType{common.SplunkDeployer, common.SplunkIngestor, common.SplunkKVService} {
+	for _, role := range []common.InstanceType{common.SplunkIngestor, common.SplunkKVService} {
 		set, err := Conf("http://splunk-backend-kvservice-service.default:8066", "tenant1").Contribute(role)
 		require.NoError(t, err)
 		require.Empty(t, set.NonSensitive)

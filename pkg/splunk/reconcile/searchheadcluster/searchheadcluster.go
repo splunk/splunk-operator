@@ -397,8 +397,15 @@ func applySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		return result, err
 	}
 
+	// Deployer and search heads consume the same namespace-selected defaults.
+	defaultsConfigMap, err := configworkflow.EnsureKVServiceDefaults(ctx, client, cr, splcommon.SplunkSearchHead)
+	if err != nil {
+		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure KVService defaults")
+		return result, err
+	}
+
 	// create or update statefulset for the deployer
-	statefulSet, err := getDeployerStatefulSet(ctx, client, cr)
+	statefulSet, err := getDeployerStatefulSet(ctx, client, cr, defaultsConfigMap.AsStatefulSetOption())
 	if err != nil {
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to create or update Deployer StatefulSet")
 		return result, err
@@ -430,11 +437,6 @@ func applySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 	cr.Status.DeployerPhase = phase
 
 	// create or update statefulset for the search heads
-	defaultsConfigMap, err := configworkflow.EnsureKVServiceDefaults(ctx, client, cr, splcommon.SplunkSearchHead)
-	if err != nil {
-		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to ensure KVService defaults")
-		return result, err
-	}
 	statefulSet, err = getSearchHeadStatefulSet(ctx, client, cr, defaultsConfigMap.AsStatefulSetOption())
 	if errors.Is(err, configworkflow.ErrPostgresDatabasePending) {
 		setPhaseAndConditions(enterpriseApi.PhasePending, err.Error())
@@ -467,7 +469,9 @@ func applySearchHeadCluster(ctx context.Context, client splcommon.ControllerClie
 		setPhaseAndConditions(enterpriseApi.PhaseError, "Failed to update Search Head pods")
 		return result, err
 	}
-	configworkflow.GarbageCollectConfigMaps(ctx, client, cr, defaultsConfigMap.Name, statefulSet.Spec.Selector)
+	// Check all namespace pods so defaults still mounted by a rolling deployer
+	// are retained as well as those mounted by search-head members.
+	configworkflow.GarbageCollectConfigMaps(ctx, client, cr, defaultsConfigMap.Name, nil)
 	setPhaseAndConditions(phase, "")
 
 	var finalResult *reconcile.Result
@@ -591,7 +595,7 @@ func setDeployerConfig(ctx context.Context, cr *enterpriseApi.SearchHeadCluster,
 	return nil
 }
 
-// getDeployerStatefulSet returns a Kubernetes StatefulSet object for a Splunk Enterprise license manager.
+// getDeployerStatefulSet returns a Kubernetes StatefulSet object for an SHC deployer.
 func getDeployerStatefulSet(ctx context.Context, client splcommon.ControllerClient, cr *enterpriseApi.SearchHeadCluster, opts ...resources.StatefulSetOption) (*appsv1.StatefulSet, error) {
 	// Uses the same SAN set as getSearchHeadStatefulSet (SH + deployer), not
 	// autoDNSNamesDeployer alone: this runs first, and EnsureCertificate is

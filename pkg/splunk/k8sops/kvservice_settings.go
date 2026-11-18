@@ -55,8 +55,8 @@ func SupportsKVService(cr splcommon.MetaObject) bool {
 // GetKVServiceSettings reads the consumer namespace's enable and tenant labels
 // and address annotation. Supported short Service DNS addresses are used unchanged.
 // It does not require a KVService CR, Service, or ready backend to exist.
-func GetKVServiceSettings(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, instanceType InstanceType) (KVServiceSettings, bool, error) {
-	if !SupportsKVService(cr) || instanceType == SplunkDeployer {
+func GetKVServiceSettings(ctx context.Context, client splcommon.ControllerClient, cr splcommon.MetaObject, _ InstanceType) (KVServiceSettings, bool, error) {
+	if !SupportsKVService(cr) {
 		return KVServiceSettings{}, false, nil
 	}
 	watchNamespaces := config.GetWatchNamespaces()

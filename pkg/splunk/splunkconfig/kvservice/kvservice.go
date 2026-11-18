@@ -38,7 +38,7 @@ func (f *feature) Contribute(role common.InstanceType) (splunkconfig.ConfSet, er
 	switch role {
 	case common.SplunkStandalone, common.SplunkIndexer, common.SplunkSearchHead,
 		common.SplunkClusterManager, common.SplunkLicenseManager, common.SplunkMonitoringConsole,
-		common.SplunkClusterMaster, common.SplunkLicenseMaster:
+		common.SplunkClusterMaster, common.SplunkLicenseMaster, common.SplunkDeployer:
 		settings := common.StanzaFields{}
 		stanzas := common.ConfFileStanzas{"kvstore": settings}
 		if f.connectionString != "" {
