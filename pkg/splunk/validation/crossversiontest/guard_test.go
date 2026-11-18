@@ -28,11 +28,71 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	enterpriseApiV3 "github.com/splunk/splunk-operator/api/enterprise/v3"
 	enterpriseApiV4 "github.com/splunk/splunk-operator/api/enterprise/v4"
+	"github.com/splunk/splunk-operator/pkg/config"
 )
+
+func TestSHCCheckpointSurvivesV3MetadataUpdate(t *testing.T) {
+	if apiServerClient == nil {
+		t.Skip("KUBEBUILDER_ASSETS is not set; run via `make test` or `make setup-envtest`")
+	}
+
+	featuregatetesting.SetFeatureGatesDuringTest(t, config.DefaultMutableFeatureGate, featuregatetesting.FeatureOverrides{
+		config.CrossVersionFieldProtection: true,
+		config.ValidationWebhook:           false,
+	})
+
+	for _, version := range []string{"v3", "v4"} {
+		t.Run(version, func(t *testing.T) {
+			shc := &enterpriseApiV4.SearchHeadCluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "checkpoint-metadata-" + version},
+				Spec:       enterpriseApiV4.SearchHeadClusterSpec{Replicas: 3},
+			}
+			require.NoError(t, apiServerClient.Create(t.Context(), shc))
+			t.Cleanup(func() {
+				require.NoError(t, apiServerClient.Delete(context.Background(), shc))
+			})
+
+			checkpoint := enterpriseApiV4.CaptainTransferStatus{MemberName: ptr.To("shc-head-0"), StartTimestamp: ptr.To(int64(1794146400))}
+			shc.Status.Phase = enterpriseApiV4.PhaseReady
+			shc.Status.DeployerPhase = enterpriseApiV4.PhaseReady
+			shc.Status.CaptainTransfer = checkpoint.DeepCopy()
+			require.NoError(t, apiServerClient.Status().Update(t.Context(), shc))
+			key := client.ObjectKeyFromObject(shc)
+			readCheckpoint := func() *enterpriseApiV4.SearchHeadCluster {
+				t.Helper()
+				stored := &enterpriseApiV4.SearchHeadCluster{}
+				require.NoError(t, apiServerClient.Get(t.Context(), key, stored))
+				require.Equal(t, &checkpoint, stored.Status.CaptainTransfer)
+				return stored
+			}
+			before := readCheckpoint()
+
+			var writer client.Object = &enterpriseApiV3.SearchHeadCluster{}
+			if version == "v4" {
+				writer = &enterpriseApiV4.SearchHeadCluster{}
+			}
+			require.NoError(t, apiServerClient.Get(t.Context(), key, writer))
+			writer.SetLabels(map[string]string{"checkpoint-metadata-update": version})
+			require.NoError(t, apiServerClient.Update(t.Context(), writer))
+
+			after := readCheckpoint()
+			require.Equal(t, version, after.Labels["checkpoint-metadata-update"])
+			require.NotEqual(t, before.ResourceVersion, after.ResourceVersion)
+
+			after.Status.CaptainTransfer = nil
+			require.NoError(t, apiServerClient.Status().Update(t.Context(), after))
+			cleared := &enterpriseApiV4.SearchHeadCluster{}
+			require.NoError(t, apiServerClient.Get(t.Context(), key, cleared))
+			require.Nil(t, cleared.Status.CaptainTransfer)
+		})
+	}
+}
 
 func TestCrossVersionFieldProtection(t *testing.T) {
 	if apiServerClient == nil {

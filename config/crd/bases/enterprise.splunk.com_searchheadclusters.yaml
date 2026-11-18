@@ -5036,6 +5036,23 @@ spec:
                 description: true if the search head cluster's captain is ready to
                   service requests
                 type: boolean
+              captainTransfer:
+                description: |-
+                  Tracks an in-progress attempt to transfer captaincy away from a member
+                  about to be disrupted, before recycling or removing it.
+                properties:
+                  memberName:
+                    description: |-
+                      Name of the SHC member the operator is currently trying to transfer
+                      captaincy away from.
+                    type: string
+                  startTimestamp:
+                    description: |-
+                      Unix timestamp in seconds when the first transfer attempt began for
+                      MemberName's current disruption episode.
+                    format: int64
+                    type: integer
+                type: object
               deployerPhase:
                 description: current phase of the deployer
                 enum:
@@ -10532,6 +10549,23 @@ spec:
                   confirmation the newly elected captain actually held.
                 format: int64
                 type: integer
+              captainTransfer:
+                description: |-
+                  Tracks an in-progress attempt to transfer captaincy away from a member
+                  about to be disrupted, before recycling or removing it.
+                properties:
+                  memberName:
+                    description: |-
+                      Name of the SHC member the operator is currently trying to transfer
+                      captaincy away from.
+                    type: string
+                  startTimestamp:
+                    description: |-
+                      Unix timestamp in seconds when the first transfer attempt began for
+                      MemberName's current disruption episode.
+                    format: int64
+                    type: integer
+                type: object
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the resource's state.

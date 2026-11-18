@@ -92,6 +92,7 @@ const (
 	EventReasonUpgradeCheckFailed            EventReason = "UpgradeCheckFailed"
 	EventReasonUpgradeBlockedVersionMismatch EventReason = "UpgradeBlockedVersionMismatch"
 	EventReasonDetentionTimeoutForced        EventReason = "DetentionTimeoutForced"
+	EventReasonCaptainTransferTimeoutForced  EventReason = "CaptainTransferTimeoutForced"
 
 	// Stalled condition transition events
 	EventReasonStalled         EventReason = "Stalled"

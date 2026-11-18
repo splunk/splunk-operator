@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -385,6 +386,36 @@ func (c *SplunkClient) RemoveSearchHeadClusterMember() error {
 	}
 
 	return fmt.Errorf("received unrecognized 503 response from %s", request.URL)
+}
+
+// TransferSearchHeadCaptain transfers captaincy to targetMgmtURI. This client's
+// node must be the current captain. The consensus endpoint matches the inspected
+// 10.6 CLI; that build rejects the older captain/control path.
+func (c *SplunkClient) TransferSearchHeadCaptain(targetMgmtURI string) error {
+	endpoint := fmt.Sprintf("%s/services/shcluster/member/consensus/default/transfer_captaincy", c.ManagementURI)
+	body := url.Values{"mgmt_uri": {targetMgmtURI}}.Encode()
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(body))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	expectedStatus := []int{200}
+	return c.Do(request, expectedStatus, nil)
+}
+
+// SetPreferredCaptain updates [shclustering] preferred_captain in server.conf
+// on this client's node. A successful write does not confirm that running
+// captain-election logic has reloaded the setting.
+func (c *SplunkClient) SetPreferredCaptain(preferred bool) error {
+	endpoint := fmt.Sprintf("%s/services/configs/conf-server/shclustering", c.ManagementURI)
+	body := url.Values{"preferred_captain": {strconv.FormatBool(preferred)}}.Encode()
+	request, err := http.NewRequest("POST", endpoint, strings.NewReader(body))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	expectedStatus := []int{200}
+	return c.Do(request, expectedStatus, nil)
 }
 
 // ClusterBundleInfo represents the status of a configuration bundle.

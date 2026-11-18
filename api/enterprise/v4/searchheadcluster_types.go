@@ -237,6 +237,26 @@ type SearchHeadClusterStatus struct {
 	// StatefulSet controller-revision-hash of the pod that started the current detention episode.
 	// Resets the timer when a replacement pod with a new revision enters ManualDetention.
 	DetainedPodRevision string `json:"detainedPodRevision,omitempty"`
+
+	// Tracks an in-progress attempt to transfer captaincy away from a member
+	// about to be disrupted, before recycling or removing it.
+	// +optional
+	CaptainTransfer *CaptainTransferStatus `json:"captainTransfer,omitempty"`
+}
+
+// CaptainTransferStatus tracks an in-progress attempt to hand captaincy away
+// from a member about to be disrupted. It is only present on the status while
+// a transfer is in progress.
+type CaptainTransferStatus struct {
+	// Unix timestamp in seconds when the first transfer attempt began for
+	// MemberName's current disruption episode.
+	// +optional
+	StartTimestamp *int64 `json:"startTimestamp,omitempty"`
+
+	// Name of the SHC member the operator is currently trying to transfer
+	// captaincy away from.
+	// +optional
+	MemberName *string `json:"memberName,omitempty"`
 }
 
 type UpgradePhase string

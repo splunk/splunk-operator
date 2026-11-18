@@ -5030,6 +5030,23 @@ spec:
                 description: true if the search head cluster's captain is ready to
                   service requests
                 type: boolean
+              captainTransfer:
+                description: |-
+                  Tracks an in-progress attempt to transfer captaincy away from a member
+                  about to be disrupted, before recycling or removing it.
+                properties:
+                  memberName:
+                    description: |-
+                      Name of the SHC member the operator is currently trying to transfer
+                      captaincy away from.
+                    type: string
+                  startTimestamp:
+                    description: |-
+                      Unix timestamp in seconds when the first transfer attempt began for
+                      MemberName's current disruption episode.
+                    format: int64
+                    type: integer
+                type: object
               deployerPhase:
                 description: current phase of the deployer
                 enum:
@@ -7204,6 +7221,66 @@ spec:
                   PodAnnotations is a map of annotations applied to Splunk instance pods.
                   These annotations override operator-provided pod annotations when keys overlap.
                 type: object
+              postgresDatabaseMounts:
+                description: |-
+                  PostgresDatabaseMounts mounts published database metadata and credentials
+                  read-only under $SPLUNK_HOME/var/run/supervisor/postgresok. SearchHeadCluster
+                  deployers do not receive these mounts. Consumers must reload updated files.
+                items:
+                  description: |-
+                    PostgresDatabaseMountSpec mounts a database's published connection metadata
+                    and credentials into the Splunk container. It does not provision a database,
+                    enable a sidecar, or configure Splunk to use PostgreSQL.
+                  properties:
+                    database:
+                      description: Database selects one entry in PostgresDatabase.spec.databases
+                        by name.
+                      maxLength: 30
+                      minLength: 1
+                      pattern: ^[a-z][a-z0-9]*$
+                      type: string
+                    includeAdmin:
+                      default: false
+                      description: |-
+                        IncludeAdmin also mounts the database-owner password for schema changes.
+                        Disabled by default; ordinary consumers receive only the RW password.
+                      type: boolean
+                    name:
+                      description: Name identifies this entry. Files use the database
+                        name, not this name.
+                      maxLength: 60
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    postgresDatabaseRef:
+                      description: |-
+                        PostgresDatabaseRef references a platform.splunk.com PostgresDatabase
+                        in the same namespace as this workload.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                      x-kubernetes-validations:
+                      - message: postgresDatabaseRef.name must not be empty
+                        rule: has(self.name) && self.name != ''
+                  required:
+                  - database
+                  - name
+                  - postgresDatabaseRef
+                  type: object
+                maxItems: 10
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               readinessInitialDelaySeconds:
                 description: |-
                   ReadinessInitialDelaySeconds defines initialDelaySeconds(See https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) for Readiness probe
@@ -10458,6 +10535,23 @@ spec:
                   confirmation the newly elected captain actually held.
                 format: int64
                 type: integer
+              captainTransfer:
+                description: |-
+                  Tracks an in-progress attempt to transfer captaincy away from a member
+                  about to be disrupted, before recycling or removing it.
+                properties:
+                  memberName:
+                    description: |-
+                      Name of the SHC member the operator is currently trying to transfer
+                      captaincy away from.
+                    type: string
+                  startTimestamp:
+                    description: |-
+                      Unix timestamp in seconds when the first transfer attempt began for
+                      MemberName's current disruption episode.
+                    format: int64
+                    type: integer
+                type: object
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the resource's state.
@@ -10568,6 +10662,11 @@ spec:
                       description: Flag that indicates if this member can run scheduled
                         searches.
                       type: boolean
+                    currentOperation:
+                      description: |-
+                        The lifecycle operation SOK is currently performing on this member, if any. Empty when the
+                        member is Up on the current revision and nothing is being done to it.
+                      type: string
                     is_registered:
                       description: Indicates if this member is registered with the
                         searchhead cluster captain.
@@ -10575,6 +10674,12 @@ spec:
                     name:
                       description: Name of the search head cluster member
                       type: string
+                    operationStartTimestamp:
+                      description: |-
+                        Unix timestamp when CurrentOperation last transitioned to its present value. Zero when
+                        CurrentOperation is empty.
+                      format: int64
+                      type: integer
                     podRevision:
                       description: |-
                         StatefulSet controller-revision-hash label of the pod — populated by updateStatus

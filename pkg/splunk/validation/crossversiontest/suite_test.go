@@ -22,7 +22,9 @@ package crossversiontest
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -62,6 +64,7 @@ func TestMain(m *testing.M) {
 		Service: &admissionregistrationv1.ServiceReference{Name: "webhook-service", Namespace: "system", Path: ptr.To("validate")},
 	}
 	testEnv := &envtest.Environment{
+		UseExistingCluster:    ptr.To(false),
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
@@ -110,6 +113,12 @@ func TestMain(m *testing.M) {
 	restConfig, err := testEnv.Start()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "start envtest:", err)
+		os.Exit(1)
+	}
+	endpoint, err := url.Parse(restConfig.Host)
+	if err != nil || !net.ParseIP(endpoint.Hostname()).IsLoopback() {
+		fmt.Fprintln(os.Stderr, "envtest API endpoint must be a loopback address:", restConfig.Host)
+		_ = testEnv.Stop()
 		os.Exit(1)
 	}
 

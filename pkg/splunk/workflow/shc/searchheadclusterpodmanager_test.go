@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -41,6 +42,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	clienttesting "k8s.io/client-go/testing"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -1488,6 +1490,8 @@ func TestUpdateStatusPreservesPodRevisionByMemberName(t *testing.T) {
 		{Name: "splunk-test-shc-search-head-1", PodRevision: "revision-1"},
 		{Name: "splunk-test-shc-search-head-0", PodRevision: "revision-0"},
 	}
+	checkpoint := enterpriseApi.CaptainTransferStatus{MemberName: ptr.To("splunk-test-shc-search-head-0"), StartTimestamp: ptr.To(int64(12345))}
+	cr.Status.CaptainTransfer = checkpoint.DeepCopy()
 
 	c := spltest.NewMockClient()
 	c.AddObjects([]client.Object{
@@ -1517,6 +1521,9 @@ func TestUpdateStatusPreservesPodRevisionByMemberName(t *testing.T) {
 	if got := cr.Status.Members[1].PodRevision; got != "revision-1" {
 		t.Errorf("expected revision-1 preserved by member name, got %q", got)
 	}
+	if got := cr.Status.CaptainTransfer; !reflect.DeepEqual(got, &checkpoint) {
+		t.Errorf("checkpoint = %+v; want preserved %+v after missing labels", got, checkpoint)
+	}
 }
 
 func TestUpdateStatusPreservesPodRevisionWhenPodReadFails(t *testing.T) {
@@ -1529,6 +1536,8 @@ func TestUpdateStatusPreservesPodRevisionWhenPodReadFails(t *testing.T) {
 	cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{
 		{Name: "splunk-test-shc-search-head-0", PodRevision: "revision-0"},
 	}
+	checkpoint := enterpriseApi.CaptainTransferStatus{MemberName: ptr.To(cr.Status.Members[0].Name), StartTimestamp: ptr.To(int64(12345))}
+	cr.Status.CaptainTransfer = checkpoint.DeepCopy()
 
 	mgr := newTestSHCPodManager(cr)
 	mgr.Client = spltest.NewMockClient()
@@ -1540,41 +1549,101 @@ func TestUpdateStatusPreservesPodRevisionWhenPodReadFails(t *testing.T) {
 	if got := cr.Status.Members[0].PodRevision; got != "revision-0" {
 		t.Errorf("expected revision-0 preserved after pod read failure, got %q", got)
 	}
+	if got := cr.Status.CaptainTransfer; !reflect.DeepEqual(got, &checkpoint) {
+		t.Errorf("checkpoint = %+v; want preserved %+v after failed pod read", got, checkpoint)
+	}
 }
 
 func TestUpdateStatusUsesCurrentPodRevisionWhenPresent(t *testing.T) {
 	ctx := context.Background()
 	restoreSearchHeadClusterInfoStubs(t)
 
-	cr := &enterpriseApi.SearchHeadCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-shc", Namespace: "test"},
-	}
+	cr := newTestSHCCR("Up", 0, 0)
 	cr.Status.Members = []enterpriseApi.SearchHeadClusterMemberStatus{
-		{Name: "splunk-test-shc-search-head-0", PodRevision: "old-revision"},
+		{Name: "splunk-test-shc-search-head-0", Status: "Up"},
+		{Name: "splunk-test-shc-search-head-1", Status: "Up", PodRevision: "old-revision"},
+	}
+	cr.Status.Captain = cr.Status.Members[0].Name
+	cr.Status.CaptainReady = true
+	cr.Status.CaptainStableSince = time.Now().Unix() - captainStabilizationSeconds - 5
+	checkpoint := enterpriseApi.CaptainTransferStatus{
+		MemberName: ptr.To(cr.Status.Members[0].Name), StartTimestamp: ptr.To(time.Now().Unix() - captainTransferTimeoutSeconds - 5),
+	}
+	cr.Status.CaptainTransfer = checkpoint.DeepCopy()
+	httpClient := &spltest.MockHTTPClient{}
+	mgr := newCaptainTransferCheckpointManager(cr, httpClient)
+	statefulSet := searchHeadStatefulSet("test-shc", 2)
+	statefulSet.Status.UpdateRevision = "next-revision"
+
+	setRevision := func(n int, revision string) {
+		t.Helper()
+		var pod corev1.Pod
+		if err := mgr.Client.Get(ctx, client.ObjectKey{Namespace: cr.Namespace, Name: cr.Status.Members[n].Name}, &pod); err != nil {
+			t.Fatal(err)
+		}
+		pod.Labels = map[string]string{"controller-revision-hash": revision}
+		if err := mgr.Client.Update(ctx, &pod); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setRevision(0, "old-revision")
+	setRevision(1, "old-revision")
+	if err := mgr.UpdateStatus(ctx, statefulSet); err != nil {
+		t.Fatal(err)
+	}
+	if got := cr.Status.CaptainTransfer; !reflect.DeepEqual(got, &checkpoint) {
+		t.Errorf("first observed revision changed checkpoint: %+v; want %+v", got, checkpoint)
 	}
 
-	c := spltest.NewMockClient()
-	c.AddObjects([]client.Object{
-		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "splunk-test-shc-search-head-0",
-				Namespace: "test",
-				Labels: map[string]string{
-					"controller-revision-hash": "current-revision",
-				},
-			},
-		},
-	})
-	mgr := newTestSHCPodManager(cr)
-	mgr.Client = c
+	setRevision(1, "next-revision")
+	if err := mgr.UpdateStatus(ctx, statefulSet); err != nil {
+		t.Fatal(err)
+	}
+	if got := cr.Status.CaptainTransfer; !reflect.DeepEqual(got, &checkpoint) {
+		t.Errorf("another member's replacement changed checkpoint: %+v; want %+v", got, checkpoint)
+	}
+	if got := cr.Status.Members[0].PodRevision; got != "old-revision" {
+		t.Errorf("unchanged pod revision = %q; want old-revision", got)
+	}
 
-	err := mgr.UpdateStatus(ctx, searchHeadStatefulSet("test-shc", 1))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	setRevision(0, "current-revision")
+	if err := mgr.UpdateStatus(ctx, statefulSet); err != nil {
+		t.Fatal(err)
 	}
 	if got := cr.Status.Members[0].PodRevision; got != "current-revision" {
 		t.Errorf("expected current pod revision to win, got %q", got)
 	}
+	if !cr.Status.CaptainReady || !captainStable(cr.Status.Captain, cr.Status.CaptainStableSince, time.Now()) || cr.Status.Members[0].Status != "Up" {
+		t.Fatal("replacement must be an Up, ready, stable captain before preparation")
+	}
+	if deferred, err := mgr.DeferRecycle(ctx, 0, statefulSet.Status.UpdateRevision); err != nil || deferred {
+		t.Fatalf("DeferRecycle = %v, %v; want the replacement captain eligible for recycling", deferred, err)
+	}
+
+	originalExecFactory := splutil.GetPodExecClient
+	splutil.GetPodExecClient = func(c splcommon.ControllerClient, cr splcommon.MetaObject, pod string) splutil.PodExecClientImpl {
+		mock := &spltest.MockPodExecClient{Client: c, Cr: cr, TargetPodName: pod}
+		mock.AddMockPodExecReturnContext(ctx, "mkdir -p", &spltest.MockPodExecReturnContext{})
+		return mock
+	}
+	t.Cleanup(func() { splutil.GetPodExecClient = originalExecFactory })
+	httpClient.AddHandlers(
+		spltest.MockHTTPHandler{Method: http.MethodPost, URL: mgr.managementURI(0) + "/services/configs/conf-server/shclustering", Status: http.StatusOK},
+		spltest.MockHTTPHandler{Method: http.MethodPost, URL: mgr.managementURI(0) + "/services/shcluster/member/consensus/default/transfer_captaincy", Status: http.StatusOK},
+	)
+	started := time.Now().Unix()
+	ready, err := mgr.PrepareRecycle(ctx, 0)
+	finished := time.Now().Unix()
+	if err != nil || ready {
+		t.Errorf("PrepareRecycle = %v, %v; want false, nil while transferring captaincy", ready, err)
+	}
+	if got := cr.Status.CaptainTransfer; got == nil || got.MemberName == nil || *got.MemberName != *checkpoint.MemberName || got.StartTimestamp == nil || *got.StartTimestamp < started || *got.StartTimestamp > finished {
+		t.Errorf("replacement checkpoint = %+v; want a fresh window instead of %+v", got, checkpoint)
+	}
+	if cr.Status.DetentionStartTimestamp != 0 || cr.Status.UpgradeStartTimestamp != 0 {
+		t.Error("detention or upgrade started before replacement captain transfer")
+	}
+	assertCaptainTransferRequests(t, httpClient, mgr.managementURI(1))
 }
 
 func restoreSearchHeadClusterInfoStubs(t *testing.T) {
@@ -1657,6 +1726,100 @@ func TestPrepareRecycle_ProceedsOnceCaptainIsStable(t *testing.T) {
 	}
 	if !ready {
 		t.Error("expected (true, nil) — captain has held stable for the full settle window and searches are drained")
+	}
+}
+
+func TestPrepareScaleDown_TransfersCaptaincyBeforeRemovingTheCaptain(t *testing.T) {
+	ctx := context.Background()
+
+	cr := newTestSHCCR("Up", 0, 0)
+	cr.Status.Members = append(cr.Status.Members, enterpriseApi.SearchHeadClusterMemberStatus{
+		Name: "splunk-test-shc-search-head-1", Status: "Up",
+	})
+	cr.Status.Captain = cr.Status.Members[0].Name
+	cr.Status.CaptainStableSince = time.Now().Unix() - captainStabilizationSeconds - 5
+	httpClient := &spltest.MockHTTPClient{}
+	mgr := newCaptainTransferCheckpointManager(cr, httpClient)
+	httpClient.AddHandlers(
+		spltest.MockHTTPHandler{Method: http.MethodPost, URL: mgr.managementURI(0) + "/services/configs/conf-server/shclustering", Status: http.StatusOK},
+		spltest.MockHTTPHandler{Method: http.MethodPost, URL: mgr.managementURI(0) + "/services/shcluster/member/consensus/default/transfer_captaincy", Status: http.StatusOK},
+	)
+
+	ready, err := mgr.PrepareScaleDown(ctx, 0)
+	if err != nil || ready {
+		t.Fatalf("PrepareScaleDown = %v, %v; want false, nil while transferring captaincy", ready, err)
+	}
+	if got := cr.Status.Members[0].CurrentOperation; got != enterpriseApi.MemberOperationDetaining {
+		t.Errorf("operation = %q; want %q before removal", got, enterpriseApi.MemberOperationDetaining)
+	}
+	if got := cr.Status.CaptainTransfer; !hasCaptainTransferFor(got, cr.Status.Members[0].Name) {
+		t.Errorf("missing captain transfer checkpoint: %+v", got)
+	}
+	if cr.Status.DetentionStartTimestamp != 0 || cr.Status.DetainedMemberName != "" || cr.Status.UpgradeStartTimestamp != 0 {
+		t.Error("detention or upgrade started before captain transfer completed")
+	}
+	assertCaptainTransferRequests(t, httpClient, mgr.managementURI(1))
+}
+
+func TestNextCaptainTransferWindow(t *testing.T) {
+	now := time.Now()
+	t.Run("starts fresh when no window exists", func(t *testing.T) {
+		got := nextCaptainTransferWindow(nil, "sh-0", now)
+		if got.MemberName == nil || *got.MemberName != "sh-0" || got.StartTimestamp == nil || *got.StartTimestamp != now.Unix() {
+			t.Errorf("got %+v", got)
+		}
+	})
+	t.Run("starts fresh from a stored empty window", func(t *testing.T) {
+		got := nextCaptainTransferWindow(&enterpriseApi.CaptainTransferStatus{}, "sh-0", now)
+		if got.MemberName == nil || *got.MemberName != "sh-0" || got.StartTimestamp == nil || *got.StartTimestamp != now.Unix() {
+			t.Errorf("got %+v", got)
+		}
+	})
+	t.Run("restarts when the stored window has a zero start time", func(t *testing.T) {
+		stored := &enterpriseApi.CaptainTransferStatus{StartTimestamp: ptr.To(int64(0)), MemberName: ptr.To("sh-0")}
+		got := nextCaptainTransferWindow(stored, "sh-0", now)
+		if got.StartTimestamp == nil || *got.StartTimestamp != now.Unix() {
+			t.Errorf("got %+v", got)
+		}
+	})
+	t.Run("continues an existing window for the same member", func(t *testing.T) {
+		existing := &enterpriseApi.CaptainTransferStatus{StartTimestamp: ptr.To(now.Unix() - 30), MemberName: ptr.To("sh-0")}
+		got := nextCaptainTransferWindow(existing, "sh-0", now)
+		if got != existing {
+			t.Errorf("got %+v, want unchanged %+v", got, existing)
+		}
+	})
+	t.Run("restarts for a different member — never inherits a stale window", func(t *testing.T) {
+		existing := &enterpriseApi.CaptainTransferStatus{StartTimestamp: ptr.To(now.Unix() - 300), MemberName: ptr.To("sh-0")}
+		got := nextCaptainTransferWindow(existing, "sh-1", now)
+		if got.MemberName == nil || *got.MemberName != "sh-1" || got.StartTimestamp == nil || *got.StartTimestamp != now.Unix() {
+			t.Errorf("got %+v", got)
+		}
+	})
+}
+
+func TestLowestUpMemberOrdinal(t *testing.T) {
+	cases := []struct {
+		name      string
+		members   []enterpriseApi.SearchHeadClusterMemberStatus
+		excluding int32
+		want      int32
+	}{
+		{"first member is Up", []enterpriseApi.SearchHeadClusterMemberStatus{{Status: "Up"}, {Status: "Up"}}, 5, 0},
+		{"lowest Up is not ordinal 0", []enterpriseApi.SearchHeadClusterMemberStatus{{Status: "ManualDetention"}, {Status: "Up"}, {Status: "Up"}}, 5, 1},
+		{"no member Up falls back to ordinal 0", []enterpriseApi.SearchHeadClusterMemberStatus{{Status: "ManualDetention"}, {Status: ""}}, 5, 0},
+		{"excludes the captain's own ordinal even though it is still Up", []enterpriseApi.SearchHeadClusterMemberStatus{{Status: "Up"}, {Status: "Up"}, {Status: "Up"}}, 0, 1},
+		{"no member Up and excluding is ordinal 0: fallback must not recreate the self-transfer", []enterpriseApi.SearchHeadClusterMemberStatus{{Status: ""}, {Status: "ManualDetention"}, {Status: ""}}, 0, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cr := &enterpriseApi.SearchHeadCluster{ObjectMeta: metav1.ObjectMeta{Name: "test-shc", Namespace: "test"}}
+			cr.Status.Members = tc.members
+			mgr := newTestSHCPodManager(cr)
+			if got := mgr.lowestUpMemberOrdinal(tc.excluding); got != tc.want {
+				t.Errorf("lowestUpMemberOrdinal(%d) = %d, want %d", tc.excluding, got, tc.want)
+			}
+		})
 	}
 }
 

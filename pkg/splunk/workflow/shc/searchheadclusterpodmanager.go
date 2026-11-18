@@ -33,6 +33,10 @@ import (
 
 const defaultSearchHeadDetentionTimeoutSeconds = 3600
 
+// captainTransferTimeoutSeconds bounds transfer retries before falling back
+// to detaining and recycling the captain directly.
+const captainTransferTimeoutSeconds = 60
+
 // NewSplunkClientFunc is the factory signature used by the SearchHeadCluster pod manager.
 type NewSplunkClientFunc func(managementURI, username, password string) *splclient.SplunkClient
 
@@ -75,6 +79,13 @@ func (mgr *PodManager) clearDetentionTimer(memberName string) {
 		metrics.ActiveRealtimeSearchCount.With(prometheus.Labels{
 			"sh_name": memberName,
 		}).Set(0)
+	}
+}
+
+// clearCaptainTransferWindow clears only the named member's checkpoint.
+func (mgr *PodManager) clearCaptainTransferWindow(memberName string) {
+	if t := mgr.CR.Status.CaptainTransfer; t != nil && t.MemberName != nil && *t.MemberName == memberName {
+		mgr.CR.Status.CaptainTransfer = nil
 	}
 }
 
@@ -213,17 +224,14 @@ func (mgr *PodManager) PrepareScaleDown(ctx context.Context, n int32) (bool, err
 	// FinishRecycle is never called on the scale-down path; clear timer fields only after
 	// RemoveSearchHeadClusterMember succeeds to avoid resetting the clock on a transient failure.
 	mgr.clearDetentionTimer(memberName)
+	mgr.clearCaptainTransferWindow(memberName)
 
 	// all done -> ok to scale down the statefulset
 	return true, nil
 }
 
-// DeferRecycle for PodManager implements splcommon.StatefulSetRecycleOrderer:
-// it reports true for the ordinal currently holding the captain role, for as
-// long as any other member still needs to be recycled to updateRevision — so
-// a rolling update recycles every other member first and the captain last,
-// regardless of which ordinal happens to be captain or when that changes
-// mid-rollout.
+// DeferRecycle defers the current captain until other members have rolled
+// and rejoined, unless its own recycle has already started.
 func (mgr *PodManager) DeferRecycle(ctx context.Context, n int32, updateRevision string) (bool, error) {
 	if n < 0 || n >= int32(len(mgr.CR.Status.Members)) {
 		return false, nil
@@ -263,6 +271,44 @@ func (mgr *PodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error
 		return false, nil
 	}
 
+	// Transfer before upgrade initialization or detention, including on scale-down.
+	// Recheck the observed captain each reconcile; after the timeout, accept the
+	// direct-recycle fallback and its involuntary-election risk.
+	// Detained members must finish draining without rearming the transfer window.
+	if mgr.CR.Status.Members[n].Status == "Up" && isCaptainMember(mgr.CR.Status.Captain, memberName) {
+		window := nextCaptainTransferWindow(mgr.CR.Status.CaptainTransfer, memberName, time.Now())
+		if time.Now().Unix()-*window.StartTimestamp < captainTransferTimeoutSeconds {
+			mgr.CR.Status.CaptainTransfer = window
+
+			target := mgr.lowestUpMemberOrdinal(n)
+			logger.InfoContext(ctx, "transferring captaincy away from member about to be disrupted",
+				"memberName", memberName, "targetOrdinal", target)
+			// Transfer is the first step of Detaining; actual detention refreshes its timestamp.
+			mgr.CR.Status.Members[n].CurrentOperation = enterpriseApi.MemberOperationDetaining
+			mgr.CR.Status.Members[n].OperationStartTimestamp = time.Now().Unix()
+
+			c := mgr.getClient(ctx, n)
+			// Best effort: clear this member's preference before transferring.
+			// The write may not affect live election logic; the timeout still bounds retries.
+			if err := c.SetPreferredCaptain(false); err != nil {
+				logger.WarnContext(ctx, "unable to clear preferred_captain before transferring captaincy; proceeding with the transfer anyway",
+					"memberName", memberName, "error", err)
+			}
+			if err := c.TransferSearchHeadCaptain(mgr.managementURI(target)); err != nil {
+				return false, err
+			}
+			return false, nil
+		}
+		logger.WarnContext(ctx, "captain transfer did not take effect in time, recycling the captain's pod directly instead",
+			"memberName", memberName, "timeoutSeconds", captainTransferTimeoutSeconds)
+		if eventPublisher := GetEventPublisher(ctx, mgr.CR); eventPublisher != nil {
+			eventPublisher.Warning(ctx, splcommon.EventReasonCaptainTransferTimeoutForced,
+				fmt.Sprintf("Captain transfer away from %s did not take effect within %ds; recycling its pod directly", memberName, captainTransferTimeoutSeconds))
+		} else {
+			logger.WarnContext(ctx, "event publisher unavailable, skipping CaptainTransferTimeoutForced event", "memberName", memberName)
+		}
+	}
+
 	switch mgr.CR.Status.Members[n].Status {
 	case "Up":
 		// Clear any stale timer from a prior recycle episode before starting a new one.
@@ -270,11 +316,13 @@ func (mgr *PodManager) PrepareRecycle(ctx context.Context, n int32) (bool, error
 		// that was never cleared by FinishRecycle (e.g. a new revision arrived before
 		// the pod returned to Up and FinishRecycle was skipped).
 		mgr.clearDetentionTimer(memberName)
+		// Do not restore preferred_captain before removal: the member could reclaim captaincy.
+		// Restart configuration owns any later preference assignment.
+		c := mgr.getClient(ctx, n)
 		mgr.CR.Status.Members[n].CurrentOperation = enterpriseApi.MemberOperationDetaining
 		mgr.CR.Status.Members[n].OperationStartTimestamp = time.Now().Unix()
 		// Detain search head
 		logger.InfoContext(ctx, "detaining SearchHeadCluster member", "memberName", memberName)
-		c := mgr.getClient(ctx, n)
 
 		podExecClient := splutil.GetPodExecClient(mgr.Client, mgr.CR, splutil.GetApplicablePodNameForK8Probes(mgr.CR, n))
 
@@ -396,6 +444,7 @@ func (mgr *PodManager) FinishRecycle(ctx context.Context, n int32) (bool, error)
 	case "Up":
 		// not in detention; clear any stale timer fields left by a timeout-forced recycle
 		mgr.clearDetentionTimer(memberName)
+		mgr.clearCaptainTransferWindow(memberName)
 		return true, nil
 
 	case "ManualDetention":
@@ -439,12 +488,7 @@ func (mgr *PodManager) FinishUpgrade(ctx context.Context, n int32) error {
 // getClient for PodManager returns a SplunkClient for the member n
 func (mgr *PodManager) getClient(ctx context.Context, n int32) *splclient.SplunkClient {
 	logger := logging.FromContext(ctx).With("func", "searchHeadClusterPodManager.getClient")
-	// Get Pod Name
 	memberName := splutil.GetSplunkStatefulsetPodName(splcommon.SplunkSearchHead, mgr.CR.GetName(), n)
-
-	// Get Fully Qualified Domain Name
-	fqdnName := splcommon.GetServiceFQDN(mgr.CR.GetNamespace(),
-		fmt.Sprintf("%s.%s", memberName, splcommon.GetSplunkServiceName(splcommon.SplunkSearchHead, mgr.CR.GetName(), true)))
 
 	// Retrieve admin password from Pod
 	adminPwd, err := splutil.GetSpecificSecretTokenFromPod(ctx, mgr.Client, memberName, mgr.CR.GetNamespace(), "password")
@@ -452,7 +496,33 @@ func (mgr *PodManager) getClient(ctx context.Context, n int32) *splclient.Splunk
 		logger.ErrorContext(ctx, "couldn't retrieve the admin password from Pod", "member", memberName, "error", err)
 	}
 
-	return mgr.NewSplunkClient(fmt.Sprintf("https://%s:8089", fqdnName), "admin", adminPwd)
+	return mgr.NewSplunkClient(mgr.managementURI(n), "admin", adminPwd)
+}
+
+// managementURI returns the management (REST) URI for search head ordinal n.
+func (mgr *PodManager) managementURI(n int32) string {
+	memberName := splutil.GetSplunkStatefulsetPodName(splcommon.SplunkSearchHead, mgr.CR.GetName(), n)
+	fqdnName := splcommon.GetServiceFQDN(mgr.CR.GetNamespace(),
+		fmt.Sprintf("%s.%s", memberName, splcommon.GetSplunkServiceName(splcommon.SplunkSearchHead, mgr.CR.GetName(), true)))
+	return fmt.Sprintf("https://%s:8089", fqdnName)
+}
+
+// lowestUpMemberOrdinal picks the lowest Up member other than excluding.
+// If none is Up, it uses the first other member, or excluding if none exists.
+func (mgr *PodManager) lowestUpMemberOrdinal(excluding int32) int32 {
+	fallback := excluding
+	for i, member := range mgr.CR.Status.Members {
+		if int32(i) == excluding {
+			continue
+		}
+		if fallback == excluding {
+			fallback = int32(i)
+		}
+		if member.Status == "Up" {
+			return int32(i)
+		}
+	}
+	return fallback
 }
 
 // GetSearchHeadClusterMemberInfo used in mocking this function
@@ -526,6 +596,9 @@ func (mgr *PodManager) UpdateStatus(ctx context.Context, statefulSet *appsv1.Sta
 		if podErr := mgr.Client.Get(ctx, podKey, &pod); podErr == nil {
 			if rev := pod.GetLabels()["controller-revision-hash"]; rev != "" {
 				memberStatus.PodRevision = rev
+				if previous := previousPodRevisions[memberName]; previous != "" && previous != rev {
+					mgr.clearCaptainTransferWindow(memberName)
+				}
 			} else {
 				memberStatus.PodRevision = previousPodRevisions[memberName]
 			}
