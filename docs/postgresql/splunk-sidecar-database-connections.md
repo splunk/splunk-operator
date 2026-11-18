@@ -32,7 +32,6 @@ The mount requires CNPG default certificates.
 The operator gives the CNPG cluster the same name as the PostgresCluster.
 It reads `ca.crt` from the Secret named `<PostgresCluster name>-ca`.
 Do not use custom certificates unless the mount implementation supports their CA reference.
-[CPI-2235](https://splunk.atlassian.net/browse/CPI-2235) tracks changes to CA discovery.
 
 ## Create the database
 

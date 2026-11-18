@@ -365,10 +365,8 @@ Before creating a PostgresCluster, set `TEST_PG17_IMAGE` to your approved Postgr
 17 `tag@sha256` reference and `TEST_PGBOUNCER_IMAGE` to your pinned PgBouncer reference
 when pooling is enabled. PostgreSQL tags must start with their mapped numeric major;
 `rel-17-...` build tags require a published numeric-leading alias before use here.
-The `sok/postgresok-build` project owns publishing compliant tags, promoting images
-to production, supplying complete release references, and preserving scan and
-signing evidence. Use those supplied references as the variable values; SOK does
-not publish images or discover release references.
+Use the verified release references from [Public PostgreSQL artifacts](public-artifacts.md)
+as the variable values. SOK does not publish images or discover release references.
 
 There is no public-image fallback. `spec.images.imagePullSecrets` is optional;
 SOK does not select a default Secret. Supplied references must name Secrets in
