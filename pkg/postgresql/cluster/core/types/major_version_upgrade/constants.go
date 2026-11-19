@@ -32,6 +32,8 @@ const (
 	ReasonPostUpgradeBackupNotReady          = "PostUpgradeBackupBaselineNotReady"
 	ReasonPreflightCheckPassed               = "PreflightCheckPassed"
 	ReasonCandidateReady                     = "CandidateReady"
+	ReasonCandidatePluginPending             = "CandidatePluginPending"
+	ReasonCandidatePluginTimedOut            = "CandidatePluginTimedOut"
 	ReasonCandidateRebuildRequired           = "CandidateRebuildRequired"
 	ReasonRollbackCapabilityMissing          = "RollbackCapabilityPortMissing"
 	ReasonBackupProviderMissing              = "BackupProviderMissing"

@@ -39,8 +39,15 @@ import (
 
 type completionSQLFake struct {
 	stopped, archived, accessible bool
+	archivingReady                bool
+	archivingHosts                []string
 	teardownErr                   error
 	sourceCalls, greenCalls       int
+}
+
+func (p *completionSQLFake) TargetArchivingReady(_ context.Context, _ *cnpgv1.Cluster, host string) (bool, error) {
+	p.archivingHosts = append(p.archivingHosts, host)
+	return p.archivingReady, nil
 }
 
 func (p *completionSQLFake) SourceStopped(context.Context, *cnpgv1.Cluster, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error) {
@@ -108,7 +115,7 @@ func completionFixture(t *testing.T) (*cutoverFixture, *BlueGreenCompletion, *co
 	teardown, err := NewBlueGreenReplicationTeardown(f.runtime.client, f.runtime.reader, f.runtime.key, parent)
 	require.NoError(t, err)
 	teardown.sql = &teardownSQLFake{}
-	sql := &completionSQLFake{stopped: true, accessible: true}
+	sql := &completionSQLFake{stopped: true, accessible: true, archivingReady: true}
 	c := &BlueGreenCompletion{switchover: f.runtime, teardown: teardown, sql: sql, config: &clustercore.MergedConfig{
 		Spec: &platformv1alpha1.PostgresClusterSpec{Backup: &platformv1alpha1.BackupConfig{Enabled: new(true), Schedule: new("0 2 * * *")}},
 		CNPG: &platformv1alpha1.CNPGConfig{Backup: &platformv1alpha1.CNPGBackupConfig{VolumeSnapshot: &platformv1alpha1.CNPGVolumeSnapshotConfig{}}},
@@ -330,6 +337,7 @@ func TestCommittedBackupFailureDoesNotStarveGreenAvailability(t *testing.T) {
 func TestCompletionUsesClassBarmanBackendAndBothSchedules(t *testing.T) {
 	f, c, _ := completionFixture(t)
 	c.config.CNPG.Backup.BarmanObjectStore = &platformv1alpha1.CNPGBarmanObjectStoreConfig{DestinationPath: "s3://fixture/green"}
+	readyBarmanInstances(t, f)
 	backup := waitForTargetBackup(t, f, c)
 	require.Equal(t, cnpgv1.BackupMethodPlugin, backup.Spec.Method)
 	require.NotNil(t, backup.Spec.PluginConfiguration)

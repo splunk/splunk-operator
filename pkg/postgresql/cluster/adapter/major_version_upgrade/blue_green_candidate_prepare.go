@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	cnpgutils "github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
@@ -46,6 +47,7 @@ type BlueGreenCandidatePlan struct {
 	TargetStorage       *resource.Quantity
 	TargetInstances     int
 	TargetConfiguration *platformv1alpha1.PostgresClusterSpec
+	TargetCNPG          *platformv1alpha1.CNPGConfig
 }
 
 // BlueGreenCandidatePreparer reconciles the green CNPG Cluster. It does not
@@ -121,6 +123,16 @@ func (p *BlueGreenCandidatePreparer) PrepareCandidate(ctx context.Context, inten
 	if err != nil {
 		return status, err
 	}
+	backupConfig := &clustercore.MergedConfig{Spec: p.plan.TargetConfiguration, CNPG: p.plan.TargetCNPG}
+	if len(stagedBackupPlugins(backupConfig, desired.Name)) > 0 {
+		ready, err := ensureAttemptObjectStore(ctx, p.client, p.cluster, desired.Name, intent.AttemptID, p.plan.TargetCNPG.Backup.BarmanObjectStore)
+		if err != nil {
+			return status, err
+		}
+		if !ready {
+			return status, fmt.Errorf("%w: preparing the candidate backup plugin ObjectStore", mvutypes.ErrUpgradeFlowPending)
+		}
+	}
 
 	candidate := &cnpgv1.Cluster{}
 	err = p.client.Get(ctx, client.ObjectKeyFromObject(desired), candidate)
@@ -145,8 +157,8 @@ func (p *BlueGreenCandidatePreparer) PrepareCandidate(ctx context.Context, inten
 			APIVersion: "postgresql.cnpg.io/v1", Kind: "Cluster", Namespace: candidate.Namespace, Name: candidate.Name, UID: candidate.UID,
 		},
 	}
-	if err := clusterCnpg.ClusterBlockingError(candidate); err != nil {
-		return status, fmt.Errorf("%w: green CNPG Cluster cannot bootstrap: %v", mvutypes.ErrUpgradeFlowFailed, err)
+	if err := candidateBlockingError(candidate, time.Now()); err != nil {
+		return status, err
 	}
 	if !clusterCnpg.PrimaryReady(candidate) {
 		return status, fmt.Errorf("%w: waiting for green CNPG Cluster schema-only bootstrap", mvutypes.ErrUpgradeFlowPending)
@@ -289,6 +301,11 @@ func (p *BlueGreenCandidatePreparer) buildCandidate(ctx context.Context, source 
 		plugins = append(plugins, plugin)
 	}
 	spec.Plugins = plugins
+	staged := stagedBackupPlugins(&clustercore.MergedConfig{Spec: p.plan.TargetConfiguration, CNPG: p.plan.TargetCNPG}, candidateName)
+	for _, plugin := range staged {
+		spec.Plugins = slices.DeleteFunc(spec.Plugins, func(existing cnpgv1.PluginConfiguration) bool { return existing.Name == plugin.Name })
+		spec.Plugins = append(spec.Plugins, plugin)
+	}
 	spec.Bootstrap = &cnpgv1.BootstrapConfiguration{InitDB: &cnpgv1.BootstrapInitDB{
 		Database: "postgres", Owner: "postgres", Secret: source.Spec.SuperuserSecret,
 		PostInitSQL: []string{candidatePublisherShadowSQL(username)},
@@ -324,6 +341,16 @@ func (p *BlueGreenCandidatePreparer) buildCandidate(ctx context.Context, source 
 	replicationSource.SSLRootCert = importSource.SSLRootCert.DeepCopy()
 	spec.ExternalClusters = append(spec.ExternalClusters, importSource, replicationSource)
 	configureCandidateCertificates(&spec, source, serverLeaf)
+	if serverLeaf == "" {
+		// A cloned blue SAN set does not identify green's Pooler Services. Use
+		// the authoritative TLS policy with the candidate environment name.
+		plan, err := clustercore.ReconcileServerTLSForEnvironment(ctx, nil, p.cluster, nil,
+			&clustercore.MergedConfig{Spec: p.plan.TargetConfiguration}, tlsport.Identity{}, candidateName)
+		if err != nil {
+			return nil, fmt.Errorf("planning green CNPG certificate names: %w", err)
+		}
+		plan.ApplyToCNPG(&spec, candidateName, p.key.Namespace)
+	}
 
 	return &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{
 		Name: candidateName, Namespace: p.key.Namespace,
@@ -396,8 +423,8 @@ func (p *BlueGreenCandidatePreparer) reconcileCandidateTopology(ctx context.Cont
 		}
 		return false, nil
 	}
-	if err := clusterCnpg.ClusterBlockingError(candidate); err != nil {
-		return false, fmt.Errorf("%w: green CNPG Cluster cannot scale: %v", mvutypes.ErrUpgradeFlowFailed, err)
+	if err := candidateBlockingError(candidate, time.Now()); err != nil {
+		return false, err
 	}
 	return candidate.Status.Instances == p.plan.TargetInstances &&
 		candidate.Status.ReadyInstances == p.plan.TargetInstances &&

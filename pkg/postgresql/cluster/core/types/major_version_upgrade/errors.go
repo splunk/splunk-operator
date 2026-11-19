@@ -39,6 +39,7 @@ var (
 	ErrUpgradeFlowPending          = errors.New("major upgrade flow is pending")
 	ErrPreUpgradeBackupNotReady    = errors.New("major upgrade pre-upgrade backup is not ready")
 	ErrPostUpgradeBackupNotReady   = errors.New("major upgrade post-upgrade backup is not ready")
+	ErrCandidatePluginPending      = fmt.Errorf("%w: green CNPG plugin startup is pending", ErrUpgradeFlowPending)
 
 	// Terminal errors mean the operator should move the workflow to Failed and
 	// surface that external intervention is required.
@@ -50,6 +51,7 @@ var (
 	ErrTargetWALArchiveMissing            = errors.New("blue/green completion requires class-configured Barman WAL archiving; snapshot-only protection cannot establish the target recovery baseline")
 	ErrRollbackCapabilityUnavailable      = errors.New("major upgrade rollback capability is unavailable")
 	ErrUpgradeFlowFailed                  = errors.New("major upgrade flow failed")
+	ErrCandidatePluginTimedOut            = fmt.Errorf("%w: green CNPG plugin startup timed out", ErrUpgradeFlowFailed)
 	ErrUpgradeVerificationFailed          = errors.New("major upgrade verification failed")
 	ErrUpgradeUnrecoverablePreConversion  = errors.New("major upgrade failed before data directory conversion")
 	ErrUpgradeUnrecoverablePostConversion = errors.New("major upgrade failed after data directory conversion")
@@ -139,6 +141,11 @@ func ReportFromError(err error) reconciliationtypes.Report {
 			Name: UseCaseName, Phase: string(PreUpgradeBackup),
 			Reason: ReasonBackupStatusMissing, Message: reportMessageBackupStatusMissing,
 			Retry: true, Sleep: new(reportSleepRetrySeconds)}
+	case errors.Is(err, ErrCandidatePluginPending):
+		return reconciliationtypes.Report{
+			Name: UseCaseName, Phase: string(Upgrading),
+			Reason: ReasonCandidatePluginPending, Message: "Waiting for green CNPG plugin startup to recover. The operator will retry automatically; blue remains authoritative.",
+			Retry: true, Sleep: new(reportSleepQuickRetrySeconds)}
 	case errors.Is(err, ErrUpgradeFlowPending):
 		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Upgrading),
@@ -179,6 +186,11 @@ func ReportFromError(err error) reconciliationtypes.Report {
 		return reconciliationtypes.Report{
 			Name: UseCaseName, Phase: string(Failed),
 			Reason: ReasonCandidateRebuildRequired, Message: reportMessageCandidateRebuildRequired,
+			Retry: false, Sleep: new(reportSleepNone)}
+	case errors.Is(err, ErrCandidatePluginTimedOut):
+		return reconciliationtypes.Report{
+			Name: UseCaseName, Phase: string(Failed),
+			Reason: ReasonCandidatePluginTimedOut, Message: "Green CNPG plugin startup did not recover before its deadline. Check the green Cluster and plugin logs, correct the dependency, then retry or cancel the attempt. Blue remains authoritative.",
 			Retry: false, Sleep: new(reportSleepNone)}
 	case errors.Is(err, ErrUpgradeFlowFailed):
 		return reconciliationtypes.Report{

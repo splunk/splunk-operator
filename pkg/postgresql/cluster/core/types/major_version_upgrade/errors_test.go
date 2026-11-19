@@ -18,6 +18,7 @@ package majorversionupgradetypes
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -64,5 +65,30 @@ func TestReportFromErrorForMissingBackupProviderIsTerminal(t *testing.T) {
 	}
 	if report.Retry {
 		t.Fatal("missing backup provider must not retry")
+	}
+}
+
+func TestCandidatePluginReportsAreActionableWithoutLeakingDependencyErrors(t *testing.T) {
+	for _, test := range []struct {
+		err    error
+		reason string
+		phase  Status
+		retry  bool
+	}{
+		{ErrCandidatePluginPending, ReasonCandidatePluginPending, Upgrading, true},
+		{ErrCandidatePluginTimedOut, ReasonCandidatePluginTimedOut, Failed, false},
+	} {
+		t.Run(test.reason, func(t *testing.T) {
+			report := ReportFromError(errors.Join(test.err, errors.New("sensitive dependency details")))
+			if report.Reason != test.reason || report.Phase != string(test.phase) || report.Retry != test.retry {
+				t.Fatalf("unexpected plugin report: %+v", report)
+			}
+			if strings.Contains(report.Message, "sensitive dependency details") || !strings.Contains(strings.ToLower(report.Message), "blue remains authoritative") {
+				t.Fatalf("plugin report must explain source authority without dependency details: %q", report.Message)
+			}
+			if test.retry && !IsRetryableFailureReason(report.Reason) {
+				t.Fatal("a plugin obstacle must be visible as retryable failure, not healthy progress")
+			}
+		})
 	}
 }

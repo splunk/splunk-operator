@@ -17,8 +17,10 @@ limitations under the License.
 package majorupgradeadapter
 
 import (
+	"crypto/x509"
 	"strings"
 	"testing"
+	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	cnpgutils "github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
@@ -50,6 +52,7 @@ func TestBlueGreenCandidatePreparerCreatesSchemaOnlyTargetWithoutProductionArchi
 		Spec: cnpgv1.ClusterSpec{
 			ImageName: "postgres:17", Instances: 3, SuperuserSecret: &cnpgv1.LocalObjectReference{Name: "orders-superuser"},
 			Backup: &cnpgv1.BackupConfiguration{}, Plugins: []cnpgv1.PluginConfiguration{{Name: "barman", IsWALArchiver: &walArchiver}},
+			Certificates: &cnpgv1.CertificatesConfiguration{ServerAltDNSNames: []string{"orders-pooler-rw.default.svc.cluster.local", "customer.example"}},
 		},
 		Status: cnpgv1.ClusterStatus{Certificates: cnpgv1.CertificatesStatus{CertificatesConfiguration: cnpgv1.CertificatesConfiguration{ServerCASecret: "orders-ca", ClientCASecret: "orders-client-ca"}}},
 	}
@@ -70,7 +73,11 @@ func TestBlueGreenCandidatePreparerCreatesSchemaOnlyTargetWithoutProductionArchi
 	key := types.NamespacedName{Name: parent.Name, Namespace: parent.Namespace}
 	declarations, err := listManagedDatabases(t.Context(), client, key)
 	require.NoError(t, err)
-	baseline := &BlueGreenPreparer{client: client, key: key, cluster: parent, plan: BlueGreenPreflightPlan{TargetImage: "postgres:18"}}
+	targetConfig := &platformv1alpha1.PostgresClusterSpec{
+		Backup:           &platformv1alpha1.BackupConfig{Enabled: new(true)},
+		ConnectionPooler: &platformv1alpha1.ConnectionPoolerEnableConfig{Enabled: new(true), ReadWrite: new(true), ReadOnly: new(true)},
+	}
+	baseline := &BlueGreenPreparer{client: client, key: key, cluster: parent, plan: BlueGreenPreflightPlan{TargetImage: "postgres:18", TargetConfiguration: targetConfig}}
 	fingerprint, err := baseline.configurationFingerprint(source, declarations)
 	require.NoError(t, err)
 	credentials, err := baseline.credentialFingerprints(t.Context(), source, declarations, secret.Name)
@@ -88,9 +95,14 @@ func TestBlueGreenCandidatePreparerCreatesSchemaOnlyTargetWithoutProductionArchi
 			SourceConfigurationFingerprint: &fingerprint, CredentialFingerprints: credentials},
 	}}}
 	preparer := NewBlueGreenCandidatePreparer(client, key, parent, BlueGreenCandidatePlan{TargetImage: "postgres:18", TargetStorage: &targetStorage, TargetInstances: 3})
+	preparer.plan.TargetConfiguration = targetConfig
+	preparer.plan.TargetCNPG = &platformv1alpha1.CNPGConfig{Backup: &platformv1alpha1.CNPGBackupConfig{BarmanObjectStore: &platformv1alpha1.CNPGBarmanObjectStoreConfig{DestinationPath: "s3://backup/candidate"}}}
 	preparer.verifier = candidateSourceVerifiedStub{}
 
 	status, err := preparer.PrepareCandidate(t.Context(), intent)
+	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowPending)
+	require.Nil(t, status.Green, "the ObjectStore must exist before a sidecar-bearing candidate starts")
+	status, err = preparer.PrepareCandidate(t.Context(), intent)
 	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowPending)
 	require.NotNil(t, status.Green)
 
@@ -99,6 +111,16 @@ func TestBlueGreenCandidatePreparerCreatesSchemaOnlyTargetWithoutProductionArchi
 	assert.Equal(t, "postgres:18", green.Spec.ImageName)
 	assert.Equal(t, 1, green.Spec.Instances)
 	assert.Equal(t, "20Gi", green.Spec.StorageConfiguration.Size)
+	leafNames := &x509.Certificate{DNSNames: green.Spec.Certificates.ServerAltDNSNames}
+	for _, kind := range []string{"rw", "ro"} {
+		for _, suffix := range []string{".default", ".default.svc.cluster.local"} {
+			host := candidatePoolerName(green.Name, kind) + suffix
+			require.NoError(t, leafNames.VerifyHostname(host), "candidate certificate must identify the actual Pooler hostname %s", host)
+		}
+	}
+	assert.Contains(t, green.Spec.Certificates.ServerAltDNSNames, "customer.example")
+	assert.Equal(t, []string{"orders-pooler-rw.default.svc.cluster.local", "customer.example"}, source.Spec.Certificates.ServerAltDNSNames,
+		"candidate certificate planning must not mutate the serving source")
 	require.NotNil(t, green.Spec.Bootstrap)
 	require.NotNil(t, green.Spec.Bootstrap.InitDB)
 	require.NotNil(t, green.Spec.Bootstrap.InitDB.Import)
@@ -113,7 +135,10 @@ func TestBlueGreenCandidatePreparerCreatesSchemaOnlyTargetWithoutProductionArchi
 	assert.Contains(t, green.Spec.Bootstrap.InitDB.PostInitSQL[0], "NOLOGIN NOREPLICATION NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS INHERIT CONNECTION LIMIT -1 PASSWORD NULL")
 	assert.Empty(t, green.Spec.Bootstrap.InitDB.Import.PgRestoreExtraOptions, "application ownership and ACL restoration must retain native defaults")
 	assert.Nil(t, green.Spec.Backup)
-	assert.Empty(t, green.Spec.Plugins)
+	require.Len(t, green.Spec.Plugins, 1)
+	assert.True(t, *green.Spec.Plugins[0].Enabled)
+	assert.False(t, *green.Spec.Plugins[0].IsWALArchiver, "the sidecar must be present before the endpoint switch, without producing WAL alongside blue")
+	assert.Equal(t, green.Name+"-object-store", green.Spec.Plugins[0].Parameters["barmanObjectName"])
 	require.NotNil(t, green.Spec.Certificates)
 	assert.Equal(t, "orders-ca", green.Spec.Certificates.ServerCASecret)
 	assert.Empty(t, green.Spec.Certificates.ServerTLSSecret)
@@ -132,6 +157,18 @@ func TestBlueGreenCandidatePreparerCreatesSchemaOnlyTargetWithoutProductionArchi
 	}
 
 	intent.State[0].BlueGreen = status
+	green.CreationTimestamp = metav1.NewTime(time.Now().Add(-25 * time.Second))
+	green.Status.Phase = cnpgv1.PhaseFailurePlugin
+	green.Status.PhaseReason = `Role.rbac.authorization.k8s.io "green-barman-cloud" not found`
+	require.NoError(t, client.Update(t.Context(), green))
+	status, err = preparer.PrepareCandidate(t.Context(), intent)
+	require.ErrorIs(t, err, mvutypes.ErrCandidatePluginPending, "a temporary Barman hook failure must not end preparation")
+	assert.Equal(t, intent.State[0].BlueGreen.Green.Ref, status.Green.Ref, "re-entry keeps the same candidate")
+	var prematureSubscriptions cnpgv1.SubscriptionList
+	require.NoError(t, client.List(t.Context(), &prematureSubscriptions))
+	assert.Empty(t, prematureSubscriptions.Items, "plugin recovery must not bypass candidate verification")
+	green.Status.Phase = ""
+	require.NoError(t, client.Update(t.Context(), green))
 	_, err = preparer.PrepareCandidate(t.Context(), intent)
 	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowPending, "reconcile restart reuses the immutable candidate")
 	green.Spec.Instances = 3
