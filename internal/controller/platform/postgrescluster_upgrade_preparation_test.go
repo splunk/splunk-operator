@@ -25,12 +25,15 @@ import (
 )
 
 func TestBlueGreenPlansCopyResolvedConfiguration(t *testing.T) {
-	cfg := &core.MergedConfig{Spec: &platform.PostgresClusterSpec{PostgresVersion: ptr.To("18"), Instances: ptr.To(int32(3))}}
+	cfg := &core.MergedConfig{Spec: &platform.PostgresClusterSpec{PostgresVersion: ptr.To("18"), Instances: ptr.To(int32(3))},
+		CNPG: &platform.CNPGConfig{Backup: &platform.CNPGBackupConfig{BarmanObjectStore: &platform.CNPGBarmanObjectStoreConfig{DestinationPath: "s3://original"}}}}
 	image := "registry.example.invalid/postgresql:18-test"
 	preflight, candidate := blueGreenUpgradePlans(cfg, image)
 	assert.Equal(t, image, preflight.TargetImage)
 	assert.Equal(t, image, candidate.TargetImage)
 	assert.Equal(t, 3, candidate.TargetInstances)
+	cfg.CNPG.Backup.BarmanObjectStore.DestinationPath = "s3://changed"
+	assert.Equal(t, "s3://original", candidate.TargetCNPG.Backup.BarmanObjectStore.DestinationPath)
 	cfg.Spec.PostgresVersion = ptr.To("17")
 	assert.Equal(t, "18", *preflight.TargetConfiguration.PostgresVersion)
 	assert.Equal(t, "18", *candidate.TargetConfiguration.PostgresVersion)

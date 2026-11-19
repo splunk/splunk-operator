@@ -240,6 +240,9 @@ func (f Flow) checkCandidate(ctx context.Context, intent mvutypes.Intent) (*plat
 // candidateFailureOutcome classifies a candidate preparation or revalidation
 // failure as pending, retryable, or terminal.
 func candidateFailureOutcome(status *platformv1alpha1.PostgresBlueGreenUpgradeStatus, intent mvutypes.Intent, err error) (Outcome, error) {
+	if errors.Is(err, mvutypes.ErrCandidatePluginPending) {
+		return Outcome{BlueGreen: status, Report: mvutypes.ReportFromError(err)}, nil
+	}
 	if sourcePreparationRetryable(err) {
 		return candidatePendingOutcome(status), nil
 	}

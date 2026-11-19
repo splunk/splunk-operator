@@ -33,10 +33,8 @@ import (
 	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/reconciliation"
 	bluegreen "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/use_cases/major_version_upgrade/use_case/blue_green"
 	cnpginfra "github.com/splunk/splunk-operator/pkg/postgresql/cluster/infrastructure/cnpg"
-	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -44,6 +42,7 @@ import (
 // completionSQL verifies database state beyond Kubernetes status.
 type completionSQL interface {
 	SourceStopped(context.Context, *cnpgv1.Cluster, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error)
+	TargetArchivingReady(context.Context, *cnpgv1.Cluster, string) (bool, error)
 	VerifyRecovery(context.Context, *cnpgv1.Cluster, *cnpgv1.Backup, string) (bool, error)
 	RemoveGreenReplication(context.Context, *cnpgv1.Cluster, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) error
 	RemoveSourceReplication(context.Context, *cnpgv1.Cluster, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error)
@@ -99,6 +98,9 @@ func (c *BlueGreenCompletion) AdvanceCompletion(ctx context.Context, intent mvut
 		return c.pendingCompletion(status, "Waiting for healthy green workloads.", nil)
 	}
 	handedOff, err := c.TransferBackupOwnership(ctx, intent, status)
+	if errors.Is(err, mvutypes.ErrUpgradeFlowPending) {
+		return c.pendingCompletion(status, err.Error(), nil)
+	}
 	if err != nil || !handedOff {
 		return c.pendingCompletion(status, "Transferring backup and WAL production to green.", err)
 	}
@@ -378,34 +380,40 @@ func (c *BlueGreenCompletion) stopSourceBackups(ctx context.Context, blue *cnpgv
 func (c *BlueGreenCompletion) enableGreenBackups(ctx context.Context, green *cnpgv1.Cluster, attemptID string) (bool, error) {
 	s := c.switchover
 	backup, plugins := clustercore.BackupConfigurationForEnvironment(c.config, green.Name)
+	_, pluginName, _ := clustercore.EffectiveBackupProvider(c.config)
 	if len(plugins) > 0 {
-		cfg := c.config.CNPG.Backup.BarmanObjectStore
-		object := clustercore.BuildObjectStore(green.Name+"-object-store", green.Namespace, cfg)
-		object.SetOwnerReferences([]metav1.OwnerReference{*metav1.NewControllerRef(s.owner, platformv1alpha1.GroupVersion.WithKind("PostgresCluster"))})
-		object.SetLabels(map[string]string{blueGreenAttemptLabel: attemptID})
-		existing := &unstructured.Unstructured{}
-		existing.SetGroupVersionKind(clustercore.ObjectStoreGVK)
-		err := s.reader.Get(ctx, client.ObjectKeyFromObject(object), existing)
-		if apierrors.IsNotFound(err) {
-			return false, s.client.Create(ctx, object)
-		}
-		if err != nil {
+		ready, err := ensureAttemptObjectStore(ctx, liveReadClient{Client: s.client, reader: s.reader}, s.owner, green.Name, attemptID, c.config.CNPG.Backup.BarmanObjectStore)
+		if err != nil || !ready {
 			return false, err
 		}
-		if !metav1.IsControlledBy(existing, s.owner) || existing.GetLabels()[blueGreenAttemptLabel] != attemptID {
-			return false, fmt.Errorf("target ObjectStore is not owned by this cluster")
-		}
-		if !equality.Semantic.DeepDerivative(object.Object["spec"], existing.Object["spec"]) {
-			return false, fmt.Errorf("target ObjectStore differs from the effective backup policy")
+		active := slices.ContainsFunc(green.Spec.Plugins, func(plugin cnpgv1.PluginConfiguration) bool {
+			return plugin.Name == pluginName && isWALArchiver(plugin)
+		})
+		if !active {
+			// Older candidates may have no sidecars. Roll them out while the
+			// plugin is not an archiver, then activate only after every Pod is ready.
+			before := green.DeepCopy()
+			green.Spec.Plugins = slices.DeleteFunc(green.Spec.Plugins, func(plugin cnpgv1.PluginConfiguration) bool { return plugin.Name == pluginName })
+			green.Spec.Plugins = append(green.Spec.Plugins, stagedBackupPlugins(c.config, green.Name)...)
+			if !reflect.DeepEqual(before.Spec, green.Spec) {
+				return false, s.client.Patch(ctx, green, client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{}))
+			}
+			if _, err := c.targetBackupInstances(ctx, green); err != nil {
+				return false, err
+			}
 		}
 	}
 	before := green.DeepCopy()
 	green.Spec.Backup = backup
-	_, pluginName, _ := clustercore.EffectiveBackupProvider(c.config)
 	green.Spec.Plugins = slices.DeleteFunc(green.Spec.Plugins, func(plugin cnpgv1.PluginConfiguration) bool { return plugin.Name == pluginName })
 	green.Spec.Plugins = append(green.Spec.Plugins, plugins...)
 	if !reflect.DeepEqual(before.Spec, green.Spec) {
 		return false, s.client.Patch(ctx, green, client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{}))
+	}
+	if len(plugins) > 0 {
+		if err := c.targetBackupReady(ctx, green); err != nil {
+			return false, err
+		}
 	}
 	backend := cnpginfra.NewBackupBackend(liveReadClient{Client: s.client, reader: s.reader}, s.client.Scheme())
 	for _, provider := range clustercore.BackupSchedulesForEnvironment(c.config, green.Name, green.Namespace) {

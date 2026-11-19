@@ -26,6 +26,7 @@ import (
 	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -100,6 +101,29 @@ func TestCandidatePreparationKeepsEarlierRebuildReason(t *testing.T) {
 	require.ErrorIs(t, err, mvutypes.ErrCandidateInvalid)
 	require.NotNil(t, outcome.BlueGreen.RebuildRequired)
 	assert.Equal(t, "first reason", *outcome.BlueGreen.RebuildRequired)
+}
+
+func TestCandidatePluginFailureRetriesWithoutLosingItsStatusReason(t *testing.T) {
+	intent := preparedCandidateIntent()
+	status := intent.State[0].BlueGreen.DeepCopy()
+	status.Green = &platformv1alpha1.BlueGreenEnvironmentStatus{Ref: corev1.ObjectReference{Name: "green", UID: "green-uid"}}
+	for range 2 {
+		outcome, err := New(mvutypes.Upgrading, &countingPreparer{}, resultCandidate{status: status, err: mvutypes.ErrCandidatePluginPending}, nil).Advance(t.Context(), intent)
+		require.NoError(t, err)
+		assert.Equal(t, string(mvutypes.Upgrading), outcome.Report.Phase)
+		assert.Equal(t, mvutypes.ReasonCandidatePluginPending, outcome.Report.Reason)
+		assert.True(t, outcome.Report.Retry)
+		assert.Equal(t, status.Green.Ref, outcome.BlueGreen.Green.Ref)
+		assert.Nil(t, outcome.BlueGreen.RebuildRequired)
+		assert.Nil(t, outcome.BlueGreen.Switchover, "a plugin failure must not consume the switchover gate")
+		intent.State[0].BlueGreen = outcome.BlueGreen
+	}
+	outcome, err := New(mvutypes.Upgrading, &countingPreparer{}, resultCandidate{status: status, err: mvutypes.ErrCandidatePluginTimedOut}, nil).Advance(t.Context(), intent)
+	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowFailed)
+	assert.Equal(t, string(mvutypes.Failed), outcome.Report.Phase)
+	assert.Equal(t, mvutypes.ReasonCandidatePluginTimedOut, outcome.Report.Reason)
+	assert.False(t, outcome.Report.Retry)
+	assert.Nil(t, outcome.BlueGreen.RebuildRequired)
 }
 
 func TestTransientCandidateFailureIsNotClassifiedForRebuild(t *testing.T) {

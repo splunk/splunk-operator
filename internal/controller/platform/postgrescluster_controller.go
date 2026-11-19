@@ -227,6 +227,9 @@ func blueGreenUpgradePlans(mergedConfig *clustercore.MergedConfig, targetImage s
 	preflight.TargetConfiguration, preflight.TargetImage = mergedConfig.Spec.DeepCopy(), targetImage
 	preflight.WALArchiveConfigured = mergedConfig.CNPG != nil && mergedConfig.CNPG.Backup != nil && mergedConfig.CNPG.Backup.BarmanObjectStore != nil
 	candidate.TargetConfiguration, candidate.TargetImage = mergedConfig.Spec.DeepCopy(), targetImage
+	if mergedConfig.CNPG != nil {
+		candidate.TargetCNPG = mergedConfig.CNPG.DeepCopy()
+	}
 	if mergedConfig.Spec.Instances != nil {
 		candidate.TargetInstances = int(*mergedConfig.Spec.Instances)
 	}

@@ -191,6 +191,24 @@ teardown proceeds. Neither is full upgrade completion. The parent
 health, managed roles, and metrics converge; this permits ordinary database
 reconciliation while the upgrade entry remains in `PostUpgradeBackup`.
 
+Before requesting target backups or enabling their schedules, the operator waits
+for the Barman sidecar rollout and effective archive settings on every green
+instance. A healthy Cluster status or a configured plugin alone does not satisfy
+this check. Both native and conventional sidecars are supported.
+
+The Barman sidecar is prepared on green while blue still serves traffic, with
+`isWALArchiver: false` and no green backup schedules. After blue's archive producer
+has stopped, the operator activates green's existing sidecars. Older candidates
+without sidecars first roll out the inactive plugin before activation. This avoids
+enabling an archiver that the primary Pod cannot call during shutdown.
+
+Barman WAL archiving is currently required for blue/green upgrades. A snapshot-only
+configuration is blocked during preflight with `TargetWALArchiveNotConfigured`;
+the completion verifier requires both a target backup and an archived-WAL baseline.
+CSI snapshots can be enabled alongside Barman. In that configuration the recovery
+anchor uses Barman, and both schedules are enabled after the readiness check.
+Other backup plugins are not exposed by the current backup-provider configuration.
+
 ### Failure and restart behavior
 
 Before Endpoint Committed, a failed or expired interruption window restores the
@@ -231,8 +249,24 @@ after the commit time to request a fresh backup within the same attempt. The
 operator preserves earlier requests and anchors. Once recoverability is verified,
 its anchor is fixed; later retry annotations do not replace it.
 
-An attempt prepared by an older operator without the restricted replication
+After recoverability is verified, Subscription retirement does not require a
+previously failed CNPG apply to succeed. The operator records Retain intent,
+deletes the exact owned declaration, and waits for CNPG's finalizer acknowledgement
+before removing the SQL subscription. Publication apply barriers and unrelated
+finalizers remain in force.
+
+After a source primary becomes a standby, it can retain local failover slots
+that PostgreSQL's slot synchronization worker cannot adopt. The prepared
+standby retirement helper removes only this attempt's inactive, persistent,
+unsynchronized `pgoutput` slot in its recorded database, after the source
+publisher role can no longer log in. Active slots remain blockers; synchronized
+slots are left to PostgreSQL. The next observation must confirm absence.
+
+An attempt prepared by an older operator without a required restricted
 retirement helper can restore green access but fails closed during source teardown.
+In particular, an older attempt with a local standby slot reports that the
+standby slot retirement helper was not prepared and requires operator-assisted
+recovery. Updating the operator does not rewrite SQL helpers in a committed attempt.
 Green stays authoritative; do not open blue or bypass helper ownership checks to
 finish it. Escalate for an explicitly authorized recovery of the recorded source
 control overlay.
@@ -255,6 +289,29 @@ reconnection, DNS caching, and external pooling behavior can extend the
 application-visible interruption.
 
 ### Retry after a failure
+
+Green uses its own server certificate under the frozen blue CA. With CNPG's
+default certificate mode, the candidate TLS plan adds green's generated RW and
+RO pooler hostnames before CNPG issues that certificate. Clients retain
+`sslmode=verify-full` when switching to a pooler. For an unfinished pre-cutover
+attempt, an older candidate whose certificate configuration differs from this
+contract is rejected by the existing candidate-spec validation; cancel it and
+start a fresh attempt rather than bypassing TLS hostname verification. After
+Endpoint Committed, keep green authoritative and recover forward. A corrected
+certificate in a Secret alone does not prove that running poolers present it;
+verify connections through the published pooler endpoints as well.
+
+During green preparation, CNPG plugin-hook failures retry automatically for up
+to five minutes from the green Cluster's creation time. The attempt reports
+`Upgrading` with reason `CandidatePluginPending`; blue remains authoritative
+and no switchover starts. This allows temporary plugin setup failures, such as
+a newly created Barman Role not yet being visible, to recover without ending
+the attempt. Reconciliation and operator restarts do not reset this deadline.
+If the plugin remains failed after that window, the attempt reports `Failed`
+with reason `CandidatePluginTimedOut`. Check the green CNPG Cluster and plugin
+logs, correct the dependency, and explicitly retry or cancel. Unknown plugins
+and unrecoverable configuration errors still fail immediately. This grace
+period applies only to candidate preparation, not post-commit recovery.
 
 Transient failures retry automatically. A terminal failure stops the attempt
 until you set a newer

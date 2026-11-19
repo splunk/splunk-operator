@@ -115,6 +115,8 @@ func TestRetainedSourceControlHelperCompatibility(t *testing.T) {
 		{"legacy helpers", controlRetireReplicationFunction, false, true},
 		{"current helpers", "", true, true},
 		{"altered retirement helper", controlRetireReplicationFunction, true, false},
+		{"missing standby retirement helper", controlRetireStandbySlotFunction, false, true},
+		{"altered standby retirement helper", controlRetireStandbySlotFunction, true, false},
 		{"missing fence helper", controlFenceFunction, false, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {

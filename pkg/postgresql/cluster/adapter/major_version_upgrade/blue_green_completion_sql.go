@@ -69,6 +69,21 @@ func (p *postgresCompletionSQL) SourceStopped(ctx context.Context, blue *cnpgv1.
 
 var archivedWALPattern = regexp.MustCompile(`^[0-9A-F]{24}$`)
 
+// TargetArchivingReady checks effective settings on an observed target instance,
+// including standbys that may become the primary while a backup is requested.
+func (p *postgresCompletionSQL) TargetArchivingReady(ctx context.Context, green *cnpgv1.Cluster, host string) (bool, error) {
+	if green.Status.SystemID == "" {
+		return false, nil
+	}
+	var ready bool
+	err := p.teardown.withConn(ctx, green, host, "postgres", func(conn pginfra.Conn) error {
+		return queryOne(ctx, conn, &ready, `SELECT current_setting('archive_mode') IN ('on','always')
+AND current_setting('archive_command') NOT IN ('','/bin/true','false','(disabled)')
+AND (SELECT system_identifier::text FROM pg_catalog.pg_control_system())=$1`, green.Status.SystemID)
+	})
+	return ready, err
+}
+
 // VerifyRecovery checks target identity and archived WAL through the backup's end.
 func (p *postgresCompletionSQL) VerifyRecovery(ctx context.Context, green *cnpgv1.Cluster, backup *cnpgv1.Backup, target string) (bool, error) {
 	if !archivedWALPattern.MatchString(backup.Status.EndWal) || backup.Status.StartedAt == nil || backup.Status.StoppedAt == nil || green.Status.SystemID == "" {
@@ -126,7 +141,10 @@ func (p *postgresCompletionSQL) RemoveSourceReplication(ctx context.Context, blu
 		}
 		var removed bool
 		err := queryOne(ctx, conn, &removed, controlHelperCallSQL(controlRetireReplicationFunction))
-		return removed, err
+		if err != nil || removed {
+			return removed, err
+		}
+		return retireStandbySlot(ctx, conn, id, database)
 	})
 }
 

@@ -49,6 +49,7 @@ FROM (SELECT * FROM pg_catalog.pg_hba_file_rules WHERE type LIKE 'host%'
 AND user_name NOT IN (ARRAY['streaming_replica']::text[],ARRAY['cnpg_pooler_pgbouncer']::text[]) ORDER BY rule_number LIMIT ` + strconv.Itoa(len(fenceRules)) + `) rules)
 = ` + fenceRuleProofSQL(fenceRules) + `; END;`},
 		retireReplicationHelper(id, database),
+		retireStandbySlotHelper(id, database),
 		retireSubscriptionHelper(id, database),
 	}
 }

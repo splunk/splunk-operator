@@ -18,6 +18,7 @@ package majorupgradeadapter
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -29,6 +30,52 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+func TestTargetArchiveReadinessPinsSystemAndPreservesConnectionErrors(t *testing.T) {
+	for _, mode := range []string{"ready", "pending restart", "unknown identity", "query failure", "close failure"} {
+		t.Run(mode, func(t *testing.T) {
+			green := &cnpgv1.Cluster{Status: cnpgv1.ClusterStatus{SystemID: "target-system"}}
+			if mode == "unknown identity" {
+				green.Status.SystemID = ""
+			}
+			failure := errors.New("test connection failure")
+			conn := &closingCutoverConn{cutoverSQLTestConn: cutoverSQLTestConn{query: func(query string, args []any) ([][]any, error) {
+				assert.Contains(t, query, "archive_mode")
+				assert.Contains(t, query, "archive_command")
+				assert.Contains(t, query, "pg_control_system()")
+				assert.Equal(t, []any{"target-system"}, args)
+				if mode == "query failure" {
+					return nil, failure
+				}
+				return [][]any{{mode != "pending restart"}}, nil
+			}}}
+			if mode == "close failure" {
+				conn.closeErr = failure
+			}
+			dials := 0
+			sql := &postgresCompletionSQL{teardown: &postgresTeardownSQL{connect: func(_ context.Context, cluster *cnpgv1.Cluster, host, database string) (pginfra.Conn, error) {
+				dials++
+				assert.Same(t, green, cluster)
+				assert.Equal(t, "10.42.0.18", host)
+				assert.Equal(t, "postgres", database)
+				return conn, nil
+			}}}
+			ready, err := sql.TargetArchivingReady(t.Context(), green, "10.42.0.18")
+			if mode == "query failure" || mode == "close failure" {
+				require.ErrorIs(t, err, failure)
+			} else {
+				require.NoError(t, err)
+			}
+			if mode == "unknown identity" {
+				assert.False(t, ready)
+				assert.Zero(t, dials)
+			} else {
+				assert.Equal(t, mode != "pending restart" && mode != "query failure", ready)
+				assert.Equal(t, 1, conn.closeCalls)
+			}
+		})
+	}
+}
 
 func TestRetirementHelperUsesSharedReplicationNames(t *testing.T) {
 	for _, cluster := range []string{"orders", strings.Repeat("long-name", 9)} {
@@ -103,6 +150,9 @@ func TestSourceReplicationCleanupVisitsPrimaryDespitePendingStandbys(t *testing.
 			var primaryCalls int
 			sql.connect = func(_ context.Context, host, database, _, _, _ string, _ []byte) (pginfra.Conn, error) {
 				return &cutoverSQLTestConn{query: func(query string, _ []any) ([][]any, error) {
+					if query == controlHelperCallSQL(controlRetireStandbySlotFunction) {
+						return [][]any{{false}}, nil
+					}
 					if query == controlHelperCallSQL(controlRetireReplicationFunction) {
 						if host == test.primaryIP {
 							primaryCalls++
