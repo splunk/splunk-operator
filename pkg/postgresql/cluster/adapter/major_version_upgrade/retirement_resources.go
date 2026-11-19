@@ -37,8 +37,8 @@ import (
 // Only these resource kinds may become retirement roots.
 var retirementRootScheme = func() *runtime.Scheme {
 	scheme := runtime.NewScheme()
-	scheme.AddKnownTypes(cnpgv1.SchemeGroupVersion, &cnpgv1.Cluster{}, &cnpgv1.Database{}, &cnpgv1.Pooler{}, &cnpgv1.ScheduledBackup{}, &cnpgv1.Publication{}, &cnpgv1.Subscription{})
-	scheme.AddKnownTypes(corev1.SchemeGroupVersion, &corev1.Secret{})
+	scheme.AddKnownTypes(cnpgv1.SchemeGroupVersion, &cnpgv1.Cluster{}, &cnpgv1.Database{}, &cnpgv1.Backup{}, &cnpgv1.Pooler{}, &cnpgv1.ScheduledBackup{}, &cnpgv1.Publication{}, &cnpgv1.Subscription{})
+	scheme.AddKnownTypes(corev1.SchemeGroupVersion, &corev1.Secret{}, &corev1.ConfigMap{})
 	scheme.AddKnownTypes(certv1.SchemeGroupVersion, &certv1.Certificate{})
 	return scheme
 }()
@@ -129,4 +129,25 @@ type databaseOwners map[types.UID]string
 func (owners databaseOwners) owns(object client.Object) bool {
 	owner := metav1.GetControllerOf(object)
 	return owner != nil && owner.Kind == "PostgresDatabase" && owner.APIVersion == platformv1alpha1.GroupVersion.String() && owners[owner.UID] == owner.Name && owner.UID != ""
+}
+
+func finalizationDatabaseOwners(ctx context.Context, reader client.Reader, parent *platformv1alpha1.PostgresCluster) (databaseOwners, error) {
+	var children platformv1alpha1.PostgresDatabaseList
+	if err := reader.List(ctx, &children, client.InNamespace(parent.Namespace)); err != nil {
+		return nil, err
+	}
+	owners := databaseOwners{}
+	for _, child := range children.Items {
+		if child.Spec.ClusterRef.Name == parent.Name {
+			owners[child.UID] = child.Name
+		}
+	}
+	for _, entry := range parent.Status.PostgresMajorUpgradeStatus {
+		if entry.BlueGreen != nil {
+			for _, row := range entry.BlueGreen.DatabaseReplication {
+				owners[types.UID(row.PostgresDatabaseUID)] = row.PostgresDatabaseName
+			}
+		}
+	}
+	return owners, nil
 }

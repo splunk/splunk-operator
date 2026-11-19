@@ -399,7 +399,7 @@ func (a *blueGreenAccess) validateControlSecret(secret *corev1.Secret, attemptID
 
 func accessOwnedBy(object metav1.Object, owner *platformv1alpha1.PostgresCluster) bool {
 	controller := metav1.GetControllerOf(object)
-	return controller != nil && controller.UID == owner.UID && controller.Name == owner.Name && controller.Kind == "PostgresCluster" && controller.APIVersion == platformv1alpha1.GroupVersion.String()
+	return controller != nil && controller.UID == owner.UID && controller.Name == owner.Name && controller.Kind == "PostgresCluster" && controller.APIVersion == platformv1alpha1.GroupVersion.String() || finalizationOwns(owner, object)
 }
 
 func snapshotRoleLogins(cluster *cnpgv1.Cluster, databases []declaredDatabase, attemptID string) ([]platformv1alpha1.BlueGreenRoleLoginStatus, error) {

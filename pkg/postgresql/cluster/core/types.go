@@ -16,6 +16,7 @@ limitations under the License.
 package core
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -52,6 +53,10 @@ type managedRole struct {
 // shell (primary adapter). The service layer declares what it needs via this struct
 // rather than reaching into context — keeping ports explicit and testable.
 type ReconcileContext struct {
+	Finalizer interface {
+		AdvanceFinalization(context.Context, *platformv1alpha1.PostgresCluster) (bool, error)
+	}
+
 	Client                  client.Client
 	APIReader               client.Reader
 	Scheme                  *runtime.Scheme

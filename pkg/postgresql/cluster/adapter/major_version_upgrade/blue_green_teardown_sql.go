@@ -91,7 +91,7 @@ func connectTeardownInstance(ctx context.Context, c client.Client, owner *platfo
 	if err == nil {
 		err = c.Get(ctx, client.ObjectKeyFromObject(&target), livePod)
 	}
-	if err == nil && (liveCluster.UID != cluster.UID || !metav1.IsControlledBy(liveCluster, owner) || livePod.UID != target.UID || !metav1.IsControlledBy(livePod, cluster) || livePod.Status.PodIP != target.Status.PodIP) {
+	if err == nil && (liveCluster.UID != cluster.UID || !finalizationOwns(owner, liveCluster) || livePod.UID != target.UID || !metav1.IsControlledBy(livePod, cluster) || livePod.Status.PodIP != target.Status.PodIP) {
 		err = fmt.Errorf("%w: teardown SQL environment or instance was replaced", mvutypes.ErrUpgradeFlowFailed)
 	}
 	if err != nil {

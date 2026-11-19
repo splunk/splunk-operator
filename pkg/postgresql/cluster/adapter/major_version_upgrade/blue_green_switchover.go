@@ -40,14 +40,18 @@ import (
 // but each attempt must release its worker even if an established SQL connection stalls.
 const cutoverRecoveryTimeout = 30 * time.Second
 
-type cutoverEndpoints interface {
+type recoveryEndpoints interface {
 	ObserveCommit(context.Context, types.NamespacedName, string) (bool, error)
-	PublishPreparationIntent(context.Context, types.NamespacedName, string) error
-	PreparationComplete(context.Context, types.NamespacedName, string) (bool, error)
-	CommitCanonical(context.Context, types.NamespacedName, string) error
 	RecoverCanonical(context.Context, types.NamespacedName, string) error
 	RestoreUncommittedCanonical(context.Context, types.NamespacedName, string) error
 	CancelPreparation(context.Context, types.NamespacedName, string, int64) error
+}
+
+type cutoverEndpoints interface {
+	recoveryEndpoints
+	PublishPreparationIntent(context.Context, types.NamespacedName, string) error
+	PreparationComplete(context.Context, types.NamespacedName, string) (bool, error)
+	CommitCanonical(context.Context, types.NamespacedName, string) error
 	PublishPublicationIntent(context.Context, types.NamespacedName, string) error
 	ReconcilePublicationStatus(context.Context, types.NamespacedName, string) (bool, error)
 }
@@ -520,14 +524,18 @@ func restoredWindowReport(status *platformv1alpha1.PostgresBlueGreenUpgradeStatu
 // SourceFenceRestoredAt once blue access is verified. Each pass, including a
 // cancellation's, has a fresh recovery timeout.
 func (s *BlueGreenSwitchover) restoreBlue(ctx context.Context, attemptID string, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, string, error) {
+	return s.restoreBlueWith(ctx, attemptID, status, s.endpoints)
+}
+
+func (s *BlueGreenSwitchover) restoreBlueWith(ctx context.Context, attemptID string, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus, endpoints recoveryEndpoints) (bool, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, cutoverRecoveryTimeout)
 	defer cancel()
 
-	if err := s.endpoints.RestoreUncommittedCanonical(ctx, s.key, attemptID); err != nil {
+	if err := endpoints.RestoreUncommittedCanonical(ctx, s.key, attemptID); err != nil {
 		return false, "Restoring the uncommitted blue endpoint record.", err
 	}
 	if status.EndpointPreparation != nil {
-		if err := s.endpoints.CancelPreparation(ctx, s.key, attemptID, status.EndpointPreparation.Generation); err != nil {
+		if err := endpoints.CancelPreparation(ctx, s.key, attemptID, status.EndpointPreparation.Generation); err != nil {
 			return false, "Clearing the uncommitted endpoint preparation.", err
 		}
 		return false, "Endpoint preparation is cleared; restoring blue access.", nil
@@ -618,10 +626,14 @@ func (s *BlueGreenSwitchover) RevalidateCandidate(ctx context.Context, _ mvutype
 // attempt that never opened a switchover window or endpoint preparation left
 // blue untouched and needs no restoration.
 func (s *BlueGreenSwitchover) RestoreForCancellation(ctx context.Context, attemptID string, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error) {
+	return s.restoreForCancellationWith(ctx, attemptID, status, s.endpoints)
+}
+
+func (s *BlueGreenSwitchover) restoreForCancellationWith(ctx context.Context, attemptID string, status *platformv1alpha1.PostgresBlueGreenUpgradeStatus, endpoints recoveryEndpoints) (bool, error) {
 	if status.EndpointPreparation == nil && (status.Switchover == nil || status.Switchover.SourceFenceRestoredAt != nil) {
 		return true, nil
 	}
-	restored, _, err := s.restoreBlue(ctx, attemptID, status)
+	restored, _, err := s.restoreBlueWith(ctx, attemptID, status, endpoints)
 	return restored, err
 }
 
@@ -686,7 +698,7 @@ func (s *BlueGreenSwitchover) readAttempt(ctx context.Context, attemptID string)
 	if parent.UID == "" || parent.UID != s.owner.UID || parent.DeletionTimestamp != nil || len(parent.Status.PostgresMajorUpgradeStatus) == 0 {
 		return nil, nil, errors.New("switchover parent identity is stale or deleting")
 	}
-	latest := parent.Status.PostgresMajorUpgradeStatus[len(parent.Status.PostgresMajorUpgradeStatus)-1].BlueGreen
+	latest := mvutypes.LatestAttempt(parent.Status.PostgresMajorUpgradeStatus).BlueGreen
 	if latest == nil || attemptID == "" || latest.AttemptID != attemptID {
 		return nil, nil, errors.New("switchover attempt is stale")
 	}
@@ -701,7 +713,7 @@ func (s *BlueGreenSwitchover) environment(ctx context.Context, environment *plat
 	if err := s.reader.Get(ctx, types.NamespacedName{Namespace: s.key.Namespace, Name: environment.Ref.Name}, cluster); err != nil {
 		return nil, err
 	}
-	if cluster.UID != environment.Ref.UID || cluster.DeletionTimestamp != nil || !metav1.IsControlledBy(cluster, s.owner) {
+	if cluster.UID != environment.Ref.UID || cluster.DeletionTimestamp != nil || !finalizationOwns(s.owner, cluster) {
 		return nil, errEnvironmentReplaced
 	}
 	return cluster, nil

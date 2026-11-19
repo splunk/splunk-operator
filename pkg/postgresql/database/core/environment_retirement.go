@@ -49,6 +49,9 @@ func (r *databaseReconciliation) reconcileRetirement(ctx context.Context) (ctrl.
 	if err != nil {
 		return ctrl.Result{}, err, true
 	}
+	if parent.DeletionTimestamp != nil && mvutypes.BlueGreenFinalizationRequired(parent) {
+		return ctrl.Result{RequeueAfter: retryDelay}, nil, true
+	}
 	if len(parent.Status.PostgresMajorUpgradeStatus) == 0 {
 		return ctrl.Result{}, nil, false
 	}

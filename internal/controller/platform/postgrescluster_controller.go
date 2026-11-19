@@ -111,6 +111,7 @@ func (r *PostgresClusterReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	logger := slog.Default().With("controller", "PostgresCluster", "name", req.Name, "namespace", req.Namespace, "reconcileID", controller.ReconcileIDFromContext(ctx))
 	ctx = logging.WithLogger(ctx, logger)
 	rc := &clustercore.ReconcileContext{
+		Finalizer:               majorupgradeadapter.NewClusterFinalizer(r.Client, r.APIReader, r.Recorder),
 		Client:                  r.Client,
 		APIReader:               r.APIReader,
 		Scheme:                  r.Scheme,

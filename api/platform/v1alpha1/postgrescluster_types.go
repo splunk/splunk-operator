@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // BootstrapFrom defines the source from which a PostgresCluster is bootstrapped via recovery.
@@ -334,8 +335,48 @@ func (c *PostgresBlueGreenUpgradeConfig) EffectiveSwitchoverTimeout() time.Durat
 	return c.SwitchoverTimeout.Duration
 }
 
+// PostgresClusterFinalizationStatus records controller-observed deletion authority.
+type PostgresClusterFinalizationStatus struct {
+	// Version identifies the finalization protocol.
+	// +kubebuilder:validation:Minimum=1
+	Version int `json:"version"`
+	// ParentUID binds the evidence to this logical cluster.
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:MinLength=1
+	ParentUID types.UID `json:"parentUID"`
+	// Policy is latched before resource mutation.
+	// +kubebuilder:validation:Enum=Delete;Retain
+	Policy string `json:"policy"`
+	// Resources preserves exact identities after deletion or owner detachment.
+	// +listType=atomic
+	// +optional
+	Resources []corev1.ObjectReference `json:"resources,omitempty"`
+	// HistoryHash invalidates SQL evidence when attempt history changes.
+	HistoryHash string `json:"historyHash"`
+	// SQLDone records the policy-specific teardown checkpoint.
+	// +optional
+	SQLDone bool `json:"sqlDone,omitempty"`
+	// SQLBlocked records a replication writer whose cleaned attempt cannot be re-proved.
+	// +optional
+	SQLBlocked bool `json:"sqlBlocked,omitempty"`
+	// SQLWarning records an incomplete bounded Delete teardown attempt.
+	// +optional
+	SQLWarning bool `json:"sqlWarning,omitempty"`
+	// DeleteCA records the class retention policy before it becomes unavailable.
+	// +optional
+	DeleteCA bool `json:"deleteCA,omitempty"`
+	// CASecrets identifies positively verified copied CA Secrets.
+	// +listType=atomic
+	// +optional
+	CASecrets []types.UID `json:"caSecrets,omitempty"`
+}
+
 // PostgresClusterStatus defines the observed state of PostgresCluster.
 type PostgresClusterStatus struct {
+	// Finalization contains protected inventory and deletion checkpoints.
+	// +optional
+	Finalization *PostgresClusterFinalizationStatus `json:"finalization,omitempty"`
+
 	// Phase represents the current phase of the PostgresCluster.
 	// Values: "Pending", "Provisioning", "Failed", "Ready", "Deleting"
 	// +optional

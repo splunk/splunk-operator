@@ -276,11 +276,17 @@ creation, deletion, and spec changes remain frozen until `Completed` or
 updates remain available throughout the attempt. Never manually
 repoint applications or remove blue's fence to recover a committed attempt.
 
-Deleting a parent with `clusterDeletionPolicy: Retain` is blocked while an
-unfinished blue/green attempt owns replication or access artifacts. The operator
-keeps its finalizer, environment ownership, and required recovery material. The
-normal cleanup and finalization lifecycle remains separate from production
-completion. Do not remove the finalizer to bypass this guard.
+Deleting a parent with `clusterDeletionPolicy: Retain` waits for verified SQL
+teardown and safe access to the surviving environments. The operator preserves
+its finalizer and recovery material while that proof is unavailable. See
+[Delete a cluster during an upgrade](#delete-a-cluster-during-an-upgrade).
+
+After endpoint commit, Retain finalization verifies blue's fence, drains its
+remaining application sessions, and restores and verifies green access before
+recording SQL teardown. Interrupted handoff checkpoints survive retries. A
+completed replication checkpoint permits finalization after temporary control
+credentials have been retired. A surviving stamped canonical record can repair
+a lost commit receipt; finalization cannot create a new endpoint commit.
 
 The protocol targets zero data loss for the supported, frozen managed database
 inventory. The timeout bounds the operator's interruption work; client
@@ -410,3 +416,58 @@ Child changes invalidate the barrier and require fresh acknowledgements.
 `Cleaned` also requires removal of retired storage and workloads; a terminating
 resource or storage finalizer keeps cleanup pending. Do not remove finalizers
 to advance it.
+
+### Delete a cluster during an upgrade
+
+Deleting the `PostgresCluster` follows `clusterDeletionPolicy` without requiring
+`cleanup: true`, a current class/image configuration, or a completed upgrade.
+The operator discovers managed environments and temporary resources through
+exact references and ownership, including resources whose creation preceded
+an interrupted status write. `status.finalization` preserves controller-observed
+inventory, policy and SQL checkpoints across restarts and owner detachment.
+Only identities verified before detachment can authorize later replay. Metadata
+annotations never authorize finalization or supply SQL-completion proof.
+
+With `Delete`, it attempts SQL teardown within a bounded timeout, then removes
+all managed environments, their operational storage and workloads, Poolers,
+and temporary resources. Unreachable SQL produces a `FinalizationSQLSkipped`
+warning and does not prevent this deletion. Recovery Backup metadata is
+preserved for its existing retention policy. A remaining storage-protection or
+unrelated finalizer keeps the parent finalizer in place until removal completes.
+
+With `Retain`, actual subscription and source-slot teardown must be proved
+before environments are orphaned. Before Endpoint Committed, blue access is
+restored and verified. After commit, green stays authoritative and blue stays
+fenced. Valid completion receipts allow finalization to proceed after temporary
+credentials have already been retired. Application credentials, TLS material,
+and renewing Certificates remain with retained environments. Managed Poolers
+and backup schedules are removed, and retained environments stop referencing
+the managed WAL archiver. Copied CA deletion under `Delete` follows the latched
+class retention policy; if the class is already unavailable, the CA is preserved.
+
+Retain rechecks blue's live fence before each ownership change and finalizer
+release, including after `status.finalization.sqlDone` is saved. A new replication
+declaration invalidates SQL proof; its removal must be acknowledged before a
+fresh SQL check. Historical declaration references alone do not invalidate a
+subsequently saved proof. A writer for an already cleaned attempt latches
+`status.finalization.sqlBlocked`: automatic cleanup cannot reconstruct that
+attempt's SQL proof. Removing the declaration does not clear this receipt;
+resolve the SQL and proof with the owning team while preserving the finalizer.
+
+Draft versions that stored inventory in annotations cannot supply trusted
+provenance for already detached resources. Those records are not imported into
+status; unresolved detached identities require owner-assisted recovery.
+
+`FinalizationBlocked` means proof is missing; ownership and recovery material
+are preserved. Older cancelled candidates can still contain SQL subscriptions
+after their credentials were removed. Older fenced attempts may also lack the
+restricted subscription-removal helper. Use authorized administrative access
+to inspect the exact candidate's subscriptions and the source's attempt slots,
+including synchronization slots. Resolve the missing helper or teardown proof
+with the owning team. The operator never reopens the fence or recreates a retired
+credential automatically.
+
+Manual removal of the parent finalizer is a break-glass action: first secure
+credentials and TLS renewal, verify subscription/slot removal and the correct
+source access state, and account for every retained environment and storage
+resource. The operator does not perform that bypass.

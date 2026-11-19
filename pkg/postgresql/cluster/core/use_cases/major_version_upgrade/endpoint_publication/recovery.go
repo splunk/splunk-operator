@@ -40,7 +40,7 @@ func (c *Coordinator) ObserveCommit(ctx context.Context, key types.NamespacedNam
 	if err != nil {
 		return false, err
 	}
-	entry, err := activeAttempt(parent, attemptID)
+	entry, err := c.activeAttempt(parent, attemptID)
 	if err != nil {
 		return false, err
 	}
@@ -61,7 +61,7 @@ func (c *Coordinator) ObserveCommit(ctx context.Context, key types.NamespacedNam
 	if err != nil {
 		return false, err
 	}
-	if !pgendpointprotocol.CanonicalOwnedByParent(parent, cm) {
+	if !c.canonicalOwnedByParent(parent, cm) {
 		return false, ErrCanonicalMismatch
 	}
 	if cm.Annotations[pgconninfo.AnnotationActiveEnvironment] == bg.Green.Ref.Name {
@@ -85,6 +85,7 @@ func (c *Coordinator) ObserveCommit(ctx context.Context, key types.NamespacedNam
 func (c *Coordinator) RecoverCanonical(ctx context.Context, key types.NamespacedName, attemptID string) error {
 	return c.retryStatus(ctx, key, attemptID, func(parent *platformv1alpha1.PostgresCluster, entry *platformv1alpha1.PostgresMajorUpgradeStatus) (bool, error) {
 		bg := entry.BlueGreen
+
 		if !pgendpointprotocol.CommitReceiptIdentityMatches(parent, bg, pgendpointprotocol.AllowProviderRepair) || !preparedRoutingValid(bg) {
 			return false, ErrCanonicalMismatch
 		}
@@ -101,10 +102,10 @@ func (c *Coordinator) RecoverCanonical(ctx context.Context, key types.Namespaced
 		} else if err != nil {
 			return false, err
 		} else {
-			if !pgendpointprotocol.CanonicalOwnedByParent(parent, cm) {
+			if !c.canonicalOwnedByParent(parent, cm) {
 				return false, ErrCanonicalMismatch
 			}
-			if !canonicalCommittedFor(parent, bg, cm) {
+			if !c.canonicalCommittedFor(parent, bg, cm) {
 				applyPreparedRouting(cm, bg)
 				if err := c.store.UpdateConfigMap(ctx, cm); err != nil {
 					return false, err
@@ -115,7 +116,7 @@ func (c *Coordinator) RecoverCanonical(ctx context.Context, key types.Namespaced
 		if err != nil {
 			return false, err
 		}
-		if !canonicalCommittedFor(parent, bg, cm) {
+		if !c.canonicalCommittedFor(parent, bg, cm) {
 			return false, ErrCanonicalMismatch
 		}
 		changed := false
@@ -193,7 +194,7 @@ func (c *Coordinator) RestoreUncommittedCanonical(ctx context.Context, key types
 		if err != nil {
 			return false, err
 		}
-		if !pgendpointprotocol.CanonicalOwnedByParent(parent, cm) || cm.Annotations[pgconninfo.AnnotationActiveEnvironment] == bg.Green.Ref.Name || !endpointDataMatches(cm.Data, blue) {
+		if !c.canonicalOwnedByParent(parent, cm) || cm.Annotations[pgconninfo.AnnotationActiveEnvironment] == bg.Green.Ref.Name || !endpointDataMatches(cm.Data, blue) {
 			return false, ErrCanonicalMismatch
 		}
 		// A read that still sees blue does not settle an earlier Update whose
@@ -213,7 +214,7 @@ func (c *Coordinator) RestoreUncommittedCanonical(ctx context.Context, key types
 		if err != nil {
 			return false, err
 		}
-		if !pgendpointprotocol.CanonicalOwnedByParent(parent, latest) || latest.UID != cm.UID || latest.ResourceVersion == previousVersion ||
+		if !c.canonicalOwnedByParent(parent, latest) || latest.UID != cm.UID || latest.ResourceVersion == previousVersion ||
 			latest.Annotations[pgconninfo.AnnotationSourceRestoreFence] != fence || latest.Annotations[pgconninfo.AnnotationActiveEnvironment] == bg.Green.Ref.Name || !endpointDataMatches(latest.Data, blue) {
 			return false, ErrCanonicalMismatch
 		}

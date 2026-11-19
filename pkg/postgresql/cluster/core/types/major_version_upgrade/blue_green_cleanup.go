@@ -283,3 +283,19 @@ func sameRetirementResources(left, right []corev1.ObjectReference) bool {
 	}
 	return len(identities) == 0
 }
+
+// BlueGreenFinalizationRequired keeps durable finalization active across history updates.
+func BlueGreenFinalizationRequired(parent *platformv1alpha1.PostgresCluster) bool {
+	if parent == nil {
+		return false
+	}
+	if parent.Status.Finalization != nil {
+		return true
+	}
+	for _, entry := range parent.Status.PostgresMajorUpgradeStatus {
+		if entry.BlueGreen != nil {
+			return true
+		}
+	}
+	return false
+}
