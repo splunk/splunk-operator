@@ -1,0 +1,187 @@
+suite: shared KVService lifecycle
+values:
+  - fixtures/shared-services.yaml
+templates:
+  - templates/shared_kvservice.yaml
+  - templates/shared_kvservice_readiness.yaml
+  - templates/shared_postgres.yaml
+  - templates/deployment.yaml
+release:
+  name: verify
+  namespace: platform
+tests:
+  - it: creates KVService with explicitly enabled shared PostgreSQL
+    template: templates/shared_kvservice.yaml
+    asserts:
+      - isKind: {of: KVService}
+      - equal: {path: 'metadata.name', value: kvservice}
+      - equal: {path: 'metadata.namespace', value: platform}
+      - equal: {path: 'spec.replicas', value: 2}
+      - equal: {path: 'spec.image', value: example.invalid/splunk/kvservice:test}
+      - matchRegex: {path: 'spec.postgres.clusterRef.name', pattern: '^verify-pg-[a-f0-9]{10}$'}
+  - it: creates the explicitly enabled shared PostgreSQL cluster
+    template: templates/shared_postgres.yaml
+    documentIndex: 1
+    asserts:
+      - isKind: {of: PostgresCluster}
+      - equal: {path: 'metadata.namespace', value: platform}
+      - matchRegex: {path: 'metadata.name', pattern: '^verify-pg-[a-f0-9]{10}$'}
+      - equal: {path: 'spec.clusterDeletionPolicy', value: Retain}
+  - it: enables only the two required controller gates automatically
+    template: templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --feature-gates=KVService=true,PostgresController=true
+  - it: disables KVService without disabling PostgreSQL
+    template: templates/shared_kvservice.yaml
+    set: {sharedKVService.enabled: false}
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: skips the entire readiness path when KVService is disabled
+    template: templates/shared_kvservice_readiness.yaml
+    set: {sharedKVService.enabled: false}
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: retains shared PostgreSQL with KVService disabled
+    template: templates/shared_postgres.yaml
+    set: {sharedKVService.enabled: false}
+    documentIndex: 1
+    asserts:
+      - isKind: {of: PostgresCluster}
+  - it: uses an explicit existing PostgreSQL cluster
+    template: templates/shared_kvservice.yaml
+    set:
+      sharedPostgres.enabled: false
+      cloudnative-pg.enabled: false
+      plugin-barman-cloud.enabled: false
+      sharedKVService.postgres.clusterRef.name: customer-postgres
+    asserts:
+      - equal: {path: 'spec.postgres.clusterRef.name', value: customer-postgres}
+  - it: rejects an absent backend
+    template: templates/shared_kvservice_readiness.yaml
+    set: {sharedPostgres.enabled: false}
+    asserts:
+      - failedTemplate:
+          errorMessage: sharedKVService requires sharedPostgres.enabled=true or sharedKVService.postgres.clusterRef.name
+  - it: rejects ambiguous backend selection
+    template: templates/shared_kvservice_readiness.yaml
+    set: {sharedKVService.postgres.clusterRef.name: other-postgres}
+    asserts:
+      - failedTemplate:
+          errorMessage: set sharedKVService.postgres.clusterRef.name only when sharedPostgres.enabled=false
+  - it: requires a qualified release image
+    template: templates/shared_kvservice.yaml
+    set: {sharedKVService.image: ''}
+    asserts:
+      - failedTemplate:
+          errorMessage: sharedKVService.image must specify a qualified KVService release image
+  - it: accepts a digest-pinned image
+    template: templates/shared_kvservice.yaml
+    set:
+      sharedKVService.image: registry.example/splunk/kvservice@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    asserts:
+      - equal:
+          path: spec.image
+          value: registry.example/splunk/kvservice@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  - it: accepts an image with a registry port tag and digest
+    template: templates/shared_kvservice.yaml
+    set:
+      sharedKVService.image: registry.example:5000/splunk/kvservice:v1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    asserts:
+      - equal:
+          path: spec.image
+          value: registry.example:5000/splunk/kvservice:v1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  - it: rejects a tagged image with a malformed digest
+    template: templates/shared_kvservice.yaml
+    set:
+      sharedKVService.image: registry.example/splunk/kvservice:v1@sha256:1234
+    asserts:
+      - failedTemplate:
+          errorPattern: sharedKVService.image
+  - it: rejects whitespace in an image reference
+    template: templates/shared_kvservice.yaml
+    set:
+      sharedKVService.image: 'registry.example/splunk/kvservice:v 1'
+    asserts:
+      - failedTemplate:
+          errorPattern: sharedKVService.image
+  - it: rejects explicitly disabling the KVService controller
+    template: templates/shared_kvservice.yaml
+    set: {splunkOperator.featureGates.KVService: false}
+    asserts:
+      - failedTemplate:
+          errorMessage: sharedKVService.enabled requires the KVService feature gate
+  - it: rejects explicitly disabling the PostgreSQL controller
+    template: templates/shared_postgres.yaml
+    set: {splunkOperator.featureGates.PostgresController: false}
+    asserts:
+      - failedTemplate:
+          errorMessage: sharedPostgres.enabled requires the PostgresController feature gate
+  - it: uses the same namespace override for the consumer and backend
+    template: templates/shared_kvservice.yaml
+    set: {namespaceOverride: services}
+    asserts:
+      - equal: {path: 'metadata.namespace', value: services}
+  - it: excludes no selected namespace from the operator watch
+    template: templates/shared_kvservice.yaml
+    set:
+      sharedPostgres.enabled: false
+      sharedKVService.postgres.clusterRef.name: customer-postgres
+      splunkOperator.watchNamespaces: tenant1,tenant2
+    asserts:
+      - failedTemplate:
+          errorMessage: splunkOperator.watchNamespaces must include the shared KVService namespace
+  - it: passes resources certificates and autoscaling to the existing CR API
+    template: templates/shared_kvservice.yaml
+    set:
+      sharedKVService.resources.requests.cpu: '4'
+      sharedKVService.certs: [{secretRef: {name: serving-cert}, role: server}]
+      sharedKVService.autoscaling: {minReplicas: 2, maxReplicas: 5}
+    asserts:
+      - equal: {path: 'spec.resources.requests.cpu', value: '4'}
+      - equal: {path: 'spec.certs[0].secretRef.name', value: serving-cert}
+      - equal: {path: 'spec.autoscaling.maxReplicas', value: 5}
+  - it: gates Helm install and upgrade completion with a bounded Job
+    template: templates/shared_kvservice_readiness.yaml
+    documentIndex: 3
+    release: {upgrade: true}
+    set: {sharedKVService.readiness.timeoutSeconds: 600}
+    asserts:
+      - isKind: {of: Job}
+      - equal: {path: 'metadata.annotations["helm.sh/hook"]', value: 'post-install,post-upgrade'}
+      - equal: {path: 'metadata.annotations["helm.sh/hook-delete-policy"]', value: 'before-hook-creation,hook-succeeded'}
+      - equal: {path: 'spec.activeDeadlineSeconds', value: 600}
+      - equal: {path: 'spec.backoffLimit', value: 0}
+  - it: waits for PostgreSQL before waiting for generation-aware KVService readiness
+    template: templates/shared_kvservice_readiness.yaml
+    documentIndex: 3
+    asserts:
+      - equal: {path: 'spec.template.spec.initContainers[0].name', value: wait-postgres}
+      - contains: {path: 'spec.template.spec.initContainers[0].args', content: '--for=condition=Ready'}
+      - matchRegex: {path: 'spec.template.spec.initContainers[0].args[3]', pattern: '^postgresclusters.platform.splunk.com/verify-pg-'}
+      - contains: {path: 'spec.template.spec.containers[0].args', content: 'kvservices.enterprise.splunk.com/kvservice'}
+      - contains: {path: 'spec.template.spec.containers[0].args', content: '--for=condition=Ready'}
+      - equal: {path: 'spec.template.spec.containers[0].command', value: [/bin/kubectl]}
+      - equal: {path: 'spec.template.spec.securityContext.runAsNonRoot', value: true}
+  - it: scopes the readiness account to named resources without Secret access or writes
+    template: templates/shared_kvservice_readiness.yaml
+    documentIndex: 1
+    asserts:
+      - isKind: {of: Role}
+      - equal: {path: 'metadata.namespace', value: platform}
+      - lengthEqual: {path: 'rules', count: 2}
+      - equal: {path: 'rules[0].verbs', value: [get, list, watch]}
+      - equal: {path: 'rules[1].verbs', value: [get, list, watch]}
+      - equal: {path: 'rules[1].resourceNames', value: [kvservice]}
+      - equal: {path: 'rules[1].resources', value: [kvservices]}
+  - it: supports a mirrored readiness image with its own pull secrets
+    template: templates/shared_kvservice_readiness.yaml
+    documentIndex: 3
+    set:
+      sharedKVService.readiness.image: mirror.example/kubectl:v1.37.0
+      sharedKVService.readiness.imagePullSecrets: [{name: mirror-pull}]
+    asserts:
+      - equal: {path: 'spec.template.spec.initContainers[0].image', value: 'mirror.example/kubectl:v1.37.0'}
+      - equal: {path: 'spec.template.spec.containers[0].image', value: 'mirror.example/kubectl:v1.37.0'}
+      - equal: {path: 'spec.template.spec.imagePullSecrets', value: [{name: mirror-pull}]}

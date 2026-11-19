@@ -1,0 +1,12 @@
+# Render-only fixture. This image is deliberately not a deployable release.
+cloudnative-pg:
+  enabled: true
+plugin-barman-cloud:
+  enabled: true
+sharedPostgres:
+  enabled: true
+  backup:
+    acknowledgeNoBackups: true
+sharedKVService:
+  enabled: true
+  image: example.invalid/splunk/kvservice:test

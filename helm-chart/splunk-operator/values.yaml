@@ -16,7 +16,7 @@ cert-manager:
   crds:
     enabled: true
 
-# Enable with PostgresController for bundled Splunk-built public backends.
+# Optional bundled PostgreSQL controllers. Enable only when not already installed.
 cloudnative-pg:
   enabled: false
   image:
@@ -236,6 +236,8 @@ splunkOperator:
   # extraEnvs count too, with featureGates taking precedence as in the operator,
   # and so do AllAlpha and AllBeta (e.g. AllBeta: false turns
   # CrossVersionFieldProtection off unless it is set by name).
+  # Shared workloads enable required gates only when unset. Explicit disables here,
+  # in extraEnvs.FEATURE_GATES, or through AllAlpha reject conflicting shared workloads.
   featureGates: {}
   # featureGates:
   #   ValidationWebhook: true
@@ -337,3 +339,38 @@ sharedPostgres:
   # Additional application DatabaseDefinition entries (maximum 10).
   # Each entry defaults to deletionPolicy: Retain.
   databases: []
+
+# Optional KVService in the operator namespace, using the release's PostgreSQL backend
+# or an explicitly configured existing cluster. Enable each dependency as needed.
+sharedKVService:
+  enabled: false
+  name: kvservice
+  # Supply the qualified KVService release image (tag or digest); no latest fallback.
+  image: ""
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  replicas: 2
+  resources:
+    requests: {cpu: "1", memory: 1Gi}
+    limits: {cpu: "2", memory: 2Gi}
+  # Used only when sharedPostgres.enabled=false. Must be in the operator namespace.
+  postgres:
+    clusterRef:
+      name: ""
+  # Existing KVService CR fields; protocol follows the installed API/controller.
+  certs: []
+  autoscaling: {}
+  readiness:
+    # Total budget for PostgreSQL and KVService, not a separate budget per stage.
+    timeoutSeconds: 900
+    # Override for your Kubernetes version or an air-gapped mirror.
+    image: registry.k8s.io/kubectl:v1.37.0@sha256:5ed410ebac5dc976cc717098994dcdb29bbbd38f6bd65f582311f5be4ba719cf
+    imagePullSecrets: []
+    # Override numeric IDs for namespace-specific policies such as OpenShift SCCs.
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65532
+      runAsGroup: 65532
+      fsGroup: 65532
+      seccompProfile:
+        type: RuntimeDefault

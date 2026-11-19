@@ -219,7 +219,7 @@ helm-dependencies: ## Build and verify locked operator chart dependencies
 .PHONY: helm-lint
 helm-lint: helm-dependencies ## Lint Helm charts
 	helm lint $(HELM_OPERATOR_CHART)
-	helm lint $(HELM_OPERATOR_CHART) --strict --set sharedPostgres.enabled=true --set splunkOperator.featureGates.PostgresController=true --set sharedPostgres.backup.acknowledgeNoBackups=true
+	helm lint $(HELM_OPERATOR_CHART) --strict -f $(HELM_OPERATOR_CHART)/tests/fixtures/shared-services.yaml
 	helm lint $(HELM_UF_CHART) --set splunkConfig.forwardServer=indexer:9997 --set splunkConfig.password=Test1234! --set splunkConfig.splunkGeneralTerms=$(SPLUNK_GENERAL_TERMS)
 	@mkdir -p $(HELM_ENTERPRISE_CHART)/charts
 	@rm -f $(HELM_ENTERPRISE_CHART)/charts/splunk-operator-*.tgz $(HELM_ENTERPRISE_CHART)/charts/splunk-universalforwarder-*.tgz
@@ -234,6 +234,11 @@ helm-test: setup/helm-unittest helm-dependencies ## Run Helm chart unit tests
 
 .PHONY: helm-check
 helm-check: helm-lint helm-test ## Run Helm lint and unit tests
+
+.PHONY: helm-kvservice-readiness-test
+helm-kvservice-readiness-test: ## Execute the readiness hook on an explicitly selected fresh kind cluster
+	@test -n "$(HELM_KVS_READINESS_CONTEXT)" || (echo "Set HELM_KVS_READINESS_CONTEXT to the authorized fresh kind context"; exit 1)
+	python3 helm-chart/tests/kvservice-readiness.py --context "$(HELM_KVS_READINESS_CONTEXT)" --wait-strategy "$(HELM_KVS_READINESS_WAIT_STRATEGY)"
 
 .PHONY: helm-lint-uf
 helm-lint-uf: ## Lint the UF Helm chart

@@ -1,0 +1,25 @@
+suite: shared services are opt-in
+templates:
+  - templates/shared_kvservice.yaml
+  - templates/shared_kvservice_readiness.yaml
+  - templates/shared_postgres.yaml
+  - templates/deployment.yaml
+tests:
+  - it: creates no KVService with default values
+    template: templates/shared_kvservice.yaml
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: creates no shared-service readiness resources with default values
+    template: templates/shared_kvservice_readiness.yaml
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: creates no PostgreSQL resources with default values
+    template: templates/shared_postgres.yaml
+    asserts:
+      - hasDocuments: {count: 0}
+  - it: does not enable controller gates with default values
+    template: templates/deployment.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --feature-gates=KVService=true,PostgresController=true

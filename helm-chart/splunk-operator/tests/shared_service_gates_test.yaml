@@ -1,0 +1,169 @@
+suite: shared services respect configured feature gates
+values:
+  - fixtures/shared-services.yaml
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: rejects an environment KVService disable
+    set:
+      extraEnvs: [{name: FEATURE_GATES, value: KVService=false}]
+    asserts: &kvDisabled
+      - failedTemplate:
+          errorMessage: sharedKVService.enabled requires the KVService feature gate
+
+  - it: rejects an environment PostgresController disable
+    set:
+      extraEnvs: [{name: FEATURE_GATES, value: PostgresController=false}]
+    asserts: &postgresDisabled
+      - failedTemplate:
+          errorMessage: sharedPostgres.enabled requires the PostgresController feature gate
+
+  - it: rejects an environment AllAlpha disable
+    set:
+      extraEnvs: [{name: FEATURE_GATES, value: AllAlpha=false}]
+    asserts: *kvDisabled
+
+  - it: rejects a CLI AllAlpha disable
+    set:
+      splunkOperator.featureGates.AllAlpha: false
+    asserts: *kvDisabled
+
+  - it: preserves an environment per-gate disable over a CLI umbrella enable
+    set:
+      extraEnvs: [{name: FEATURE_GATES, value: KVService=false}]
+      splunkOperator.featureGates.AllAlpha: true
+    asserts: *kvDisabled
+
+  - it: preserves an earlier environment umbrella disable over a CLI umbrella enable
+    set:
+      extraEnvs: [{name: FEATURE_GATES, value: AllAlpha=false}]
+      splunkOperator.featureGates.AllAlpha: true
+    asserts: *kvDisabled
+
+  - it: rejects a CLI per-gate disable despite an environment enable
+    set:
+      extraEnvs: [{name: FEATURE_GATES, value: KVService=true}]
+      splunkOperator.featureGates.KVService: false
+    asserts: *kvDisabled
+
+  - it: lets explicit CLI enables override environment per-gate and umbrella disables
+    set:
+      extraEnvs: [{name: FEATURE_GATES, value: 'AllAlpha=false,KVService=false,PostgresController=false'}]
+      splunkOperator.featureGates: {KVService: true, PostgresController: true}
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --feature-gates=KVService=true,PostgresController=true
+
+  - it: lets explicit CLI enables override a CLI umbrella disable
+    set:
+      splunkOperator.featureGates: {AllAlpha: false, KVService: true, PostgresController: true}
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --feature-gates=AllAlpha=false,KVService=true,PostgresController=true
+
+  - it: preserves environment per-gate enables over a CLI umbrella disable without autofill
+    set:
+      extraEnvs: [{name: FEATURE_GATES, value: 'KVService=true,PostgresController=true'}]
+      splunkOperator.featureGates.AllAlpha: false
+    asserts: &onlyUmbrella
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [--leader-elect, --pprof=false, --feature-gates=AllAlpha=false]
+
+  - it: preserves an earlier environment umbrella enable over a CLI umbrella disable
+    set:
+      extraEnvs: [{name: FEATURE_GATES, value: AllAlpha=true}]
+      splunkOperator.featureGates.AllAlpha: false
+    asserts: *onlyUmbrella
+
+  - it: honors same-pass environment per-gate enables over its umbrella disable
+    set:
+      extraEnvs: [{name: FEATURE_GATES, value: 'AllAlpha=false,KVService=true,PostgresController=true'}]
+    asserts: &noFlags
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [--leader-elect, --pprof=false]
+
+  - it: autofills only PostgreSQL when KVService is already enabled in the environment
+    set:
+      extraEnvs: [{name: FEATURE_GATES, value: KVService=true}]
+    asserts: &onlyPostgres
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [--leader-elect, --pprof=false, --feature-gates=PostgresController=true]
+
+  - it: autofills only KVService when PostgreSQL is already enabled in the environment
+    set:
+      extraEnvs: [{name: FEATURE_GATES, value: PostgresController=true}]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: [--leader-elect, --pprof=false, --feature-gates=KVService=true]
+
+  - it: uses the last duplicate environment entry when deciding whether to autofill
+    set:
+      extraEnvs:
+        - {name: FEATURE_GATES, value: AllAlpha=false}
+        - {name: FEATURE_GATES, value: KVService=true}
+    asserts: *onlyPostgres
+
+  - it: preserves unrelated CLI and environment gates while autofilling required gates
+    set:
+      extraEnvs: [{name: FEATURE_GATES, value: CertManagement=false}]
+      splunkOperator.featureGates.ValidationWebhook: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --feature-gates=KVService=true,PostgresController=true,ValidationWebhook=false
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: FEATURE_GATES, value: CertManagement=false}
+
+  - it: enables only PostgreSQL for sharedPostgres even with KVService explicitly disabled
+    set:
+      sharedKVService.enabled: false
+      extraEnvs: [{name: FEATURE_GATES, value: KVService=false}]
+    asserts: *onlyPostgres
+
+  - it: rejects an environment disable for sharedPostgres alone
+    set:
+      sharedKVService.enabled: false
+      extraEnvs: [{name: FEATURE_GATES, value: PostgresController=false}]
+    asserts: *postgresDisabled
+
+  - it: rejects an environment umbrella disable for sharedPostgres alone
+    set:
+      sharedKVService.enabled: false
+      extraEnvs: [{name: FEATURE_GATES, value: AllAlpha=false}]
+    asserts: *postgresDisabled
+
+  - it: rejects a CLI umbrella disable for sharedPostgres alone
+    set:
+      sharedKVService.enabled: false
+      splunkOperator.featureGates.AllAlpha: false
+    asserts: *postgresDisabled
+
+  - it: still requires PostgresController for KVService using an external backend
+    set:
+      sharedPostgres.enabled: false
+      sharedKVService.postgres.clusterRef.name: external-postgres
+      extraEnvs: [{name: FEATURE_GATES, value: PostgresController=false}]
+    asserts:
+      - failedTemplate:
+          errorMessage: sharedKVService.enabled requires the PostgresController feature gate
+
+  - it: leaves default deployment args unchanged without shared services
+    set:
+      sharedPostgres.enabled: false
+      sharedKVService.enabled: false
+    asserts: *noFlags
+
+  - it: accepts explicit disables unchanged without shared services
+    set:
+      sharedPostgres.enabled: false
+      sharedKVService.enabled: false
+      extraEnvs: [{name: FEATURE_GATES, value: 'KVService=false,PostgresController=false'}]
+      splunkOperator.featureGates.AllAlpha: false
+    asserts: *onlyUmbrella

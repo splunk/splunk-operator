@@ -212,6 +212,134 @@
           "type": "object"
         }
       }
+    },
+    "sharedKVService": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "name",
+        "image",
+        "replicas",
+        "resources",
+        "postgres",
+        "readiness"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63,
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+        },
+        "image": {
+          "type": "string",
+          "pattern": "^$|^[^\\s]+/[^/:@\\s]+(:[^/@\\s]+(@sha256:[a-f0-9]{64})?|@sha256:[a-f0-9]{64})$"
+        },
+        "replicas": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "resources": {
+          "type": "object"
+        },
+        "postgres": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "clusterRef"
+          ],
+          "properties": {
+            "clusterRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 63,
+                  "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+                }
+              }
+            }
+          }
+        },
+        "certs": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "autoscaling": {
+          "type": "object"
+        },
+        "readiness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "timeoutSeconds",
+            "image"
+          ],
+          "properties": {
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 30,
+              "maximum": 3600
+            },
+            "image": {
+              "type": "string",
+              "minLength": 1
+            },
+            "imagePullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            },
+            "securityContext": {
+              "type": "object"
+            }
+          }
+        },
+        "imagePullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        },
+        "imagePullSecrets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
