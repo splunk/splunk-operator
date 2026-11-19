@@ -262,7 +262,7 @@ func preserveCredentialCaptureTimes(previous *platformv1alpha1.PostgresBlueGreen
 func (p *BlueGreenPreparer) preparationStatus(intent mvutypes.Intent, source *cnpgv1.Cluster) *platformv1alpha1.PostgresBlueGreenUpgradeStatus {
 	status := previousBlueGreenStatus(intent)
 	if status == nil {
-		status = &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: intent.AttemptID}
+		status = &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: intent.AttemptID, SubscriptionCreationAuthorized: new(false)}
 	}
 	if status.Blue == nil {
 		status.Blue = &platformv1alpha1.BlueGreenEnvironmentStatus{

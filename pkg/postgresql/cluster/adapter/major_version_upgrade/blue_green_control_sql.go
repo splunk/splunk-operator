@@ -248,7 +248,7 @@ func verifyControlDatabase(ctx context.Context, conn pginfra.Conn, id cutoverIde
 	}
 	for _, helper := range cutoverHelpers(id, database) {
 		// Older attempts can recover access without the retirement helper.
-		if helper.name == controlRetireReplicationFunction {
+		if helper.name == controlRetireReplicationFunction || helper.name == controlRetireSubscriptionFunction {
 			var exists bool
 			if err := queryOne(ctx, conn, &exists, controlGuardFunctionExistsSQL, candidateGuardSchema+"."+helper.name+"()"); err != nil {
 				return err
@@ -261,7 +261,7 @@ func verifyControlDatabase(ctx context.Context, conn pginfra.Conn, id cutoverIde
 			return err
 		}
 	}
-	if err := queryCutoverBoolean(ctx, conn, &safe, controlSchemaProofSQL, candidateGuardSchema, id.Role, []string{controlTerminateFunction, controlRemoveGuardsFunction, controlFenceFunction, candidateGuardFunction, controlRetireReplicationFunction}); err != nil {
+	if err := queryCutoverBoolean(ctx, conn, &safe, controlSchemaProofSQL, candidateGuardSchema, id.Role, []string{controlTerminateFunction, controlRemoveGuardsFunction, controlFenceFunction, candidateGuardFunction, controlRetireReplicationFunction, controlRetireSubscriptionFunction}); err != nil {
 		return err
 	}
 	if !safe {

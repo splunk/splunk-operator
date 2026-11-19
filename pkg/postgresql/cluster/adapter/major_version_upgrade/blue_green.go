@@ -156,7 +156,7 @@ func stateWithBlueGreenRearm(entries []platformv1alpha1.PostgresMajorUpgradeStat
 
 func applyBlueGreenProgress(current *platformv1alpha1.PostgresMajorUpgradeStatus, intent mvutypes.Intent, progress mvutypes.Progress) {
 	if intent.Strategy == mvutypes.MajorUpgradeFlowBlueGreen && current.BlueGreen == nil && intent.AttemptID != "" {
-		current.BlueGreen = &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: intent.AttemptID}
+		current.BlueGreen = &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: intent.AttemptID, SubscriptionCreationAuthorized: new(false)}
 	}
 	if progress.BlueGreen != nil {
 		current.BlueGreen = progress.BlueGreen.DeepCopy()

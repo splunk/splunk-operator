@@ -46,9 +46,10 @@ type candidateFenceProbe interface {
 // fence.
 type BlueGreenCancellation struct {
 	*BlueGreenReplicationTeardown
-	client     client.Client
-	switchover *BlueGreenSwitchover
-	probe      candidateFenceProbe
+	client        client.Client
+	switchover    *BlueGreenSwitchover
+	probe         candidateFenceProbe
+	subscriberSQL subscriptionRetirementSQL
 }
 
 var _ bluegreen.Canceller = (*BlueGreenCancellation)(nil)
@@ -65,7 +66,9 @@ func NewBlueGreenCancellation(c client.Client, reader client.Reader, key types.N
 	if err != nil {
 		return nil, fmt.Errorf("construct candidate fence probe: %w", err)
 	}
-	return &BlueGreenCancellation{BlueGreenReplicationTeardown: teardown, client: c, switchover: switchover, probe: probe}, nil
+	result := &BlueGreenCancellation{BlueGreenReplicationTeardown: teardown, client: c, switchover: switchover, probe: probe}
+	result.subscriberSQL = probe
+	return result, nil
 }
 
 func (c *BlueGreenCancellation) CommitObserved(ctx context.Context, attemptID string) (bool, error) {
@@ -145,7 +148,7 @@ func (c *BlueGreenCancellation) handBackUnpreparedSource(ctx context.Context, st
 	if err != nil {
 		return false, err
 	}
-	entry := parent.Status.PostgresMajorUpgradeStatus[len(parent.Status.PostgresMajorUpgradeStatus)-1]
+	entry := *mvutypes.LatestAttempt(parent.Status.PostgresMajorUpgradeStatus)
 	if blue == nil || entry.SourcePgVersion == nil || blue.Status.PGDataImageInfo == nil || blue.Status.PGDataImageInfo.MajorVersion <= 0 ||
 		!samePostgresMajor(*entry.SourcePgVersion, fmt.Sprintf("%d", blue.Status.PGDataImageInfo.MajorVersion)) {
 		return false, fmt.Errorf("%w: authoritative source no longer matches the cancelled attempt's source major", mvutypes.ErrUpgradeFlowFailed)

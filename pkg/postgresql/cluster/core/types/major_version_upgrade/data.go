@@ -37,6 +37,14 @@ func PostgresMajorVersion(version string) int {
 	return parsed
 }
 
+// LatestAttempt returns the latest recorded upgrade, or nil for empty history.
+func LatestAttempt(entries []platformv1alpha1.PostgresMajorUpgradeStatus) *platformv1alpha1.PostgresMajorUpgradeStatus {
+	if len(entries) == 0 {
+		return nil
+	}
+	return &entries[len(entries)-1]
+}
+
 type Intent struct {
 	Strategy        string
 	SourcePgVersion string

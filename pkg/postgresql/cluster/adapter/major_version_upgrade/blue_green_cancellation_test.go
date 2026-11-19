@@ -18,6 +18,7 @@ package majorupgradeadapter
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"slices"
 	"syscall"
@@ -268,7 +269,8 @@ func TestNewBlueGreenCancellationRequiresSwitchover(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestCancellationDuringOpenWindowCompletesThroughPriorityRecovery(t *testing.T) {
+func cancellationOrchestrationFixture(t *testing.T, subscriber subscriptionRetirementSQL) (*cutoverFixture, *clustercore.ReconcileContext, *teardownSQLFake, *candidateProbeFake, *corev1.Secret) {
+	t.Helper()
 	f := newCutoverFixture(t)
 	f.until(func(bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus) bool { return bg.EndpointPreparation != nil })
 	for _, name := range []string{"blue", "green"} {
@@ -301,11 +303,19 @@ func TestCancellationDuringOpenWindowCompletesThroughPriorityRecovery(t *testing
 					return nil, err
 				}
 				teardown := &BlueGreenReplicationTeardown{client: f.runtime.client, reader: f.runtime.reader, key: key, owner: p, sql: teardownSQL}
-				cancellation := &BlueGreenCancellation{BlueGreenReplicationTeardown: teardown, client: f.runtime.client, switchover: f.runtime, probe: probe}
+				cancellation := &BlueGreenCancellation{BlueGreenReplicationTeardown: teardown, client: f.runtime.client, switchover: f.runtime, probe: probe, subscriberSQL: subscriber}
 				return majorupgrade.NewMajorUpgradeUseCase(NewMajorUpgradeStateStoreWithTarget(stateStore, "18"), nil, nil, NewUpgradeNotifier(cutoverTestEvents{}, p), nil, nil, f.runtime).
 					WithBlueGreenCanceller(cancellation), nil
 			}}
 		}}
+
+	return f, rc, teardownSQL, probe, secret
+}
+
+func TestCancellationDuringOpenWindowCompletesThroughPriorityRecovery(t *testing.T) {
+	f, rc, teardownSQL, probe, secret := cancellationOrchestrationFixture(t, subscriptionSQLFunc(func(context.Context, *cnpgv1.Cluster, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error) {
+		return true, nil
+	}))
 
 	phase := func() string {
 		parent := new(platformv1alpha1.PostgresCluster)
@@ -339,6 +349,94 @@ func TestCancellationDuringOpenWindowCompletesThroughPriorityRecovery(t *testing
 	cleanup := meta.FindStatusCondition(status.Conditions, mvutypes.ConditionCleanupAvailable)
 	require.NotNil(t, cleanup)
 	assert.Equal(t, metav1.ConditionTrue, cleanup.Status)
+}
+
+type rejectingCancellationStatusClient struct {
+	client.Client
+	reject   bool
+	failures int
+}
+
+func (c *rejectingCancellationStatusClient) Status() client.SubResourceWriter {
+	return rejectingCancellationStatusWriter{SubResourceWriter: c.Client.Status(), owner: c}
+}
+
+type rejectingCancellationStatusWriter struct {
+	client.SubResourceWriter
+	owner *rejectingCancellationStatusClient
+}
+
+func (w rejectingCancellationStatusWriter) Patch(ctx context.Context, object client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+	if err := w.owner.rejectReceipt(object); err != nil {
+		return err
+	}
+	return w.SubResourceWriter.Patch(ctx, object, patch, opts...)
+}
+
+func (w rejectingCancellationStatusWriter) Update(ctx context.Context, object client.Object, opts ...client.SubResourceUpdateOption) error {
+	if err := w.owner.rejectReceipt(object); err != nil {
+		return err
+	}
+	return w.SubResourceWriter.Update(ctx, object, opts...)
+}
+
+func (c *rejectingCancellationStatusClient) rejectReceipt(object client.Object) error {
+	if parent, ok := object.(*platformv1alpha1.PostgresCluster); ok && c.reject {
+		for _, entry := range parent.Status.PostgresMajorUpgradeStatus {
+			if entry.BlueGreen != nil && entry.BlueGreen.Gates != nil && entry.BlueGreen.Gates.Cancellation != nil && entry.BlueGreen.Gates.Cancellation.GreenReplicationRemovedAt != nil {
+				c.failures++
+				return errors.New("receipt status write failed")
+			}
+		}
+	}
+	return nil
+}
+
+func TestCancellationSubscriberProofMustPersistBeforeSourceEffects(t *testing.T) {
+	for _, mode := range []string{"pending", "SQL error", "status conflict"} {
+		t.Run(mode, func(t *testing.T) {
+			ready := mode == "status conflict"
+			var sqlErr error
+			if mode == "SQL error" {
+				sqlErr = errors.New("subscriber unavailable")
+			}
+			calls := 0
+			f, rc, source, _, secret := cancellationOrchestrationFixture(t, subscriptionSQLFunc(func(context.Context, *cnpgv1.Cluster, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (bool, error) {
+				calls++
+				return ready, sqlErr
+			}))
+			writer := &rejectingCancellationStatusClient{Client: f.runtime.client, reject: mode == "status conflict"}
+			f.runtime.client, rc.Client = writer, writer
+			reconcile := func() {
+				_, _ = clustercore.PostgresClusterService(t.Context(), rc, ctrl.Request{NamespacedName: f.runtime.key}, nil, nil, nil, nil)
+			}
+			for range 10 {
+				reconcile()
+				if calls >= 2 {
+					break
+				}
+			}
+			require.GreaterOrEqual(t, calls, 2)
+			assert.Nil(t, f.status().Gates.Cancellation.GreenReplicationRemovedAt)
+			assert.Empty(t, source.stopCalls)
+			assert.Empty(t, source.roleCalls)
+			require.NoError(t, f.runtime.reader.Get(t.Context(), client.ObjectKeyFromObject(secret), &corev1.Secret{}))
+			if mode == "status conflict" {
+				assert.Greater(t, writer.failures, 0)
+			}
+			ready, sqlErr, writer.reject = true, nil, false
+			reconcile()
+			require.NotNil(t, f.status().Gates.Cancellation.GreenReplicationRemovedAt)
+			assert.Empty(t, source.stopCalls, "proof persistence is its own reconciliation")
+			for range 6 {
+				reconcile()
+				if len(source.stopCalls) > 0 {
+					break
+				}
+			}
+			assert.NotEmpty(t, source.stopCalls)
+		})
+	}
 }
 
 func TestCancelAfterUnrecordedCanonicalCommitFailsForward(t *testing.T) {

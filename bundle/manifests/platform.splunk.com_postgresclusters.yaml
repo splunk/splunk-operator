@@ -1697,6 +1697,19 @@ spec:
                                     candidate.
                                   format: date-time
                                   type: string
+                                greenReplicationProofVersion:
+                                  description: |-
+                                    GreenReplicationProofVersion identifies SQL proof recorded after CNPG
+                                    acknowledged its subscription writer. Zero identifies legacy receipts.
+                                  format: int32
+                                  maximum: 1
+                                  minimum: 1
+                                  type: integer
+                                greenReplicationRemovedAt:
+                                  description: GreenReplicationRemovedAt proves actual
+                                    subscriber SQL removal.
+                                  format: date-time
+                                  type: string
                                 replicationRemovedAt:
                                   description: |-
                                     ReplicationRemovedAt records verified removal of the attempt's logical
@@ -1857,6 +1870,11 @@ spec:
                               format: date-time
                               type: string
                           type: object
+                        subscriptionCreationAuthorized:
+                          description: |-
+                            SubscriptionCreationAuthorized is false for new attempts until a status
+                            write authorizes creating subscriptions. Omission identifies legacy attempts.
+                          type: boolean
                         switchover:
                           description: Switchover records the latched timeout and
                             the durable handoff milestones.

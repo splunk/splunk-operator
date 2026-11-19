@@ -173,11 +173,10 @@ func (c *BlueGreenCompletion) removeReplication(ctx context.Context, status *pla
 	t := c.teardown
 	for _, objects := range []client.ObjectList{&cnpgv1.SubscriptionList{}, &cnpgv1.PublicationList{}} {
 		gone, err := t.deleteOwned(ctx, objects, status, func(object client.Object) error {
-			finalizer := cnpgutils.PublicationFinalizerName
-			if _, ok := object.(*cnpgv1.Subscription); ok {
-				finalizer = cnpgutils.SubscriptionFinalizerName
+			if subscription, ok := object.(*cnpgv1.Subscription); ok {
+				return quiesceRetainedSubscription(ctx, t.client, subscription)
 			}
-			return t.releaseRetainedFinalizer(ctx, object, finalizer)
+			return t.releaseRetainedFinalizer(ctx, object, cnpgutils.PublicationFinalizerName)
 		})
 		if err != nil || !gone {
 			return false, err

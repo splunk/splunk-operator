@@ -287,9 +287,12 @@ During `Cancelling`, the operator:
 
 1. Restores and verifies blue's endpoint records and application access, if a
    switchover window or endpoint preparation had started.
-2. Deletes the attempt's CNPG `Subscription` resources, removes publications
-   and replication slots from blue, and removes green's replication source.
-   SQL subscription state remains in fenced green until cleanup deletes green.
+2. Retains and removes CNPG Subscription declarations, waiting for CNPG to
+   acknowledge its last apply. It then disables green's subscriptions, waits
+   for their workers to stop, and detaches and drops the actual SQL subscriptions,
+   publications, source replication slots, and green's replication source.
+   `gates.cancellation.greenReplicationRemovedAt` records verified subscriber
+   SQL removal before temporary credentials are retired.
 3. Drops the attempt's temporary replication and control roles on blue and
    deletes their Secrets. Green keeps its copy of the control role until
    cleanup deletes green; its password existed only in the deleted Secret.

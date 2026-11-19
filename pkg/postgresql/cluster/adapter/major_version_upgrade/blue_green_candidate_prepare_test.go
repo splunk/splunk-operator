@@ -138,6 +138,19 @@ func TestBlueGreenCandidatePreparerCreatesSchemaOnlyTargetWithoutProductionArchi
 	require.NoError(t, client.Update(t.Context(), green))
 	_, err = preparer.PrepareCandidate(t.Context(), intent)
 	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowPending, "a scaled candidate remains valid on reconcile restart")
+	green.Status.Phase = cnpgv1.PhaseHealthy
+	green.Status.CurrentPrimary = "green-1"
+	green.Status.InstancesStatus = map[cnpgv1.PodStatus][]string{cnpgv1.PodHealthy: {"green-1"}}
+	green.Status.ReadyInstances = 1
+	require.NoError(t, client.Update(t.Context(), green))
+	intent.State[0].BlueGreen.SubscriptionCreationAuthorized = new(false)
+	status, err = preparer.PrepareCandidate(t.Context(), intent)
+	require.ErrorIs(t, err, mvutypes.ErrUpgradeFlowPending)
+	assert.Equal(t, new(true), status.SubscriptionCreationAuthorized)
+	assert.Equal(t, new(false), intent.State[0].BlueGreen.SubscriptionCreationAuthorized, "a failed status save must not authorize creation")
+	var subscriptions cnpgv1.SubscriptionList
+	require.NoError(t, client.List(t.Context(), &subscriptions))
+	assert.Empty(t, subscriptions.Items, "creation waits for the next persisted pass")
 	// A bootstrap Job that already ran the old contract may have partial data.
 	// Changing the Cluster spec cannot safely replay its initdb/import command.
 	legacy := green.DeepCopy()
