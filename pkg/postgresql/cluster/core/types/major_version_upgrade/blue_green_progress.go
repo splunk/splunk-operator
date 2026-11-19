@@ -52,6 +52,9 @@ func ValidateBlueGreenProgress(intent Intent, progress Progress) error {
 	if err := validateCompletionProgress(intent, progress); err != nil {
 		return err
 	}
+	if err := validateCleanupProgress(intent, progress); err != nil {
+		return err
+	}
 
 	for i := len(intent.State) - 1; i >= 0; i-- {
 		current := intent.State[i]
@@ -157,6 +160,9 @@ func validateExistingBlueGreenProgress(attemptID string, current, proposed *plat
 		return err
 	}
 	if err := preserveCompletionReceipts(current, proposed); err != nil {
+		return err
+	}
+	if err := preserveCleanupProgress(current, proposed); err != nil {
 		return err
 	}
 	if previous := current.SourcePreparation; previous != nil && previous.CompletedAt != nil {

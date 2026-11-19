@@ -1386,6 +1386,15 @@ type BlueGreenCleanupStatus struct {
 	// +kubebuilder:validation:Enum=Retained;Cleaning;Cleaned;CleanupFailed
 	State BlueGreenCleanupState `json:"state"`
 
+	// EnvironmentRef identifies the exact environment being retired.
+	// +optional
+	EnvironmentRef *corev1.ObjectReference `json:"environmentRef,omitempty"`
+
+	// RetiredResources preserves parent-owned roots across asynchronous deletion.
+	// +listType=atomic
+	// +optional
+	RetiredResources []corev1.ObjectReference `json:"retiredResources,omitempty"`
+
 	// RetirementGeneration identifies the database-controller retirement barrier
 	// for this cleanup attempt.
 	// +optional
@@ -1425,6 +1434,20 @@ type BlueGreenRetirementAcknowledgementStatus struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	DatabaseName string `json:"databaseName"`
+
+	// PostgresDatabaseGeneration invalidates proofs after child spec changes.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	PostgresDatabaseGeneration int64 `json:"postgresDatabaseGeneration,omitempty"`
+
+	// Resources freezes the provider Database identities for this row.
+	// +listType=atomic
+	// +optional
+	Resources []corev1.ObjectReference `json:"resources,omitempty"`
+
+	// PostgresDatabaseAbsentAt is parent-observed absence of a deleted child.
+	// +optional
+	PostgresDatabaseAbsentAt *metav1.Time `json:"postgresDatabaseAbsentAt,omitempty"`
 
 	// +optional
 	AcknowledgedAt *metav1.Time `json:"acknowledgedAt,omitempty"`
