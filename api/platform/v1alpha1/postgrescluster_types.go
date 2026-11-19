@@ -671,6 +671,11 @@ type PostgresBlueGreenUpgradeStatus struct {
 	// +kubebuilder:validation:MinLength=1
 	AttemptID string `json:"attemptID"`
 
+	// SubscriptionCreationAuthorized is false for new attempts until a status
+	// write authorizes creating subscriptions. Omission identifies legacy attempts.
+	// +optional
+	SubscriptionCreationAuthorized *bool `json:"subscriptionCreationAuthorized,omitempty"`
+
 	// RearmedAt records that the controller observed allow=false after this
 	// cleaned attempt. A later allow=true may start a new attempt for the same
 	// source, target, and strategy only after this observation.
@@ -966,6 +971,17 @@ type BlueGreenGateConsumptionStatus struct {
 // Each step is write-once so an interrupted cancellation resumes at the first
 // unrecorded step.
 type BlueGreenCancellationStatus struct {
+	// GreenReplicationRemovedAt proves actual subscriber SQL removal.
+	// +optional
+	GreenReplicationRemovedAt *metav1.Time `json:"greenReplicationRemovedAt,omitempty"`
+
+	// GreenReplicationProofVersion identifies SQL proof recorded after CNPG
+	// acknowledged its subscription writer. Zero identifies legacy receipts.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1
+	// +optional
+	GreenReplicationProofVersion int32 `json:"greenReplicationProofVersion,omitempty"`
+
 	// RequestedAt latches the cancellation. Once recorded, the attempt cannot
 	// resume preparation or switchover, even if the cancel gate is cleared.
 	// +optional

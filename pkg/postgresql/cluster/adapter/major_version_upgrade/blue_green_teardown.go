@@ -389,6 +389,12 @@ func (t *BlueGreenReplicationTeardown) deleteOwned(ctx context.Context, list cli
 		changed := false
 		switch resource := object.(type) {
 		case *cnpgv1.Subscription:
+			if status.Gates != nil && status.Gates.Cancellation != nil && status.Gates.Cancellation.GreenReplicationProofVersion == greenReplicationProofVersion {
+				return false, fmt.Errorf("subscription reappeared after verified SQL removal; preserve credentials and inspect the unexpected declaration")
+			}
+			if status.SubscriptionCreationAuthorized != nil && !*status.SubscriptionCreationAuthorized {
+				return false, fmt.Errorf("subscription exists before its creation was authorized")
+			}
 			changed = resource.Spec.ReclaimPolicy != cnpgv1.SubscriptionReclaimRetain
 			resource.Spec.ReclaimPolicy = cnpgv1.SubscriptionReclaimRetain
 		case *cnpgv1.Publication:

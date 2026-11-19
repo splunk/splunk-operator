@@ -79,7 +79,7 @@ func validateCancellationReceipt(attemptID string, proposed *platformv1alpha1.Po
 	}
 	cancellation := proposed.Gates.Cancellation
 	if cancellation.RequestedAt == nil && (cancellation.SourceAccessRestoredAt != nil || cancellation.ReplicationRemovedAt != nil ||
-		cancellation.CredentialsRemovedAt != nil || cancellation.GreenFencedAt != nil || cancellation.CompletedAt != nil) {
+		cancellation.GreenReplicationRemovedAt != nil || cancellation.CredentialsRemovedAt != nil || cancellation.GreenFencedAt != nil || cancellation.CompletedAt != nil) {
 		return fmt.Errorf("blue/green cancellation steps require a latched cancellation request for attempt %q", attemptID)
 	}
 	if cancellation.CompletedAt != nil && CutoverStageOfStatus(proposed).Committed() {
@@ -107,6 +107,9 @@ func validateCancellationSteps(attemptID string, current, proposed *platformv1al
 	if next == nil {
 		return fmt.Errorf("blue/green progress cannot remove the cancellation receipt for attempt %q", attemptID)
 	}
+	if next.GreenReplicationProofVersion < previous.GreenReplicationProofVersion || next.GreenReplicationProofVersion > 1 || next.GreenReplicationProofVersion < 0 {
+		return fmt.Errorf("blue/green progress cannot change cancellation SQL proof version for attempt %q", attemptID)
+	}
 	for _, milestone := range []struct {
 		name string
 		old  *metav1.Time
@@ -115,6 +118,7 @@ func validateCancellationSteps(attemptID string, current, proposed *platformv1al
 		{"request time", previous.RequestedAt, next.RequestedAt},
 		{"source access restoration time", previous.SourceAccessRestoredAt, next.SourceAccessRestoredAt},
 		{"replication removal time", previous.ReplicationRemovedAt, next.ReplicationRemovedAt},
+		{"green SQL removal time", previous.GreenReplicationRemovedAt, next.GreenReplicationRemovedAt},
 		{"credential removal time", previous.CredentialsRemovedAt, next.CredentialsRemovedAt},
 		{"green fence time", previous.GreenFencedAt, next.GreenFencedAt},
 		{"completion time", previous.CompletedAt, next.CompletedAt},

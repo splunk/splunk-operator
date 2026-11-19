@@ -38,7 +38,7 @@ func TestCutoverControlBootstrapConstrainsPrivilegedHelpers(t *testing.T) {
 	}}
 	boundary := &postgresSwitchoverSQL{}
 	require.NoError(t, boundary.installControlDatabase(t.Context(), conn, `db"name`, id, true))
-	assert.Equal(t, 4, conn.commits)
+	assert.Equal(t, 5, conn.commits)
 	assert.Zero(t, conn.rollbacks)
 	all := strings.Join(conn.execs, "\n")
 	assert.Contains(t, all, "SECURITY DEFINER SET search_path = pg_catalog")

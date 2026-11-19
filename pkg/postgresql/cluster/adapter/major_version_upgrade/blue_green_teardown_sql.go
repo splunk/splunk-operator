@@ -82,9 +82,10 @@ func connectTeardownInstance(ctx context.Context, c client.Client, owner *platfo
 		return nil, fmt.Errorf("%w: teardown SQL has no owned instance for %q", mvutypes.ErrUpgradeFlowFailed, host)
 	}
 	conn, err := connect(ctx, cluster, target.Status.PodIP, database)
-	if err != nil {
+	if err != nil && !missingTeardownDatabase(err) {
 		return nil, err
 	}
+	connectionErr := err
 	liveCluster, livePod := &cnpgv1.Cluster{}, &corev1.Pod{}
 	err = c.Get(ctx, client.ObjectKeyFromObject(cluster), liveCluster)
 	if err == nil {
@@ -94,9 +95,12 @@ func connectTeardownInstance(ctx context.Context, c client.Client, owner *platfo
 		err = fmt.Errorf("%w: teardown SQL environment or instance was replaced", mvutypes.ErrUpgradeFlowFailed)
 	}
 	if err != nil {
-		return nil, errors.Join(err, conn.Close(ctx))
+		if conn != nil {
+			err = errors.Join(err, conn.Close(ctx))
+		}
+		return nil, err
 	}
-	return conn, nil
+	return conn, connectionErr
 }
 
 // StopReplication prevents retained green subscriptions from reconnecting,

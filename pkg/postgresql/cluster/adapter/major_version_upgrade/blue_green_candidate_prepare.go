@@ -154,6 +154,10 @@ func (p *BlueGreenCandidatePreparer) PrepareCandidate(ctx context.Context, inten
 	if err := p.verifier.VerifyAndGuard(ctx, candidate, databases, status); err != nil {
 		return status, err
 	}
+	if status.SubscriptionCreationAuthorized != nil && !*status.SubscriptionCreationAuthorized {
+		status.SubscriptionCreationAuthorized = new(true)
+		return status, fmt.Errorf("%w: recording subscription creation authorization", mvutypes.ErrUpgradeFlowPending)
+	}
 	subscriptionsReady, err := p.reconcileSubscriptions(ctx, candidate, databases, intent.AttemptID, status)
 	if err != nil {
 		return status, err
