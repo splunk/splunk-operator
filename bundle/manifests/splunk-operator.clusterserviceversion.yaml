@@ -782,6 +782,14 @@ spec:
           - subjectaccessreviews
           verbs:
           - create
+        - apiGroups:
+          - snapshot.storage.k8s.io
+          resources:
+          - volumesnapshots
+          verbs:
+          - get
+          - list
+          - patch
         serviceAccountName: splunk-operator-controller-manager
       deployments:
       - label:

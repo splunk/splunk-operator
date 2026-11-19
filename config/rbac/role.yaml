@@ -271,3 +271,11 @@ rules:
   - subscriptions/status
   verbs:
   - get
+- apiGroups:
+  - snapshot.storage.k8s.io
+  resources:
+  - volumesnapshots
+  verbs:
+  - get
+  - list
+  - patch

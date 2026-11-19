@@ -137,21 +137,28 @@ func (c *BlueGreenCancellation) removeGreenSubscriptions(ctx context.Context, gr
 // CNPG 1.30 skips deletion when observedGeneration matches. Changing only an
 // already deleting spec wakes its finalizer without allowing another apply.
 func quiesceRetainedSubscription(ctx context.Context, c client.Client, subscription *cnpgv1.Subscription) error {
-	if subscription.DeletionTimestamp == nil || subscription.Spec.ReclaimPolicy != cnpgv1.SubscriptionReclaimRetain {
+	if subscription.Spec.ReclaimPolicy != cnpgv1.SubscriptionReclaimRetain {
 		return fmt.Errorf("subscription writer quiescence requires deleting Retain intent")
 	}
-	if !slices.Contains(subscription.Finalizers, cnpgutils.SubscriptionFinalizerName) || subscription.Generation != subscription.Status.ObservedGeneration {
+	return wakeDeletingDeclaration(ctx, c, subscription, &subscription.Spec.Parameters, "enabled", subscription.Status.ObservedGeneration, cnpgutils.SubscriptionFinalizerName)
+}
+
+func wakeDeletingDeclaration(ctx context.Context, c client.Client, object client.Object, parameters *map[string]string, parameter string, observed int64, finalizer string) error {
+	if object.GetDeletionTimestamp() == nil {
+		return fmt.Errorf("writer acknowledgement requires a deleting declaration")
+	}
+	if !slices.Contains(object.GetFinalizers(), finalizer) || object.GetGeneration() != observed {
 		return nil
 	}
-	original := subscription.DeepCopy()
-	subscription.Spec.Parameters = maps.Clone(subscription.Spec.Parameters)
-	if subscription.Spec.Parameters == nil {
-		subscription.Spec.Parameters = map[string]string{}
+	original := object.DeepCopyObject().(client.Object)
+	*parameters = maps.Clone(*parameters)
+	if *parameters == nil {
+		*parameters = map[string]string{}
 	}
-	if subscription.Spec.Parameters["enabled"] == "false" {
-		subscription.Spec.Parameters["enabled"] = "true"
+	if (*parameters)[parameter] == "false" {
+		(*parameters)[parameter] = "true"
 	} else {
-		subscription.Spec.Parameters["enabled"] = "false"
+		(*parameters)[parameter] = "false"
 	}
-	return c.Patch(ctx, subscription, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
+	return c.Patch(ctx, object, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{}))
 }
