@@ -82,29 +82,24 @@ Produces: Key1=true,Key2=false
 */}}
 {{- define "splunk-operator.featureGates" -}}
 {{- $pairs := list -}}
-{{- range $gate, $enabled := .Values.splunkOperator.featureGates -}}
+{{- range $gate, $enabled := (include "splunk-operator.effectiveFeatureGates" . | fromJson) -}}
 {{- $pairs = append $pairs (printf "%s=%t" $gate $enabled) -}}
 {{- end -}}
 {{- join "," $pairs -}}
 {{- end }}
 
 {{/*
-"true" when a feature gate is on, as the operator will see it. The chart renders a
-failurePolicy Fail webhook only while its gate is on, so it must agree with the
-operator however the gate was set, or matching writes are rejected.
+Feature gate configuration in operator application order, with shared-service
+defaults added only after resolving explicit choices.
 The operator applies three passes in order, each starting from the state the last
 left (k8s.io/component-base featuregate): ENABLE_VALIDATION_WEBHOOK=true in
 extraEnvs (deprecated, sets ValidationWebhook); FEATURE_GATES in extraEnvs;
 splunkOperator.featureGates (rendered as --feature-gates). In each pass a key
 naming the gate sets it, and All<stage> (AllAlpha, AllBeta) sets it only if no
 earlier pass has. A gate nothing sets keeps its default.
-Call with (dict "ctx" . "gate" "<name>" "stage" "<Alpha|Beta|GA>" "default" <bool>);
-stage and default must match defaultFeatureGates in pkg/config/featuregates.go.
 */}}
-{{- define "splunk-operator.featureGateEnabled" -}}
-{{- $gate := .gate -}}
-{{- $all := printf "All%s" .stage -}}
-{{- $values := .ctx.Values -}}
+{{- define "splunk-operator.featureGateConfiguration" -}}
+{{- $values := .Values -}}
 {{- $truthy := list "1" "t" "true" -}}
 {{- $legacy := dict -}}
 {{- $env := dict -}}
@@ -129,22 +124,54 @@ stage and default must match defaultFeatureGates in pkg/config/featuregates.go.
 {{- end -}}
 {{- end -}}
 {{- end -}}
-{{- $flags := dict -}}
-{{- range $name, $value := ($values.splunkOperator.featureGates | default dict) -}}
-{{- $_ := set $flags $name (has (lower (toString $value)) $truthy) -}}
+{{- $flags := deepCopy ($values.splunkOperator.featureGates | default dict) -}}
+{{- $passes := list $legacy $env $flags -}}
+{{- $required := dict -}}
+{{- if $values.sharedKVService.enabled -}}
+{{- $_ := set $required "KVService" "sharedKVService" -}}
+{{- $_ := set $required "PostgresController" "sharedKVService" -}}
 {{- end -}}
+{{- if $values.sharedPostgres.enabled -}}
+{{- $_ := set $required "PostgresController" "sharedPostgres" -}}
+{{- end -}}
+{{- range $gate, $workload := $required -}}
+{{- $state := include "splunk-operator.resolveFeatureGate" (dict "passes" $passes "gate" $gate "stage" "Alpha" "default" false) | fromJson -}}
+{{- if not $state.isSet -}}
+{{- $_ := set $flags $gate true -}}
+{{- end -}}
+{{- end -}}
+{{- toJson (dict "passes" $passes "required" $required) -}}
+{{- end }}
+
+{{/* Resolve one gate without parsing configuration or applying workload defaults. */}}
+{{- define "splunk-operator.resolveFeatureGate" -}}
+{{- $gate := .gate -}}
+{{- $all := printf "All%s" .stage -}}
+{{- $truthy := list "1" "t" "true" -}}
 {{- $isSet := false -}}
 {{- $enabled := .default -}}
-{{- range (list $legacy $env $flags) -}}
+{{- range .passes -}}
 {{- if hasKey . $gate -}}
-{{- $enabled = index . $gate -}}
+{{- $enabled = has (lower (toString (index . $gate))) $truthy -}}
 {{- $isSet = true -}}
 {{- else if and (not $isSet) (hasKey . $all) -}}
-{{- $enabled = index . $all -}}
+{{- $enabled = has (lower (toString (index . $all))) $truthy -}}
 {{- $isSet = true -}}
 {{- end -}}
 {{- end -}}
-{{- if $enabled -}}
+{{- toJson (dict "isSet" $isSet "enabled" $enabled) -}}
+{{- end }}
+
+{{/*
+"true" when a gate is on, as the operator will see it. Webhooks and RBAC must
+agree with the operator. Call with (dict "ctx" . "gate" "<name>" "stage"
+"<Alpha|Beta|GA>" "default" <bool>); stage and default must match
+defaultFeatureGates in pkg/config/featuregates.go.
+*/}}
+{{- define "splunk-operator.featureGateEnabled" -}}
+{{- $config := include "splunk-operator.featureGateConfiguration" .ctx | fromJson -}}
+{{- $state := include "splunk-operator.resolveFeatureGate" (dict "passes" $config.passes "gate" .gate "stage" .stage "default" .default) | fromJson -}}
+{{- if $state.enabled -}}
 true
 {{- end -}}
 {{- end }}
@@ -278,3 +305,15 @@ its configuration and webhook Service independently.
   resources: [postgresclusterclasses]
   verbs: [get, list, watch]
 {{- end }}
+
+{{/* Render only CLI choices and genuinely unset required controller gates. */}}
+{{- define "splunk-operator.effectiveFeatureGates" -}}
+{{- $config := include "splunk-operator.featureGateConfiguration" . | fromJson -}}
+{{- range $gate, $workload := $config.required -}}
+{{- $state := include "splunk-operator.resolveFeatureGate" (dict "passes" $config.passes "gate" $gate "stage" "Alpha" "default" false) | fromJson -}}
+{{- if not $state.enabled -}}
+{{- fail (printf "%s.enabled requires the %s feature gate" $workload $gate) -}}
+{{- end -}}
+{{- end -}}
+{{- toJson (index $config.passes 2) -}}
+{{- end -}}

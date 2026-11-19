@@ -34,6 +34,9 @@ kubectl apply -f https://github.com/splunk/splunk-operator/releases/download/3.2
 
 Helm provides a long list of commands to manage your deployment, we'll be going over a few useful ones in the sections to come. You can learn more about supported commands [here](https://helm.sh/docs/helm/helm/).
 
+For opt-in shared PostgreSQL and KVService provisioning, required values and
+readiness checks, see [KVService through Helm](../operate/KVServiceHelm.md).
+
 ## Splunk Operator deployments
 
 Installing the ```splunk/splunk-operator``` chart deploys the Splunk Operator with cluster-wide access. View the configurable values for the chart using the following command:

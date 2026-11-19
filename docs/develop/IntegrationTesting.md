@@ -34,6 +34,34 @@ The [runner](../../kuttl/tests/helm-shared-postgresql/run.sh) checks the authori
 context, namespace and required CRDs before starting KUTTL; see the
 [shared-cluster guide](../postgresql/shared-cluster.md) for installation prerequisites.
 
+### KVService Helm readiness hook
+
+`make helm-kvservice-readiness-test` executes real Helm installs/upgrades and the
+production readiness Job on a fresh kind cluster. It uses status-controlled CRs
+instead of starting PostgreSQL, KVService or Splunk. It verifies readiness ordering,
+stale observed generations, named-resource RBAC, deadline failure, failed-hook
+replacement and successful-hook cleanup. This isolates Helm/Job behavior; it does
+not replace full shared-service acceptance testing.
+
+Use a private `KUBECONFIG` and explicitly authorize that fresh context:
+
+```bash
+export KUBECONFIG="$(mktemp)"
+kind create cluster --name kvs-readiness --image kindest/node:v1.37.0 --kubeconfig "$KUBECONFIG"
+HELM_KVS_READINESS_CONTEXT=kind-kvs-readiness make helm-kvservice-readiness-test
+kind delete cluster --name kvs-readiness
+rm "$KUBECONFIG"
+unset KUBECONFIG
+```
+
+The runner requires Helm, kubectl, Python 3 and a current context matching the
+explicit kind context. It refuses existing PostgreSQL/KVService CRDs, creates and
+removes only its own fixture CRDs/namespace, and prints Helm/Job diagnostics on
+failure. The cluster must be able to pull the chart's pinned readiness image.
+Use a Kubernetes minor compatible with that kubectl image (currently 1.37).
+With Helm 4.0.1, set `HELM_KVS_READINESS_WAIT_STRATEGY=legacy`; its default watcher
+does not promptly propagate failed hook Jobs. Helm 3 needs no strategy override.
+
 ## PostgreSQL image inputs
 
 `test/postgrescontrollers` reads image inputs when a selected spec executes; compilation

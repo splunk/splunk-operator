@@ -1,0 +1,31 @@
+{{- if .Values.sharedKVService.enabled -}}
+{{- include "splunk-operator.sharedKVServiceValidate" . -}}
+apiVersion: enterprise.splunk.com/v4
+kind: KVService
+metadata:
+  name: {{ .Values.sharedKVService.name | quote }}
+  namespace: {{ include "splunk-operator.namespace" . | quote }}
+  labels:
+    {{- include "splunk-operator.labels" . | nindent 4 }}
+spec:
+  image: {{ .Values.sharedKVService.image | quote }}
+  imagePullPolicy: {{ .Values.sharedKVService.imagePullPolicy }}
+  {{- with .Values.sharedKVService.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  replicas: {{ .Values.sharedKVService.replicas }}
+  resources:
+    {{- toYaml .Values.sharedKVService.resources | nindent 4 }}
+  postgres:
+    clusterRef:
+      name: {{ include "splunk-operator.sharedKVServicePostgresName" . | quote }}
+  {{- with .Values.sharedKVService.certs }}
+  certs:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.sharedKVService.autoscaling }}
+  autoscaling:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,122 @@
+{{- if .Values.sharedKVService.enabled -}}
+{{- $namespace := include "splunk-operator.namespace" . -}}
+{{- $name := include "splunk-operator.sharedKVServiceReadinessName" . -}}
+{{- $postgres := include "splunk-operator.sharedKVServicePostgresName" . -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace | quote }}
+  labels:
+    {{- include "splunk-operator.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace | quote }}
+  labels:
+    {{- include "splunk-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [platform.splunk.com]
+    resources: [postgresclusters]
+    resourceNames: [{{ $postgres | quote }}]
+    verbs: [get, list, watch]
+  - apiGroups: [enterprise.splunk.com]
+    resources: [kvservices]
+    resourceNames: [{{ .Values.sharedKVService.name | quote }}]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace | quote }}
+  labels:
+    {{- include "splunk-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ $namespace | quote }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}
+  namespace: {{ $namespace | quote }}
+  labels:
+    {{- include "splunk-operator.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.sharedKVService.readiness.timeoutSeconds }}
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      serviceAccountName: {{ $name }}
+      restartPolicy: Never
+      securityContext:
+        {{- toYaml .Values.sharedKVService.readiness.securityContext | nindent 8 }}
+      {{- with .Values.sharedKVService.readiness.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: wait-postgres
+          image: {{ .Values.sharedKVService.readiness.image | quote }}
+          command: ["/bin/kubectl"]
+          args:
+            - --namespace={{ $namespace }}
+            - wait
+            - --for=condition=Ready
+            - postgresclusters.platform.splunk.com/{{ $postgres }}
+            - --timeout={{ .Values.sharedKVService.readiness.timeoutSeconds }}s
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 128Mi}
+          volumeMounts:
+            - name: cache
+              mountPath: /tmp
+          env:
+            - name: HOME
+              value: /tmp
+      containers:
+        - name: wait-kvservice
+          image: {{ .Values.sharedKVService.readiness.image | quote }}
+          command: ["/bin/kubectl"]
+          args:
+            - --namespace={{ $namespace }}
+            - wait
+            - --for=condition=Ready
+            - kvservices.enterprise.splunk.com/{{ .Values.sharedKVService.name }}
+            - --timeout={{ .Values.sharedKVService.readiness.timeoutSeconds }}s
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 128Mi}
+          volumeMounts:
+            - name: cache
+              mountPath: /tmp
+          env:
+            - name: HOME
+              value: /tmp
+      volumes:
+        - name: cache
+          emptyDir:
+            sizeLimit: 16Mi
+{{- end }}

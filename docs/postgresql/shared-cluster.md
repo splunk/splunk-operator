@@ -197,9 +197,11 @@ Other `PostgresDatabase` resources explicitly set `spec.clusterRef.name` to the
 shared cluster in the same namespace. Dedicated clusters use their own
 reference.
 
-KVService is deployed separately by its owner. Configure its
-`spec.postgres.clusterRef.name` with the shared `PostgresCluster` name in the
-same namespace. Read the generated name from the release's resources; see
+Optionally enable `sharedKVService.enabled` to deploy KVService in the same Helm
+release; see [KVService through Helm](../operate/KVServiceHelm.md). KVService stays
+disabled by default. For a separately managed KVService, configure its
+`spec.postgres.clusterRef.name` with the shared `PostgresCluster` name in the same
+namespace. Read the generated name from the release's resources; see
 [KVService configuration](../operate/KVService.md#namespace-driven-tenant-provisioning).
 
 Wait for the application `PostgresDatabase` Ready condition. Its
