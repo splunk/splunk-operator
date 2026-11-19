@@ -403,6 +403,7 @@ func postgresDatabaseForClusterPredicator() predicate.Predicate {
 			return !equality.Semantic.DeepEqual(oldDB.Status.Databases, newDB.Status.Databases) ||
 				!equality.Semantic.DeepEqual(oldDB.Status.EndpointPreparation, newDB.Status.EndpointPreparation) ||
 				!equality.Semantic.DeepEqual(oldDB.Status.EndpointPublication, newDB.Status.EndpointPublication) ||
+				!equality.Semantic.DeepEqual(oldDB.Status.EnvironmentRetirement, newDB.Status.EnvironmentRetirement) ||
 				!equality.Semantic.DeepEqual(
 					oldDB.Status.CustomMetricsPublication,
 					newDB.Status.CustomMetricsPublication,

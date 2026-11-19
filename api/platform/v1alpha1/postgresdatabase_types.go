@@ -301,6 +301,51 @@ type DatabaseEndpointAcknowledgementStatus struct {
 	AcknowledgedAt *metav1.Time `json:"acknowledgedAt,omitempty"`
 }
 
+// PostgresDatabaseEnvironmentRetirementStatus binds child proofs to one retirement request.
+type PostgresDatabaseEnvironmentRetirementStatus struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:MinLength=1
+	ParentUID k8stypes.UID `json:"parentUID"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	AttemptID string `json:"attemptID"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	RetirementGeneration int64 `json:"retirementGeneration"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	ObservedDatabaseGeneration int64 `json:"observedDatabaseGeneration"`
+
+	// EnvironmentRef identifies the retired CNPG Cluster.
+	// +kubebuilder:validation:Required
+	EnvironmentRef corev1.ObjectReference `json:"environmentRef"`
+
+	// Databases includes removed definitions from the parent's frozen inventory.
+	// +listType=map
+	// +listMapKey=databaseName
+	// +optional
+	Databases []DatabaseEnvironmentRetirementStatus `json:"databases,omitempty"`
+}
+
+// DatabaseEnvironmentRetirementStatus records verified provider declaration absence.
+type DatabaseEnvironmentRetirementStatus struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	DatabaseName string `json:"databaseName"`
+
+	// Resources identifies the declarations verified absent.
+	// +listType=atomic
+	// +optional
+	Resources []corev1.ObjectReference `json:"resources,omitempty"`
+
+	// +optional
+	AcknowledgedAt *metav1.Time `json:"acknowledgedAt,omitempty"`
+}
+
 // PostgresDatabaseStatus defines the observed state of PostgresDatabase.
 type PostgresDatabaseStatus struct {
 	// +optional
@@ -326,6 +371,9 @@ type PostgresDatabaseStatus struct {
 	// EndpointPublication acknowledges verified post-commit ConfigMap publication.
 	// +optional
 	EndpointPublication *PostgresDatabaseEndpointAcknowledgementStatus `json:"endpointPublication,omitempty"`
+	// EnvironmentRetirement acknowledges removal from a non-authoritative environment.
+	// +optional
+	EnvironmentRetirement *PostgresDatabaseEnvironmentRetirementStatus `json:"environmentRetirement,omitempty"`
 	// ObservedGeneration represents the .metadata.generation that the status was set based upon.
 	// +optional
 	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`

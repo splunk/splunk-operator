@@ -124,6 +124,7 @@ func PostgresDatabaseService(
 		wasReady: postgresDB.Status.Phase != nil && *postgresDB.Status.Phase == string(readyDBPhase),
 	}
 	for _, phase := range []func(context.Context) (ctrl.Result, error, bool){
+		r.reconcileRetirement,
 		r.initialize,
 		r.reconcileEndpoints,
 		r.publishMetricsParticipation,

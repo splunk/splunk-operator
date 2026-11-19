@@ -109,6 +109,7 @@ func (r *PostgresDatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		Metrics:             r.Metrics,
 		ClusterReader:       dbadapter.NewClusterReader(r.Client, r.IdentityResolver),
 		DatabaseProvisioner: dbcnpgadapter.NewDatabaseProvisioner(r.Client, r.Scheme),
+		EnvironmentRetirer:  dbcnpgadapter.NewEnvironmentRetirer(r.Client, r.APIReader),
 		NewCustomMetricsAcknowledgementRepo: func(status *platformv1alpha1.CustomMetricsStatus) dbmetrics.AcknowledgementRepository {
 			return dbmetricsadapter.NewAcknowledgementRepository(status)
 		},

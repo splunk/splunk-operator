@@ -161,6 +161,11 @@ func TestPostgresDatabaseForClusterPredicator(t *testing.T) {
 	publicationUpdated.Status.EndpointPublication = &platformv1alpha1.PostgresDatabaseEndpointAcknowledgementStatus{AttemptID: "a1"}
 	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: publicationUpdated}))
 
+	retirementUpdated := old.DeepCopy()
+	retirementUpdated.Status.EnvironmentRetirement = &platformv1alpha1.PostgresDatabaseEnvironmentRetirementStatus{AttemptID: "a1", RetirementGeneration: 1}
+	assert.True(t, pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: retirementUpdated}))
+	assert.False(t, pred.Update(event.UpdateEvent{ObjectOld: retirementUpdated, ObjectNew: retirementUpdated.DeepCopy()}))
+
 	deleting := dbWithStatusRoles("db", "pg", "app_admin")
 	now := metav1.Now()
 	deleting.DeletionTimestamp = &now

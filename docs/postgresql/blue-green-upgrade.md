@@ -170,6 +170,18 @@ Inspect the latest `status.postgresMajorUpgradeStatus` entry:
 | `blueGreen.completion.replicationRemovedAt` | Verified replication teardown |
 | `blueGreen.completion.sourceCredentialsRetiredAt`, `credentialsRemovedAt` | Source password retirement and attempt Secret removal |
 
+| `blueGreen.cleanup.environmentRef`, `retirementGeneration` | Exact retiring environment and independent retirement revision |
+| `blueGreen.cleanup.retirementAcknowledgements` | Child/resource inventory and aggregated retirement proofs |
+| `blueGreen.cleanup.retiredResources` | Exact parent-owned resource identities retained through deletion retries |
+
+Each `PostgresDatabase.status.environmentRetirement` proof binds its parent UID,
+attempt, retirement revision, environment UID, child generation, and provider
+Database identities. A proof from another generation or a recreated object
+cannot satisfy retirement. These optional status fields do not authorize
+deletion; cleanup still requires its separate permission and verified runtime
+checks. Application credentials and authoritative Database declarations are
+outside the retirement inventory.
+
 Abbreviated fields share the prefix of the first field in their row. The fence,
 drain, final LSN, sequence, and parity fields are under `blueGreen.switchover`.
 Phase `PostUpgradeBackup` means green is available and target-major recoverability

@@ -18,6 +18,8 @@ package core
 import (
 	"errors"
 
+	"time"
+
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	dbmetrics "github.com/splunk/splunk-operator/pkg/postgresql/database/core/custom_metrics"
 	reconciliationtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/core/types/reconciliation"
@@ -27,7 +29,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"time"
 )
 
 // ReconcileContext bundles infrastructure dependencies injected by the controller.
@@ -40,6 +41,7 @@ type ReconcileContext struct {
 	Metrics                             ports.Recorder
 	ClusterReader                       dbclusterinfo.ClusterReader
 	DatabaseProvisioner                 DatabaseProvisioner
+	EnvironmentRetirer                  EnvironmentRetirer
 	NewCustomMetricsAcknowledgementRepo func(*platformv1alpha1.CustomMetricsStatus) dbmetrics.AcknowledgementRepository
 }
 
