@@ -68,6 +68,9 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		return ctrl.Result{}, fmt.Errorf("reading current PostgresCluster: %w", err)
 	}
 	ctx = logging.WithLogger(ctx, logging.FromContext(ctx).With("func", "PostgresClusterService", "postgresCluster", parent.Name))
+	if parent.DeletionTimestamp != nil {
+		return handleFinalizer(ctx, rc, parent, backupBackend)
+	}
 	// Mode ownership comes from durable protocol state, not component blocking.
 	stage := cutoverStage(parent)
 	latest := mvutypes.LatestAttempt(parent.Status.PostgresMajorUpgradeStatus)
@@ -170,21 +173,6 @@ func reconcileOrdinaryCluster(ctx context.Context, rc *ReconcileContext, postgre
 		return true, advanceClusterPhase(ctx, rc, postgresCluster, pendingClusterPhase)
 	}
 
-	// Finalizer handling must come before any other processing.
-	if err := handleFinalizer(ctx, rc, postgresCluster, authority, backupBackend); err != nil {
-		if apierrors.IsNotFound(err) {
-			logger.InfoContext(ctx, "PostgresCluster already deleted, skipping finalizer update")
-			return ctrl.Result{}, nil
-		}
-		rc.emitWarning(postgresCluster, EventCleanupFailed, fmt.Sprintf("cleanup failed for PostgresCluster %s — check operator logs", postgresCluster.Name))
-		statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterDeleteFailed,
-			fmt.Sprintf("Failed to delete resources during cleanup: %v", err), failedClusterPhase)
-		return ctrl.Result{}, errors.Join(fmt.Errorf("failed to handle finalizer: %w", err), statusErr)
-	}
-	if postgresCluster.GetDeletionTimestamp() != nil {
-		logger.InfoContext(ctx, "deletion cleanup complete, finalizer removed")
-		return ctrl.Result{}, nil
-	}
 	if err := validateAuthoritativeCNPGEnvironment(ctx, c, authority); err != nil {
 		rc.emitWarning(postgresCluster, EventClusterCreateFailed, fmt.Sprintf("authoritative CNPG environment is invalid for PostgresCluster %s — check operator logs", postgresCluster.Name))
 		statusErr := updateStatus(clusterReady, metav1.ConditionFalse, reasonClusterGetFailed,
@@ -691,20 +679,11 @@ func deleteCNPGCluster(ctx context.Context, c client.Client, cnpgCluster *cnpgv1
 	return nil
 }
 
-// handleFinalizer executes the role-aware cleanup plan for every environment
-// the resolved card manages, then removes the PostgresCluster finalizer.
-func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *platformv1alpha1.PostgresCluster, authority identitytypes.ClusterCard, backupBackend BackupBackend) error {
+// finalizeManagedEnvironments applies the conventional environment plan.
+func finalizeManagedEnvironments(ctx context.Context, rc *ReconcileContext, cluster *platformv1alpha1.PostgresCluster, authority identitytypes.ClusterCard, backupBackend BackupBackend) error {
 	c := rc.Client
 	scheme := rc.Scheme
-	logger := logging.FromContext(ctx).With("func", "handleFinalizer")
-	if cluster.GetDeletionTimestamp() == nil {
-		logger.InfoContext(ctx, "PostgresCluster not marked for deletion, skipping finalizer logic")
-		return nil
-	}
-	if !controllerutil.ContainsFinalizer(cluster, PostgresClusterFinalizerName) {
-		logger.InfoContext(ctx, "finalizer not present on PostgresCluster, skipping finalizer logic")
-		return nil
-	}
+	logger := logging.FromContext(ctx)
 	if rc.EnvironmentNamer == nil {
 		return fmt.Errorf("environment namer is required")
 	}
@@ -786,7 +765,7 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *platfor
 			// archiver, or — if the ObjectStore lingers — S3 growing unbounded with no owner to
 			// reclaim it). This mirrors the volume-snapshot survivor, which retains its dormant
 			// backup config but runs no active archiver. Existing S3 backups are untouched.
-			if removeBarmanWALArchiverPlugin(cnpgCluster) {
+			if RemoveBarmanWALArchiverPlugin(cnpgCluster) {
 				logger.InfoContext(ctx, "stripped barman-cloud WAL archiver plugin from retained CNPG Cluster")
 			}
 			if err := patchObject(ctx, c, originalCNPG, cnpgCluster, "CNPGCluster"); err != nil {
@@ -846,16 +825,6 @@ func handleFinalizer(ctx context.Context, rc *ReconcileContext, cluster *platfor
 		}
 	}
 
-	controllerutil.RemoveFinalizer(cluster, PostgresClusterFinalizerName)
-	if err := c.Update(ctx, cluster); err != nil {
-		if apierrors.IsNotFound(err) {
-			logger.InfoContext(ctx, "PostgresCluster already deleted, skipping finalizer update")
-			return nil
-		}
-		return fmt.Errorf("removing finalizer: %w", err)
-	}
-	rc.emitNormal(cluster, EventCleanupComplete, fmt.Sprintf("cleanup complete for PostgresCluster %s (policy: %s)", cluster.Name, policy))
-	logger.InfoContext(ctx, "finalizer removed, cleanup complete")
 	return nil
 }
 
@@ -888,11 +857,11 @@ func removeOwnerRef(scheme *runtime.Scheme, owner, obj client.Object) (bool, err
 	return true, nil
 }
 
-// removeBarmanWALArchiverPlugin drops the operator-managed barman-cloud plugin entry from the
+// RemoveBarmanWALArchiverPlugin drops the operator-managed barman-cloud plugin entry from the
 // CNPG cluster spec, leaving any plugins owned by other controllers/users intact. It returns
 // true if an entry was removed. Used when orphaning a cluster on Retain so the survivor stops
 // archiving WAL to an ObjectStore that is about to be garbage-collected.
-func removeBarmanWALArchiverPlugin(cnpgCluster *cnpgv1.Cluster) bool {
+func RemoveBarmanWALArchiverPlugin(cnpgCluster *cnpgv1.Cluster) bool {
 	filtered := cnpgCluster.Spec.Plugins[:0:0]
 	removed := false
 	for _, p := range cnpgCluster.Spec.Plugins {

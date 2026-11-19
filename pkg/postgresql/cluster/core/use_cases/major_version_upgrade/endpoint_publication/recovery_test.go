@@ -369,11 +369,11 @@ func TestObservedCommitSurvivesAccessSelectorDriftBeforeReceipt(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, committed, "access metadata drift cannot reverse the commit")
 			require.ErrorContains(t, coordinator.RestoreUncommittedCanonical(t.Context(), clusterKey, "attempt"), "cannot restore blue after endpoint commit")
-			require.False(t, canonicalCommittedFor(store.parent, bg, store.configMaps["cluster-config"]), "the projection still needs repair")
+			require.False(t, coordinator.canonicalCommittedFor(store.parent, bg, store.configMaps["cluster-config"]), "the projection still needs repair")
 
 			bg.CommitReceipt = receipt
 			require.NoError(t, coordinator.RecoverCanonical(t.Context(), clusterKey, "attempt"))
-			require.True(t, canonicalCommittedFor(store.parent, currentBG(store), store.configMaps["cluster-config"]))
+			require.True(t, coordinator.canonicalCommittedFor(store.parent, currentBG(store), store.configMaps["cluster-config"]))
 		})
 	}
 }
@@ -559,4 +559,62 @@ func TestCommitReauthorizesDeadlineAfterPreparationBeforeCanonicalCAS(t *testing
 	require.Equal(t, 2, calls)
 	require.Equal(t, canonical, store.configMaps["cluster-config"], "the final authorization must precede the irreversible write")
 	require.Nil(t, currentBG(store).CommitReceipt)
+}
+
+func TestFinalizationCoordinatorRestoresDeletingParentWithoutNewCommit(t *testing.T) {
+	coordinator, store, key, proof := preparedRecoveryFixture(t)
+	store.parent.DeletionTimestamp = new(metav1.Now())
+	recovery := coordinator.ForFinalization(func(parent *platformv1alpha1.PostgresCluster, cm *corev1.ConfigMap) bool {
+		return metav1.IsControlledBy(cm, parent)
+	})
+	committed, err := recovery.ObserveCommit(t.Context(), key, "attempt")
+	require.NoError(t, err)
+	assert.False(t, committed)
+	require.Error(t, coordinator.CommitCanonical(t.Context(), key, "attempt"))
+	require.NoError(t, recovery.RestoreUncommittedCanonical(t.Context(), key, "attempt"))
+	assert.True(t, endpointDataMatches(store.configMaps["cluster-config"].Data, proof.Blue))
+	assert.Nil(t, currentBG(store).CommitReceipt)
+}
+
+func TestFinalizationCoordinatorRecoversOnlyAnExistingCommitReceipt(t *testing.T) {
+	for _, committed := range []bool{false, true} {
+		coordinator, store, key, _ := preparedRecoveryFixture(t)
+		if committed {
+			require.NoError(t, coordinator.CommitCanonical(t.Context(), key, "attempt"))
+			currentBG(store).CommitReceipt = nil
+			store.parent.Status.BlueGreenCommitSequence = 0
+		}
+		before := store.configMaps["cluster-config"].DeepCopy()
+		store.parent.DeletionTimestamp = new(metav1.Now())
+		recovery := coordinator.ForFinalization(func(parent *platformv1alpha1.PostgresCluster, cm *corev1.ConfigMap) bool {
+			return metav1.IsControlledBy(cm, parent)
+		})
+		err := recovery.RecoverCanonical(t.Context(), key, "attempt")
+		if committed {
+			require.NoError(t, err)
+			require.NotNil(t, currentBG(store).CommitReceipt)
+		} else {
+			require.Error(t, err)
+			assert.Nil(t, currentBG(store).CommitReceipt)
+		}
+		assert.Equal(t, before, store.configMaps["cluster-config"], "receipt recovery cannot write a new canonical commit")
+	}
+}
+
+func TestFinalizationCoordinatorKeepsCommitCapabilitiesSeparate(t *testing.T) {
+	coordinator, store, key, _ := preparedRecoveryFixture(t)
+	recovery := coordinator.ForFinalization(nil)
+	_, canCommit := any(recovery).(interface {
+		CommitCanonical(context.Context, types.NamespacedName, string) error
+	})
+	assert.False(t, canCommit)
+	_, err := recovery.ObserveCommit(t.Context(), key, "attempt")
+	require.ErrorIs(t, err, ErrStaleAttempt)
+	require.NoError(t, coordinator.CommitCanonical(t.Context(), key, "attempt"), "constructing recovery must preserve normal commit authorization")
+	store.parent.DeletionTimestamp = new(metav1.Now())
+	_, err = coordinator.ObserveCommit(t.Context(), key, "attempt")
+	require.ErrorIs(t, err, ErrStaleAttempt)
+	committed, err := recovery.ObserveCommit(t.Context(), key, "attempt")
+	require.NoError(t, err, "deletion recovery does not depend on an ownership callback")
+	assert.True(t, committed)
 }

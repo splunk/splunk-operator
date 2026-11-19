@@ -339,3 +339,17 @@ func TestRetiredResourceInventoryCannotBeDiscarded(t *testing.T) {
 	next.Cleanup.RetiredResources[0].UID = "replacement"
 	require.Error(t, preserveCleanupProgress(previous, next))
 }
+
+func TestBlueGreenFinalizationSelection(t *testing.T) {
+	parent := &platformv1alpha1.PostgresCluster{}
+	assert.False(t, BlueGreenFinalizationRequired(parent))
+	parent.Status.PostgresMajorUpgradeStatus = []platformv1alpha1.PostgresMajorUpgradeStatus{{Strategy: new("pgUpgrade")}}
+	assert.False(t, BlueGreenFinalizationRequired(parent))
+	parent.Status.PostgresMajorUpgradeStatus = append([]platformv1alpha1.PostgresMajorUpgradeStatus{{BlueGreen: &platformv1alpha1.PostgresBlueGreenUpgradeStatus{AttemptID: "historical"}}}, parent.Status.PostgresMajorUpgradeStatus...)
+	assert.True(t, BlueGreenFinalizationRequired(parent))
+	parent.Status.PostgresMajorUpgradeStatus = nil
+	parent.Annotations = map[string]string{"platform.splunk.com/finalization-inventory": "forged inventory"}
+	assert.False(t, BlueGreenFinalizationRequired(parent))
+	parent.Status.Finalization = &platformv1alpha1.PostgresClusterFinalizationStatus{Version: 1}
+	assert.True(t, BlueGreenFinalizationRequired(parent))
+}

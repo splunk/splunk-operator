@@ -947,7 +947,7 @@ func TestHandleFinalizerUnknownDeletionPolicy(t *testing.T) {
 		EnvironmentNamer: testEnvironmentNamer,
 	}
 
-	err := handleFinalizer(t.Context(), rc, cluster, conventionalClusterCard(cluster), noopBackupBackend{})
+	err := finalizeManagedEnvironments(t.Context(), rc, cluster, conventionalClusterCard(cluster), noopBackupBackend{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), unknownPolicy)
@@ -995,7 +995,7 @@ func TestRemoveBarmanWALArchiverPlugin(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cnpg := &cnpgv1.Cluster{Spec: cnpgv1.ClusterSpec{Plugins: tt.plugins}}
 
-			removed := removeBarmanWALArchiverPlugin(cnpg)
+			removed := RemoveBarmanWALArchiverPlugin(cnpg)
 
 			assert.Equal(t, tt.expectedRemoved, removed)
 			gotNames := make([]string, 0, len(cnpg.Spec.Plugins))
@@ -1053,7 +1053,7 @@ func TestHandleFinalizerRetainStripsBarmanPlugin(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, cnpg).Build()
 	rc := &ReconcileContext{Client: c, APIReader: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
 
-	require.NoError(t, handleFinalizer(t.Context(), rc, cluster, conventionalClusterCard(cluster), noopBackupBackend{}))
+	require.NoError(t, finalizeManagedEnvironments(t.Context(), rc, cluster, conventionalClusterCard(cluster), noopBackupBackend{}))
 
 	got := &cnpgv1.Cluster{}
 	require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: "pg1", Namespace: "default"}, got))
@@ -1107,7 +1107,7 @@ func TestHandleFinalizerDeletesConventionalPoolersOnce(t *testing.T) {
 
 	card := testClusterCard(cluster, "primary-green", "")
 	card.Managed = append(card.Managed, testEnvironment(cluster, cluster.Name, "", identitytypes.EnvironmentRoleRetained))
-	require.NoError(t, handleFinalizer(t.Context(), rc, cluster, card, noopBackupBackend{}))
+	require.NoError(t, finalizeManagedEnvironments(t.Context(), rc, cluster, card, noopBackupBackend{}))
 	assert.Equal(t, 4, poolerGets, "each conventional pooler is checked and fetched once")
 	for _, name := range []string{"primary-pooler-rw", "primary-pooler-ro"} {
 		err := c.Get(t.Context(), client.ObjectKey{Name: name, Namespace: cluster.Namespace}, &cnpgv1.Pooler{})
@@ -1144,7 +1144,7 @@ func TestHandleFinalizerCleansScheduledBackupsForEveryManagedEnvironment(t *test
 	card := testClusterCard(cluster, green.Name, green.UID)
 	card.Managed = append(card.Managed, testEnvironment(cluster, conventional.Name, conventional.UID, identitytypes.EnvironmentRoleRetained))
 
-	require.NoError(t, handleFinalizer(t.Context(), rc, cluster, card, backend))
+	require.NoError(t, finalizeManagedEnvironments(t.Context(), rc, cluster, card, backend))
 	assert.ElementsMatch(t, []string{
 		"primary-backup", "primary-backup-objectstore",
 		"primary-green-backup", "primary-green-backup-objectstore",
@@ -1199,7 +1199,7 @@ func TestHandleFinalizerLeavesUnvalidatedCNPGClusters(t *testing.T) {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster, green).Build()
 			rc := &ReconcileContext{Client: c, APIReader: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10), EnvironmentNamer: testEnvironmentNamer}
 
-			require.NoError(t, handleFinalizer(t.Context(), rc, cluster, testClusterCard(cluster, green.Name, "expected-uid"), noopBackupBackend{}))
+			require.NoError(t, finalizeManagedEnvironments(t.Context(), rc, cluster, testClusterCard(cluster, green.Name, "expected-uid"), noopBackupBackend{}))
 			stored := &cnpgv1.Cluster{}
 			require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(green), stored))
 			assert.Equal(t, green.UID, stored.UID)
@@ -1263,7 +1263,7 @@ func TestHandleFinalizerRetainsConventionalAndCurrentEnvironments(t *testing.T) 
 
 	card := testClusterCard(cluster, "primary-green", "")
 	card.Managed = append(card.Managed, testEnvironment(cluster, cluster.Name, "", identitytypes.EnvironmentRoleRetained))
-	require.NoError(t, handleFinalizer(t.Context(), rc, cluster, card, noopBackupBackend{}))
+	require.NoError(t, finalizeManagedEnvironments(t.Context(), rc, cluster, card, noopBackupBackend{}))
 	for _, name := range []string{conventional.Name, current.Name} {
 		retained := &cnpgv1.Cluster{}
 		require.NoError(t, c.Get(t.Context(), client.ObjectKey{Name: name, Namespace: cluster.Namespace}, retained))
@@ -1302,7 +1302,7 @@ func TestHandleFinalizerDeletesConventionalAndCurrentEnvironments(t *testing.T) 
 
 	card := testClusterCard(cluster, "primary-green", "")
 	card.Managed = append(card.Managed, testEnvironment(cluster, cluster.Name, "", identitytypes.EnvironmentRoleRetained))
-	require.NoError(t, handleFinalizer(t.Context(), rc, cluster, card, noopBackupBackend{}))
+	require.NoError(t, finalizeManagedEnvironments(t.Context(), rc, cluster, card, noopBackupBackend{}))
 	for _, name := range []string{conventional.Name, current.Name} {
 		err := c.Get(t.Context(), client.ObjectKey{Name: name, Namespace: cluster.Namespace}, &cnpgv1.Cluster{})
 		assert.True(t, apierrors.IsNotFound(err), "%s must be deleted by the Delete finalizer", name)

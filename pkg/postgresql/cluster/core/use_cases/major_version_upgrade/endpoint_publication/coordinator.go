@@ -29,6 +29,7 @@ import (
 	"time"
 
 	platformv1alpha1 "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	mvutypes "github.com/splunk/splunk-operator/pkg/postgresql/cluster/core/types/major_version_upgrade"
 	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	pgendpointprotocol "github.com/splunk/splunk-operator/pkg/postgresql/shared/endpointprotocol"
 	corev1 "k8s.io/api/core/v1"
@@ -70,7 +71,17 @@ type ProofResolver interface {
 // Already committed records are repaired without asking permission to commit again.
 type CommitAuthorizer func(context.Context, *platformv1alpha1.PostgresCluster, *platformv1alpha1.PostgresBlueGreenUpgradeStatus, time.Time) error
 
+type parentLifecycle uint8
+
+const (
+	activeParent parentLifecycle = iota
+	deletingParent
+)
+
 type Coordinator struct {
+	lifecycle         parentLifecycle
+	retainedCanonical func(*platformv1alpha1.PostgresCluster, *corev1.ConfigMap) bool
+
 	store     Store
 	proof     ProofResolver
 	authorize CommitAuthorizer
@@ -98,6 +109,9 @@ func (c *Coordinator) CommitCanonical(ctx context.Context, key types.NamespacedN
 	if c == nil || c.store == nil || attemptID == "" {
 		return fmt.Errorf("endpoint coordinator, store, and attempt ID are required")
 	}
+	if c.lifecycle != activeParent {
+		return ErrStaleAttempt
+	}
 	for range 5 {
 		parent, bg, err := c.readCommitAttempt(ctx, key, attemptID)
 		if err != nil {
@@ -124,7 +138,7 @@ func (c *Coordinator) CommitCanonical(ctx context.Context, key types.NamespacedN
 		if canonical.Annotations[pgconninfo.AnnotationActiveEnvironment] == bg.Green.Ref.Name {
 			// Lost responses are repaired from the exact durable record, without
 			// depending on provider health or a still-open interruption deadline.
-			if !canonicalCommittedFor(parent, bg, canonical) {
+			if !c.canonicalCommittedFor(parent, bg, canonical) {
 				return ErrCanonicalMismatch
 			}
 		} else {
@@ -150,7 +164,7 @@ func (c *Coordinator) readCommitAttempt(ctx context.Context, key types.Namespace
 	if err != nil {
 		return nil, nil, err
 	}
-	entry, err := activeAttempt(parent, attemptID)
+	entry, err := c.activeAttempt(parent, attemptID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -169,13 +183,13 @@ func canonicalConfigMapKey(parent *platformv1alpha1.PostgresCluster) (types.Name
 
 // canonicalCommittedFor is the single acceptance predicate for a first commit,
 // lost-response recovery, and the read immediately before receipt persistence.
-func canonicalCommittedFor(parent *platformv1alpha1.PostgresCluster, bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus, cm *corev1.ConfigMap) bool {
+func (c *Coordinator) canonicalCommittedFor(parent *platformv1alpha1.PostgresCluster, bg *platformv1alpha1.PostgresBlueGreenUpgradeStatus, cm *corev1.ConfigMap) bool {
 	if bg == nil || bg.Green == nil || !preparedRoutingValid(bg) || cm == nil || cm.UID == "" ||
 		parent == nil || parent.Status.Resources == nil || parent.Status.Resources.ConfigMapRef == nil || cm.Name != parent.Status.Resources.ConfigMapRef.Name {
 		return false
 	}
 	p := bg.EndpointPreparation
-	return pgendpointprotocol.CanonicalOwnedByParent(parent, cm) &&
+	return c.canonicalOwnedByParent(parent, cm) &&
 		pgendpointprotocol.PublicationStampMatches(cm, bg, p.Generation, *p.EndpointFingerprint) &&
 		endpointDataMatches(cm.Data, p.Routing) && accessMetadataMatches(cm.Data, p.AccessMetadata)
 }
@@ -238,7 +252,7 @@ func (c *Coordinator) writeCanonicalCommit(ctx context.Context, parent *platform
 			return nil, err
 		}
 		latest, readErr := c.store.ReadConfigMap(ctx, key)
-		if readErr != nil || latest.UID != canonical.UID || !canonicalCommittedFor(parent, bg, latest) {
+		if readErr != nil || latest.UID != canonical.UID || !c.canonicalCommittedFor(parent, bg, latest) {
 			return nil, fmt.Errorf("updating canonical endpoint ConfigMap: %w", err)
 		}
 	}
@@ -246,7 +260,7 @@ func (c *Coordinator) writeCanonicalCommit(ctx context.Context, parent *platform
 	if err != nil {
 		return nil, err
 	}
-	if latest.UID != canonical.UID || !canonicalCommittedFor(parent, bg, latest) {
+	if latest.UID != canonical.UID || !c.canonicalCommittedFor(parent, bg, latest) {
 		return nil, ErrCanonicalMismatch
 	}
 	return latest, nil
@@ -270,7 +284,7 @@ func (c *Coordinator) recordCommitReceipt(ctx context.Context, key types.Namespa
 	if err != nil {
 		return err
 	}
-	if latest.UID != canonical.UID || !canonicalCommittedFor(parent, bg, latest) {
+	if latest.UID != canonical.UID || !c.canonicalCommittedFor(parent, bg, latest) {
 		return ErrCanonicalMismatch
 	}
 	sequence, err := nextCommitSequence(parent)
@@ -327,15 +341,14 @@ func (c *Coordinator) resolve(ctx context.Context, parent *platformv1alpha1.Post
 	return proof, pgconninfo.FingerprintEndpointData(proof.Green), nil
 }
 
-func activeAttempt(parent *platformv1alpha1.PostgresCluster, attemptID string) (*platformv1alpha1.PostgresMajorUpgradeStatus, error) {
-	if parent == nil || parent.UID == "" || parent.DeletionTimestamp != nil || attemptID == "" {
+func (c *Coordinator) activeAttempt(parent *platformv1alpha1.PostgresCluster, attemptID string) (*platformv1alpha1.PostgresMajorUpgradeStatus, error) {
+	if parent == nil || parent.UID == "" || (parent.DeletionTimestamp != nil) != (c.lifecycle == deletingParent) || attemptID == "" {
 		return nil, ErrStaleAttempt
 	}
-	entries := parent.Status.PostgresMajorUpgradeStatus
-	if len(entries) == 0 {
+	entry := mvutypes.LatestAttempt(parent.Status.PostgresMajorUpgradeStatus)
+	if entry == nil {
 		return nil, ErrStaleAttempt
 	}
-	entry := &entries[len(entries)-1]
 	if entry.BlueGreen == nil || entry.BlueGreen.AttemptID != attemptID {
 		return nil, ErrStaleAttempt
 	}
@@ -351,7 +364,7 @@ func (c *Coordinator) retryStatus(ctx context.Context, key types.NamespacedName,
 		if err != nil {
 			return err
 		}
-		entry, err := activeAttempt(parent, attemptID)
+		entry, err := c.activeAttempt(parent, attemptID)
 		if err != nil {
 			return err
 		}
@@ -449,4 +462,53 @@ func currentInventory(children map[string]platformv1alpha1.PostgresDatabase, fro
 		return nil, ErrIncompleteInventory
 	}
 	return result, nil
+}
+
+// RecoveryCoordinator exposes restoration and observation without commit capabilities.
+type RecoveryCoordinator struct{ coordinator *Coordinator }
+
+// ForFinalization isolates deletion recovery from the normal commit coordinator.
+func (c *Coordinator) ForFinalization(owns func(*platformv1alpha1.PostgresCluster, *corev1.ConfigMap) bool) *RecoveryCoordinator {
+	copy := *c
+	copy.lifecycle, copy.retainedCanonical = deletingParent, owns
+	return &RecoveryCoordinator{coordinator: &copy}
+}
+
+func (r *RecoveryCoordinator) ObserveCommit(ctx context.Context, key types.NamespacedName, attemptID string) (bool, error) {
+	return r.coordinator.ObserveCommit(ctx, key, attemptID)
+}
+func (r *RecoveryCoordinator) RestoreUncommittedCanonical(ctx context.Context, key types.NamespacedName, attemptID string) error {
+	return r.coordinator.RestoreUncommittedCanonical(ctx, key, attemptID)
+}
+func (r *RecoveryCoordinator) CancelPreparation(ctx context.Context, key types.NamespacedName, attemptID string, generation int64) error {
+	return r.coordinator.CancelPreparation(ctx, key, attemptID, generation)
+}
+func (r *RecoveryCoordinator) RecoverCanonical(ctx context.Context, key types.NamespacedName, attemptID string) error {
+	c := r.coordinator
+	parent, bg, err := c.readCommitAttempt(ctx, key, attemptID)
+	if err != nil {
+		return err
+	}
+	if bg.CommitReceipt != nil {
+		return c.RecoverCanonical(ctx, key, attemptID)
+	}
+	canonicalKey, err := canonicalConfigMapKey(parent)
+	if err != nil {
+		return err
+	}
+	canonical, err := c.store.ReadConfigMap(ctx, canonicalKey)
+	if err != nil {
+		return err
+	}
+	if !c.canonicalCommittedFor(parent, bg, canonical) {
+		return ErrCanonicalMismatch
+	}
+	return c.recordCommitReceipt(ctx, key, attemptID, canonical, bg.EndpointPreparation.Generation, *bg.EndpointPreparation.EndpointFingerprint)
+}
+
+func (c *Coordinator) canonicalOwnedByParent(parent *platformv1alpha1.PostgresCluster, cm *corev1.ConfigMap) bool {
+	if parent == nil || cm == nil || cm.DeletionTimestamp != nil || cm.Namespace != parent.Namespace {
+		return false
+	}
+	return pgendpointprotocol.CanonicalOwnedByParent(parent, cm) || c.retainedCanonical != nil && c.retainedCanonical(parent, cm)
 }

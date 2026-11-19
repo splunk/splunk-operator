@@ -92,7 +92,7 @@ func (c *Coordinator) requireCanonicalBlue(ctx context.Context, parent *platform
 	if err != nil {
 		return err
 	}
-	if !pgendpointprotocol.CanonicalOwnedByParent(parent, cm) || cm.Annotations[pgconninfo.AnnotationActiveEnvironment] == bg.Green.Ref.Name || !endpointDataMatches(cm.Data, expected) {
+	if !c.canonicalOwnedByParent(parent, cm) || cm.Annotations[pgconninfo.AnnotationActiveEnvironment] == bg.Green.Ref.Name || !endpointDataMatches(cm.Data, expected) {
 		return ErrCanonicalMismatch
 	}
 	return nil

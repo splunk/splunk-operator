@@ -171,7 +171,7 @@ func (t *BlueGreenReplicationTeardown) sourceSlotInventory(ctx context.Context, 
 	if err != nil && !apierrors.IsNotFound(err) {
 		return inventory, false, err
 	}
-	if err == nil && (secret.Labels[blueGreenAttemptLabel] != status.AttemptID || !metav1.IsControlledBy(secret, t.owner)) {
+	if err == nil && (secret.Labels[blueGreenAttemptLabel] != status.AttemptID || !finalizationOwns(t.owner, secret)) {
 		return inventory, false, fmt.Errorf("%w: subscriber identity Secret does not belong to the attempt", mvutypes.ErrUpgradeFlowFailed)
 	}
 	if legacy := secret.Annotations[teardownSubscriberAnnotation]; legacy != "" {
@@ -483,7 +483,7 @@ func (t *BlueGreenReplicationTeardown) deleteSecrets(ctx context.Context, attemp
 		if err != nil {
 			return false, err
 		}
-		if secret.Labels[blueGreenAttemptLabel] != attemptID || !metav1.IsControlledBy(secret, t.owner) {
+		if secret.Labels[blueGreenAttemptLabel] != attemptID || !finalizationOwns(t.owner, secret) {
 			return false, fmt.Errorf("%w: Secret %s does not belong to this attempt", mvutypes.ErrUpgradeFlowFailed, name)
 		}
 		gone = false
@@ -523,7 +523,7 @@ func (t *BlueGreenReplicationTeardown) environment(ctx context.Context, environm
 	if err != nil {
 		return nil, err
 	}
-	if environment.Ref.UID == "" || cluster.UID != environment.Ref.UID || !metav1.IsControlledBy(cluster, t.owner) {
+	if environment.Ref.UID == "" || cluster.UID != environment.Ref.UID || !finalizationOwns(t.owner, cluster) {
 		return nil, fmt.Errorf("%w: CNPG Cluster %s does not match the recorded environment", mvutypes.ErrUpgradeFlowFailed, cluster.Name)
 	}
 	return cluster, nil
