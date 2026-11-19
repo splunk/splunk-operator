@@ -46,6 +46,7 @@ func TestApplyKVServiceDeploymentTLSChanges(t *testing.T) {
 			cr := &enterpriseApi.KVService{Name: "kv", Namespace: "test", Spec: enterpriseApi.KVServiceSpec{Replicas: ptr.To(int32(1))}}
 			certs := []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "serving-cert"}, Role: enterpriseApi.CertRoleServer}}
 			if tt.currentTLS {
+				cr.Spec.Scheme = "https"
 				cr.Spec.Certs = certs
 			}
 			current := resources.NewKVServiceDeployment(cr)
@@ -53,8 +54,10 @@ func TestApplyKVServiceDeploymentTLSChanges(t *testing.T) {
 				current.Spec.Template.Spec.Containers[0].Command = nil
 				current.Spec.Template.Spec.Containers[0].Args = nil
 			}
+			cr.Spec.Scheme = "http"
 			cr.Spec.Certs = nil
 			if tt.desiredTLS {
+				cr.Spec.Scheme = "https"
 				cr.Spec.Certs = certs
 			}
 			desired := resources.NewKVServiceDeployment(cr)

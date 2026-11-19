@@ -60,7 +60,7 @@ func tenantFixture(t *testing.T) (context.Context, *enterpriseApi.KVService, cli
 		assert.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.PostgresController): old}))
 	})
 	cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "kvs2", Namespace: "shared", UID: "kvs-uid"},
-		Spec: enterpriseApi.KVServiceSpec{Postgres: enterpriseApi.KVServicePostgresSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}}}}
+		Spec: enterpriseApi.KVServiceSpec{Scheme: "http", Postgres: enterpriseApi.KVServicePostgresSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}}}}
 	ready, generation := "Ready", int64(1)
 	objects := []client.Object{cr,
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns-a", Labels: map[string]string{

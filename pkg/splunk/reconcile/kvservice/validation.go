@@ -17,6 +17,7 @@ package kvservice
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	"github.com/splunk/splunk-operator/pkg/config"
@@ -27,10 +28,21 @@ import (
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 )
 
 func validateKVServiceSpec(ctx context.Context, c splcommon.ControllerClient, cr *enterpriseApi.KVService) error {
 	spec := &cr.Spec
+	if spec.Scheme == "https" {
+		if len(spec.Certs) == 0 {
+			return fmt.Errorf("spec.scheme https requires a serving certificate in spec.certs")
+		}
+		for i, cert := range spec.Certs {
+			if problems := k8svalidation.IsDNS1123Subdomain(cert.SecretRef.Name); len(problems) > 0 {
+				return fmt.Errorf("spec.certs[%d].secretRef.name is invalid: %s", i, strings.Join(problems, "; "))
+			}
+		}
+	}
 	spec.Image = splutil.GetKVServiceImage(spec.Image)
 	for name, probe := range map[string]*enterpriseApi.Probe{"Liveness": spec.LivenessProbe, "Readiness": spec.ReadinessProbe} {
 		if probe != nil {
@@ -39,7 +51,7 @@ func validateKVServiceSpec(ctx context.Context, c splcommon.ControllerClient, cr
 			}
 		}
 	}
-	if len(spec.Certs) > 0 && !config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
+	if spec.Scheme == "https" && !config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
 		return fmt.Errorf("spec.certs requires the CertManagement feature gate")
 	}
 	if err := reconcileutil.ValidateSplunkGeneralTerms(); err != nil {
@@ -54,7 +66,7 @@ func validateKVServiceSpec(ctx context.Context, c splcommon.ControllerClient, cr
 		}
 	}
 	for _, env := range spec.ExtraEnv {
-		if category, managed := splutil.KVServiceManagedEnvironmentCategory(env.Name, len(spec.Certs) > 0); managed {
+		if category, managed := splutil.KVServiceManagedEnvironmentCategory(env.Name, spec.Scheme == "https"); managed {
 			return fmt.Errorf("spec.extraEnv cannot override operator-managed KVService %s environment variable %q", category, env.Name)
 		}
 	}

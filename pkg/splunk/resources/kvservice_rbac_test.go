@@ -27,23 +27,44 @@ import (
 func TestKVServicePackagedOperatorPermissions(t *testing.T) {
 	root := filepath.Join("..", "..", "..")
 	required := map[string][]string{
-		"events":                   {"create", "patch"},
-		"horizontalpodautoscalers": {"create", "delete", "get", "list", "update", "watch"},
-		"deployments":              {"create", "delete", "get", "list", "patch", "update", "watch"},
-		"kvservices":               {"create", "delete", "get", "list", "patch", "update", "watch"},
-		"kvservices/status":        {"get", "patch", "update"},
-		"kvservices/finalizers":    {"update"},
+		"namespaces":                        {"get", "list", "watch"},
+		"horizontalpodautoscalers":          {"create", "delete", "get", "list", "update", "watch"},
+		"events":                            {"create", "patch"},
+		"deployments":                       {"create", "delete", "get", "list", "patch", "update", "watch"},
+		"kvservices":                        {"create", "delete", "get", "list", "patch", "update", "watch"},
+		"kvservices/status":                 {"get", "patch", "update"},
+		"kvservices/finalizers":             {"update"},
+		"postgresclusterclasses":            {"get", "list", "watch"},
+		"postgresclusters":                  {"create", "delete", "get", "list", "patch", "update", "watch"},
+		"postgresdatabases":                 {"create", "delete", "get", "list", "patch", "update", "watch"},
+		"postgresclusters/status":           {"get", "patch", "update"},
+		"postgresdatabases/status":          {"get", "list", "patch", "update", "watch"},
+		"postgresclusters/finalizers":       {"update"},
+		"postgresdatabases/finalizers":      {"update"},
+		"networking.k8s.io:networkpolicies": {"get", "list", "watch"},
+	}
+	for _, resource := range []string{"backups", "clusters", "databases", "poolers", "publications", "scheduledbackups", "subscriptions"} {
+		required["postgresql.cnpg.io:"+resource] = []string{"create", "delete", "get", "list", "patch", "update", "watch"}
+	}
+	for _, resource := range []string{"backups/status", "clusters/status", "poolers/status", "publications/status", "scheduledbackups/status", "subscriptions/status"} {
+		required["postgresql.cnpg.io:"+resource] = []string{"get"}
 	}
 	check := func(t *testing.T, rules []rbacv1.PolicyRule) {
 		t.Helper()
 		for resource, verbs := range required {
 			group := "enterprise.splunk.com"
-			if resource == "deployments" {
+			if qualifiedGroup, resourceName, ok := strings.Cut(resource, ":"); ok {
+				group, resource = qualifiedGroup, resourceName
+			} else if resource == "deployments" {
 				group = "apps"
 			} else if resource == "horizontalpodautoscalers" {
 				group = "autoscaling"
 			} else if resource == "events" {
 				group = "events.k8s.io"
+			} else if resource == "namespaces" {
+				group = ""
+			} else if strings.HasPrefix(resource, "postgres") {
+				group = "platform.splunk.com"
 			}
 			for _, verb := range verbs {
 				allowed := false
@@ -70,26 +91,8 @@ func TestKVServicePackagedOperatorPermissions(t *testing.T) {
 		}
 		check(t, role.Rules)
 	})
-	for _, name := range []string{"role", "clusterrole"} {
-		t.Run("helm-"+name, func(t *testing.T) {
-			data, err := os.ReadFile(filepath.Join(root, "helm-chart/splunk-operator/templates/rbac", name+".yaml"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			// The only template expressions are the surrounding condition and metadata name.
-			var static []string
-			for _, line := range strings.Split(string(data), "\n") {
-				if !strings.Contains(line, "{{") {
-					static = append(static, line)
-				}
-			}
-			var role rbacv1.Role
-			if err := yaml.Unmarshal([]byte(strings.Join(static, "\n")), &role); err != nil {
-				t.Fatal(err)
-			}
-			check(t, role.Rules)
-		})
-	}
+	// Helm permissions and feature gates are checked on rendered charts by
+	// helm-chart/splunk-operator/tests/*rbac_test.yaml.
 	t.Run("olm", func(t *testing.T) {
 		data, err := os.ReadFile(filepath.Join(root, "bundle/manifests/splunk-operator.clusterserviceversion.yaml"))
 		if err != nil {

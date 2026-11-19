@@ -15,14 +15,20 @@
 package kvservice
 
 import (
+	"bytes"
 	"context"
+	"crypto/x509"
+	"encoding/asn1"
+	"log/slog"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
 	"github.com/splunk/splunk-operator/pkg/config"
+	"github.com/splunk/splunk-operator/pkg/logging"
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	"github.com/splunk/splunk-operator/pkg/splunk/workflow/certs"
@@ -37,7 +43,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -382,11 +390,12 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 	})
 	cr, _, c := postgresReadinessFixture(t)
 	ctx := t.Context()
+	cr.Spec.Scheme = "https"
 	cr.Spec.Certs = []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "customer-tls"}}}
 	require.NoError(t, c.Update(ctx, cr))
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "customer-tls", Namespace: cr.Namespace},
-		Data:       map[string][]byte{"tls.crt": []byte("test-cert-v1"), "tls.key": []byte("test-private-key"), "ca.crt": []byte("test-ca")},
+		Data:       servingCertificateData(t, cr.Name, cr.Namespace),
 	}
 	require.NoError(t, c.Create(ctx, secret))
 	key := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
@@ -418,12 +427,9 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 	if assert.Len(t, requests, 1, "certificate Secret updates must enqueue KVService") {
 		assert.Equal(t, key, requests[0].NamespacedName)
 	}
-	assert.Equal(t, []string{splcommon.GetServiceFQDN(cr.Namespace,
-		splcommon.GetSplunkServiceName(splcommon.SplunkKVService, cr.Name, false))},
-		certs.AutoDNSNames(splcommon.SplunkKVService, cr.Name, cr.Namespace, 3))
 
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, secret))
-	secret.Data["tls.crt"] = []byte("test-cert-v2")
+	secret.Data = servingCertificateData(t, cr.Name, cr.Namespace)
 	require.NoError(t, c.Update(ctx, secret))
 	_, err = Apply(ctx, c, key, nil)
 	assert.NoError(t, err)
@@ -438,6 +444,18 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 	}{
 		{name: "CA only", missingKey: "tls.crt", data: map[string][]byte{"ca.crt": []byte("test-ca")}},
 		{name: "missing private key", missingKey: "tls.key", data: map[string][]byte{"tls.crt": []byte("missing-private-key")}},
+		{name: "malformed PEM", missingKey: "matching PEM", data: map[string][]byte{"tls.crt": []byte("invalid-certificate"), "tls.key": []byte("invalid-key")}},
+		{name: "mismatched pair", missingKey: "matching PEM", data: map[string][]byte{"tls.crt": secret.Data["tls.crt"], "tls.key": servingCertificateData(t, cr.Name, cr.Namespace)["tls.key"]}},
+		{name: "expired", missingKey: "not currently valid", data: servingCertificateData(t, cr.Name, cr.Namespace, func(c *x509.Certificate) { c.NotAfter = time.Now().Add(-time.Minute) })},
+		{name: "not yet valid", missingKey: "not currently valid", data: servingCertificateData(t, cr.Name, cr.Namespace, func(c *x509.Certificate) { c.NotBefore = time.Now().Add(time.Hour) })},
+		{name: "full DNS only", missingKey: "must cover hostname", data: servingCertificateData(t, cr.Name, cr.Namespace, func(c *x509.Certificate) {
+			c.DNSNames = []string{splcommon.GetServiceFQDN(cr.Namespace, splcommon.GetSplunkServiceName(splcommon.SplunkKVService, cr.Name, false))}
+		})},
+		{name: "client only", missingKey: "server authentication", data: servingCertificateData(t, cr.Name, cr.Namespace, func(c *x509.Certificate) { c.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth} })},
+		{name: "unknown usage only", missingKey: "server authentication", data: servingCertificateData(t, cr.Name, cr.Namespace, func(c *x509.Certificate) {
+			c.ExtKeyUsage = nil
+			c.UnknownExtKeyUsage = []asn1.ObjectIdentifier{{1, 3, 6, 1, 4, 1, 55555, 1}}
+		})},
 	} {
 		t.Run(invalid.name, func(t *testing.T) {
 			secret.Data = invalid.data
@@ -447,5 +465,49 @@ func TestKVServiceCertificateMountsAndRotation(t *testing.T) {
 			require.NoError(t, c.Get(ctx, deploymentKey, deployment))
 			assert.Equal(t, before, &deployment.Spec.Template, "invalid certificates must preserve the working Deployment")
 		})
+	}
+
+	// A corrected Secret recovers, and switching to HTTP removes the TLS wiring.
+	secret.Data = servingCertificateData(t, cr.Name, cr.Namespace)
+	require.NoError(t, c.Update(ctx, secret))
+	_, err = Apply(ctx, c, key, nil)
+	require.NoError(t, err)
+	require.NoError(t, c.Get(ctx, key, cr))
+	cr.Spec.Scheme = "http"
+	require.NoError(t, c.Update(ctx, cr))
+	_, err = Apply(ctx, c, key, nil)
+	require.NoError(t, err)
+	require.NoError(t, c.Get(ctx, deploymentKey, deployment))
+	assert.Empty(t, envValue(deployment.Spec.Template.Spec.Containers[0].Env, "TLS_CERTIFICATE"))
+	for _, volume := range deployment.Spec.Template.Spec.Volumes {
+		if volume.Secret != nil {
+			assert.NotEqual(t, secret.Name, volume.Secret.SecretName)
+		}
+	}
+}
+
+func TestKVServiceHTTPIgnoresCertificatesOnEveryReconcile(t *testing.T) {
+	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
+	featuregatetesting.SetFeatureGateDuringTest(t, config.DefaultMutableFeatureGate, config.CertManagement, false)
+	cr, _, c := postgresReadinessFixture(t)
+	// An absent certificate Secret must neither block HTTP nor be mounted.
+	cr.Spec.Scheme = "http"
+	cr.Spec.Certs = []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "absent"}}}
+	require.NoError(t, c.Update(t.Context(), cr))
+	var logs bytes.Buffer
+	ctx := logging.WithLogger(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)))
+	for range 2 {
+		_, err := Apply(ctx, c, client.ObjectKeyFromObject(cr), nil)
+		require.NoError(t, err)
+	}
+	assert.Equal(t, 2, strings.Count(logs.String(), "spec.certs is ignored"))
+	deployment := &appsv1.Deployment{}
+	key := types.NamespacedName{Namespace: cr.Namespace, Name: splutil.GetSplunkDeploymentName(splcommon.SplunkKVService, cr.Name)}
+	require.NoError(t, c.Get(ctx, key, deployment))
+	assert.Empty(t, envValue(deployment.Spec.Template.Spec.Containers[0].Env, "TLS_CERTIFICATE"))
+	for _, volume := range deployment.Spec.Template.Spec.Volumes {
+		if volume.Secret != nil {
+			assert.NotEqual(t, "absent", volume.Secret.SecretName)
+		}
 	}
 }

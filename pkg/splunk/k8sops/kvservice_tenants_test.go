@@ -35,31 +35,40 @@ import (
 func TestDiscoverKVServiceTenants(t *testing.T) {
 	for _, test := range []struct {
 		name, watch string
+		scheme      string
+		mismatch    bool
 		modify      func(*corev1.Namespace)
 		want        map[string]string
 		err         string
 	}{
-		{name: "label override", want: map[string]string{"alpha": "tenant1"}},
-		{name: "namespace fallback", modify: func(ns *corev1.Namespace) { delete(ns.Labels, splcommon.LabelTenant) }, want: map[string]string{"tenant1": "tenant1"}},
-		{name: "disabled", modify: func(ns *corev1.Namespace) { ns.Labels[splcommon.LabelKVService] = "true" }, want: map[string]string{}},
-		{name: "other backend", modify: func(ns *corev1.Namespace) {
+		{name: "https matching", scheme: "https", modify: func(ns *corev1.Namespace) {
+			ns.Annotations[splcommon.AnnotationKVServiceAddr] = "https://splunk-kvs-kvservice-service.shared:8066"
+		}, want: map[string]string{"alpha": "tenant1"}},
+		{name: "https with bare HTTP address", scheme: "https", mismatch: true, want: map[string]string{"alpha": "tenant1"}},
+		{name: "HTTP with HTTPS client", scheme: "http", mismatch: true, modify: func(ns *corev1.Namespace) {
+			ns.Annotations[splcommon.AnnotationKVServiceAddr] = "https://splunk-kvs-kvservice-service.shared:8066"
+		}, want: map[string]string{"alpha": "tenant1"}},
+		{scheme: "http", name: "label override", want: map[string]string{"alpha": "tenant1"}},
+		{scheme: "http", name: "namespace fallback", modify: func(ns *corev1.Namespace) { delete(ns.Labels, splcommon.LabelTenant) }, want: map[string]string{"tenant1": "tenant1"}},
+		{scheme: "http", name: "disabled", modify: func(ns *corev1.Namespace) { ns.Labels[splcommon.LabelKVService] = "true" }, want: map[string]string{}},
+		{scheme: "http", name: "other backend", modify: func(ns *corev1.Namespace) {
 			ns.Annotations[splcommon.AnnotationKVServiceAddr] = "splunk-other-kvservice-service.shared:8066"
 		}, want: map[string]string{}},
-		{name: "missing address", modify: func(ns *corev1.Namespace) { ns.Annotations = nil }, want: map[string]string{}},
-		{name: "empty address", modify: func(ns *corev1.Namespace) { ns.Annotations[splcommon.AnnotationKVServiceAddr] = "" }, want: map[string]string{}},
-		{name: "obsolete address label ignored", modify: func(ns *corev1.Namespace) { ns.Labels[splcommon.AnnotationKVServiceAddr] = "other.shared" }, want: map[string]string{"alpha": "tenant1"}},
-		{name: "obsolete address label alone", modify: func(ns *corev1.Namespace) {
+		{scheme: "http", name: "missing address", modify: func(ns *corev1.Namespace) { ns.Annotations = nil }, want: map[string]string{}},
+		{scheme: "http", name: "empty address", modify: func(ns *corev1.Namespace) { ns.Annotations[splcommon.AnnotationKVServiceAddr] = "" }, want: map[string]string{}},
+		{scheme: "http", name: "obsolete address label ignored", modify: func(ns *corev1.Namespace) { ns.Labels[splcommon.AnnotationKVServiceAddr] = "other.shared" }, want: map[string]string{"alpha": "tenant1"}},
+		{scheme: "http", name: "obsolete address label alone", modify: func(ns *corev1.Namespace) {
 			ns.Labels[splcommon.AnnotationKVServiceAddr] = "splunk-kvs-kvservice-service.shared"
 			ns.Annotations = nil
 		}, want: map[string]string{}},
-		{name: "outside scope", watch: "shared,other", want: map[string]string{}},
-		{name: "within scope", watch: "shared,tenant1", want: map[string]string{"alpha": "tenant1"}},
-		{name: "terminating", modify: func(ns *corev1.Namespace) {
+		{scheme: "http", name: "outside scope", watch: "shared,other", want: map[string]string{}},
+		{scheme: "http", name: "within scope", watch: "shared,tenant1", want: map[string]string{"alpha": "tenant1"}},
+		{scheme: "http", name: "terminating", modify: func(ns *corev1.Namespace) {
 			now := metav1.Now()
 			ns.DeletionTimestamp = &now
 			ns.Finalizers = []string{"test"}
 		}, want: map[string]string{}},
-		{name: "invalid database name", modify: func(ns *corev1.Namespace) { ns.Labels[splcommon.LabelTenant] = "bad-tenant" }, err: "invalid tenant"},
+		{scheme: "http", name: "invalid database name", modify: func(ns *corev1.Namespace) { ns.Labels[splcommon.LabelTenant] = "bad-tenant" }, err: "invalid tenant"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv("WATCH_NAMESPACE", test.watch)
@@ -75,6 +84,7 @@ func TestDiscoverKVServiceTenants(t *testing.T) {
 			unrelatedMapping := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tenant-map", Namespace: "shared"}, Data: map[string]string{"stale": "old"}}
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ns, unrelatedMapping).Build()
 			cr := &enterpriseApi.KVService{ObjectMeta: metav1.ObjectMeta{Name: "kvs", Namespace: "shared"}}
+			cr.Spec.Scheme = test.scheme
 			mapping, err := DiscoverKVServiceTenants(context.Background(), c, cr)
 			if test.err != "" {
 				require.NoError(t, err)
@@ -84,6 +94,11 @@ func TestDiscoverKVServiceTenants(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, test.want, mapping.Members)
+			if test.mismatch {
+				require.Equal(t, []string{"tenant1"}, mapping.ProtocolMismatches)
+			} else {
+				require.Empty(t, mapping.ProtocolMismatches)
+			}
 		})
 	}
 }

@@ -55,6 +55,18 @@ tests:
             verbs: [get, list, watch, create, update, patch, delete]
       - contains:
           path: rules
+          content:
+            apiGroups: [platform.splunk.com]
+            resources: [postgresdatabases/status]
+            verbs: [get, list, watch, update, patch]
+      - contains:
+          path: rules
+          content:
+            apiGroups: [postgresql.cnpg.io]
+            resources: [clusters/status, poolers/status, backups/status, scheduledbackups/status, publications/status, subscriptions/status]
+            verbs: [get]
+      - contains:
+          path: rules
           content: *networkPolicyReads
   - it: limits namespaced reconciliation to the existing Role
     template: templates/rbac/role.yaml

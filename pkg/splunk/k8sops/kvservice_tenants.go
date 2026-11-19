@@ -34,8 +34,9 @@ import (
 // TenantDiscovery includes valid membership and namespace-local policy failures.
 // Only Kubernetes read failures are returned as errors.
 type TenantDiscovery struct {
-	Members map[string]string
-	Blocked []enterpriseApi.KVServiceTenantStatus
+	Members            map[string]string
+	Blocked            []enterpriseApi.KVServiceTenantStatus
+	ProtocolMismatches []string
 }
 
 // DiscoverKVServiceTenants excludes every participant in a duplicate assignment;
@@ -59,6 +60,9 @@ func DiscoverKVServiceTenants(ctx context.Context, c client.Reader, cr *enterpri
 		endpoint, err := namespaceKVServiceAddress(ctx, namespace)
 		if err != nil || endpoint.KVServiceName != cr.Name || endpoint.Namespace != cr.Namespace {
 			continue
+		}
+		if endpoint.Scheme != cr.Spec.Scheme {
+			result.ProtocolMismatches = append(result.ProtocolMismatches, namespace.Name)
 		}
 		if err := splutil.ValidateKVServiceTenantName(tenant); err != nil {
 			result.Blocked = append(result.Blocked, enterpriseApi.KVServiceTenantStatus{
@@ -87,6 +91,7 @@ func DiscoverKVServiceTenants(ctx context.Context, c client.Reader, cr *enterpri
 		}
 	}
 	slices.SortFunc(result.Blocked, func(a, b enterpriseApi.KVServiceTenantStatus) int { return strings.Compare(a.Namespace, b.Namespace) })
+	slices.Sort(result.ProtocolMismatches)
 	return result, nil
 }
 

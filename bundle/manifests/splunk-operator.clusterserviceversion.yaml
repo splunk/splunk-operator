@@ -130,7 +130,8 @@ metadata:
                 "cpu": "4",
                 "memory": "4Gi"
               }
-            }
+            },
+            "scheme": "http"
           }
         },
         {
@@ -361,7 +362,7 @@ metadata:
     capabilities: Seamless Upgrades
     categories: Big Data, Logging & Tracing, Monitoring, Security, AI/Machine Learning
     containerImage: splunk/splunk-operator@sha256:c4e0d314622699496f675760aad314520d050a66627fdf33e1e21fa28ca85d50
-    createdAt: "2026-09-29T10:20:03Z"
+    createdAt: "2026-11-16T20:01:03Z"
     description: The Splunk Operator for Kubernetes enables you to quickly and easily
       deploy Splunk Enterprise on your choice of private or public cloud provider.
       The Operator simplifies scaling and management of Splunk Enterprise by automating
@@ -503,13 +504,6 @@ spec:
       clusterPermissions:
       - rules:
         - apiGroups:
-          - events.k8s.io
-          resources:
-          - events
-          verbs:
-          - create
-          - patch
-        - apiGroups:
           - ""
           resources:
           - configmaps
@@ -534,6 +528,7 @@ spec:
           - ""
           resources:
           - namespaces
+          - nodes
           verbs:
           - get
           - list
@@ -554,6 +549,7 @@ spec:
         - apiGroups:
           - apps
           resources:
+          - deployments
           - statefulsets
           verbs:
           - create
@@ -614,6 +610,7 @@ spec:
           - clustermasters
           - indexerclusters
           - ingestorclusters
+          - kvservices
           - licensemanagers
           - licensemasters
           - monitoringconsoles
@@ -636,6 +633,7 @@ spec:
           - clustermasters/finalizers
           - indexerclusters/finalizers
           - ingestorclusters/finalizers
+          - kvservices/finalizers
           - licensemanagers/finalizers
           - licensemasters/finalizers
           - monitoringconsoles/finalizers
@@ -652,6 +650,7 @@ spec:
           - clustermasters/status
           - indexerclusters/status
           - ingestorclusters/status
+          - kvservices/status
           - licensemanagers/status
           - licensemasters/status
           - monitoringconsoles/status
@@ -667,6 +666,21 @@ spec:
           - enterprise.splunk.com
           resources:
           - noahclusters
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - events.k8s.io
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - networking.k8s.io
+          resources:
+          - networkpolicies
           verbs:
           - get
           - list
@@ -734,7 +748,9 @@ spec:
           - clusters
           - databases
           - poolers
+          - publications
           - scheduledbackups
+          - subscriptions
           verbs:
           - create
           - delete
@@ -749,7 +765,9 @@ spec:
           - backups/status
           - clusters/status
           - poolers/status
+          - publications/status
           - scheduledbackups/status
+          - subscriptions/status
           verbs:
           - get
         - apiGroups:
@@ -764,44 +782,6 @@ spec:
           - subjectaccessreviews
           verbs:
           - create
-        - apiGroups:
-          - apps
-          resources:
-          - deployments
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - enterprise.splunk.com
-          resources:
-          - kvservices
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - enterprise.splunk.com
-          resources:
-          - kvservices/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - enterprise.splunk.com
-          resources:
-          - kvservices/status
-          verbs:
-          - get
-          - patch
-          - update
         serviceAccountName: splunk-operator-controller-manager
       deployments:
       - label:
@@ -849,7 +829,11 @@ spec:
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.name
-                image: controller:latest
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                image: docker.io/splunk/splunk-operator:3.2.0
                 imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
@@ -859,8 +843,8 @@ spec:
                   periodSeconds: 20
                 name: manager
                 ports:
-                - containerPort: 9444
-                  name: conversion
+                - containerPort: 9443
+                  name: webhook-server
                   protocol: TCP
                 readinessProbe:
                   httpGet:
@@ -977,3 +961,32 @@ spec:
     name: splunk-enterprise
   replaces: splunk-operator.v3.1.0
   version: 3.2.0
+  webhookdefinitions:
+  - admissionReviewVersions:
+    - v1
+    containerPort: 443
+    deploymentName: splunk-operator-controller-manager
+    failurePolicy: Ignore
+    generateName: cross-version-field-protection.enterprise.splunk.com
+    matchPolicy: Exact
+    rules:
+    - apiGroups:
+      - enterprise.splunk.com
+      apiVersions:
+      - v3
+      operations:
+      - UPDATE
+      - DELETE
+      resources:
+      - standalones
+      - standalones/*
+      - indexerclusters
+      - indexerclusters/*
+      - searchheadclusters
+      - searchheadclusters/*
+      scope: Namespaced
+    sideEffects: None
+    targetPort: 9443
+    timeoutSeconds: 5
+    type: ValidatingAdmissionWebhook
+    webhookPath: /validate

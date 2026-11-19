@@ -102,18 +102,107 @@ configured.
 
 ### TLS certificates
 
-Without `spec.certs`, the listener and probes use HTTP. A nonempty `spec.certs`
-enables HTTPS and requires `CertManagement`. The serving Secret must contain
-nonempty `tls.crt` and `tls.key`; its certificate must cover the configured endpoint
-hostname. Use `role: server` to select the serving certificate when providing
-multiple Secrets. A CA-only Secret cannot serve the endpoint.
+`spec.scheme` is a required `http` or `https` field. Kubernetes defaults an
+omitted value to `http`; an explicit empty or unsupported value is rejected.
+The listener, Service
+port name and health probes use this selection on port 8066. Certificate entries
+do not implicitly enable HTTPS. In HTTP mode, `spec.certs` is ignored: the Operator
+does not issue, read or mount these certificates, or react to their rotation.
+It logs a warning on every reconcile when certificate entries are present.
+
+For HTTPS, enable `CertManagement`, set `spec.scheme: https` and provide
+`spec.certs`. The serving Secret must contain nonempty `tls.crt` and `tls.key`,
+and its certificate must cover the configured endpoint hostname. Use `role: server`
+to select the serving certificate when providing multiple Secrets. A CA-only
+Secret cannot serve the endpoint.
+
+```yaml
+spec:
+  scheme: https
+  certs:
+    - role: server
+      secretRef:
+        name: kvservice-tls
+  postgres:
+    clusterRef:
+      name: postgresql-cluster-dev
+```
 
 Provide an existing Secret or use cert-manager to issue a missing certificate.
 Issuance requires `CertManagerCertGeneration` and an existing issuer reference.
+The default generated DNS SAN is the short Service name
+`splunk-<name>-kvservice-service.<namespace>`, matching the client endpoint.
+Customer-provided certificates and explicit `dnsNames` must cover this name;
+the `.svc.cluster.local` suffix is not required.
 See [certificate configuration](Certificates.md) for fields, mount paths and
-rotation. Certificate changes trigger a rollout. With `spec.certs`, the Operator
-manages `TLS_CERTIFICATE`, `TLS_PRIVATE_KEY`, `TLS_HOST` and `TLS_PORT`; setting
-these variables without `spec.certs` does not select HTTPS.
+rotation. In HTTPS mode, certificate changes trigger a rollout, and the Operator
+manages `TLS_CERTIFICATE`, `TLS_PRIVATE_KEY`, `TLS_HOST` and `TLS_PORT`.
+Setting these variables in HTTP mode does not enable HTTPS.
+
+The controller checks the serving PEM certificate/key pair, current validity,
+TLS server usage and the short Service DNS name before changing the Service or
+Deployment. A certificate restricted to unrecognized extended key usages is
+rejected. An invalid certificate leaves the existing serving resources in place;
+correcting the Secret triggers reconciliation again. Secret reference names must
+be valid Kubernetes Secret names in HTTPS mode. Certificate preflight runs during
+reconciliation; customers supplying certificates must monitor expiry and renew them.
+
+### Client protocol and certificate trust
+
+The listener scheme and namespace `platform.splunk.com/kvservice-addr` annotation
+are configured independently. A bare address means HTTP. For an HTTPS listener,
+use an explicit annotation, for example:
+
+```yaml
+metadata:
+  annotations:
+    platform.splunk.com/kvservice-addr: "https://splunk-kvs2-kvservice-service.default:8066"
+```
+
+`ClientConfigurationReady=False` with reason `ListenerProtocolMismatch` lists
+up to five namespaces whose client protocol disagrees with the listener, the total
+count, and the expected address. A Warning event is emitted when this diagnostic
+changes; correction emits a recovery event. Database provisioning, key publication and other tenants continue.
+The condition is Unknown if discovery could not run. It checks namespace protocol
+configuration only, not client rollout completion, connectivity or certificate trust.
+
+A server certificate does not install its CA on Splunk clients. For a private CA
+or self-signed certificate, mount the issuing CA into each Splunk client using the
+existing Secret-volume facilities and configure its outbound TLS trust settings.
+Verify both CA trust and hostname verification on the KVService client path; do not
+use disabled verification as the production configuration. With a TLS-terminating
+gateway, clients trust the gateway certificate; the backend listener's protocol is
+configured separately. For private-CA rotation, distribute trust for both old and
+new CAs to clients before changing the server issuer. Retire the old CA after the
+server and client rollouts complete.
+
+Validate from a client pod with verification enabled, then run a KV Store smoke
+or distributed-lookup test through Splunk to exercise Splunk's own TLS configuration:
+
+```bash
+kubectl -n <client-namespace> exec <splunk-pod> -- \
+  curl --fail --cacert /path/to/kvservice-ca.crt \
+  https://splunk-kvs2-kvservice-service.default:8066/service/readiness
+```
+
+HTTPS Kubernetes probes skip certificate verification; pod readiness alone does
+not establish that clients trust the endpoint. See the
+[Kubernetes probe documentation](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/).
+
+### Changing HTTP and HTTPS
+
+Treat `spec.scheme` changes as planned maintenance. The Deployment uses a rolling
+update, so old and new pods can temporarily serve different protocols behind the
+same Service. Splunk client configuration also rolls independently. This flow does
+not promise uninterrupted HTTP-to-HTTPS or HTTPS-to-HTTP cutover.
+
+Prepare the serving certificate and client CA trust first. During the maintenance
+window, update `spec.scheme` and all selecting namespaces' `kvservice-addr`
+annotations to the matching protocol. Wait for the KVService rollout, the
+`ClientConfigurationReady=True` condition and all Splunk client rollouts; then
+validate verified TLS, KV Store operations and distributed lookups before resuming
+traffic. For rollback, restore both the previous listener scheme and client URLs.
+A zero-downtime cutover needs a stable gateway or a separate parallel-backend design.
 
 ## Namespace-driven tenant provisioning
 

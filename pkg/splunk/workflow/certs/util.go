@@ -22,11 +22,15 @@ import (
 
 // AutoDNSNames derives the DNS SAN list for an Enterprise CR. Multi-replica
 // StatefulSets get a wildcard headless SAN; single-replica ones get an
-// explicit pod-0 FQDN.
+// explicit pod-0 FQDN. KVService uses the short Service DNS client contract.
 func AutoDNSNames(instanceType splcommon.InstanceType, name, namespace string, replicas int32) []string {
-	serviceFQDN := splcommon.GetServiceFQDN(namespace, splcommon.GetSplunkServiceName(instanceType, name, false))
+	serviceName := splcommon.GetSplunkServiceName(instanceType, name, false)
+	if instanceType == splcommon.SplunkKVService {
+		return []string{serviceName + "." + namespace}
+	}
+	serviceFQDN := splcommon.GetServiceFQDN(namespace, serviceName)
 
-	if instanceType == splcommon.SplunkMonitoringConsole || instanceType == splcommon.SplunkKVService {
+	if instanceType == splcommon.SplunkMonitoringConsole {
 		return certlib.DeriveDNSNames([]string{serviceFQDN}, "", nil)
 	}
 

@@ -32,8 +32,11 @@ import (
 )
 
 func reconcileKVServiceCertificates(ctx context.Context, c client.Client, cr *enterpriseApi.KVService) (*certs.CertMountConfig, []corev1.EnvVar, error) {
-	if len(cr.Spec.Certs) == 0 {
+	if cr.Spec.Scheme != "https" {
 		return nil, nil, nil
+	}
+	if len(cr.Spec.Certs) == 0 {
+		return nil, nil, fmt.Errorf("spec.scheme https requires a serving certificate in spec.certs")
 	}
 	entries := reconcileutil.ToCertEntries(
 		cr.Spec.Certs,
@@ -52,6 +55,10 @@ func reconcileKVServiceCertificates(ctx context.Context, c client.Client, cr *en
 		if len(secret.Data[key]) == 0 {
 			return nil, nil, fmt.Errorf("KVService serving certificate Secret %q must contain non-empty key %q", secret.Name, key)
 		}
+	}
+	hostname := splcommon.GetSplunkServiceName(splcommon.SplunkKVService, cr.Name, false) + "." + cr.Namespace
+	if err := certs.ValidateServingCertificate(secret.Data[certs.CertTLSCRTKey], secret.Data[certs.CertTLSKeyKey], hostname); err != nil {
+		return nil, nil, fmt.Errorf("KVService serving certificate Secret %q: %w", secret.Name, err)
 	}
 	mountPath, ok := mounts.MountPathForSecret(servingCert.SecretRef.Name)
 	if !ok {

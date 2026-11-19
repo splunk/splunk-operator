@@ -1,0 +1,53 @@
+suite: KVService operator runtime permissions
+templates:
+  - templates/rbac/clusterrole.yaml
+  - templates/rbac/role.yaml
+tests:
+  - it: grants runtime permissions in cluster-wide mode
+    template: templates/rbac/clusterrole.yaml
+    set: &kvserviceEnabled
+      splunkOperator.featureGates.KVService: true
+      splunkOperator.featureGates.PostgresController: true
+    asserts: &runtimePermissions
+      - contains:
+          path: rules
+          content:
+            apiGroups: [autoscaling]
+            resources: [horizontalpodautoscalers]
+            verbs: [create, delete, get, list, update, watch]
+      - contains:
+          path: rules
+          content:
+            apiGroups: [events.k8s.io]
+            resources: [events]
+            verbs: [create, patch]
+      - contains:
+          path: rules
+          content:
+            apiGroups: [apps]
+            resources: [deployments]
+            verbs: [create, delete, get, list, patch, update, watch]
+      - contains:
+          path: rules
+          content:
+            apiGroups: [enterprise.splunk.com]
+            resources: [kvservices]
+            verbs: [create, delete, get, list, patch, update, watch]
+      - contains:
+          path: rules
+          content:
+            apiGroups: [enterprise.splunk.com]
+            resources: [kvservices/status]
+            verbs: [get, patch, update]
+      - contains:
+          path: rules
+          content:
+            apiGroups: [enterprise.splunk.com]
+            resources: [kvservices/finalizers]
+            verbs: [update]
+  - it: grants runtime permissions in namespace-only mode
+    template: templates/rbac/role.yaml
+    set:
+      <<: *kvserviceEnabled
+      splunkOperator.clusterWideAccess: false
+    asserts: *runtimePermissions
