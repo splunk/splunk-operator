@@ -1514,6 +1514,16 @@ spec:
                 description: Name of Scheduler to use for pod placement (defaults
                   to “default-scheduler”)
                 type: string
+              scheme:
+                default: http
+                description: |-
+                  Scheme selects the listener protocol. HTTPS requires a serving certificate
+                  in Certs. HTTP ignores Certs, including issuance, mounts and rotation watches.
+                  The API defaults omitted values to HTTP before validating the required field.
+                enum:
+                - http
+                - https
+                type: string
               serviceAccount:
                 description: |-
                   ServiceAccount is the service account used by the pods deployed by the CRD.
@@ -4252,7 +4262,13 @@ spec:
                 type: array
             required:
             - postgres
+            - scheme
             type: object
+            x-kubernetes-validations:
+            - message: spec.certs must contain a serving certificate when spec.scheme
+                is https
+              rule: self.scheme != 'https' || (has(self.certs) && size(self.certs)
+                > 0)
           status:
             description: KVServiceStatus defines the observed state of KVService
             properties:

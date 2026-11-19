@@ -16,6 +16,7 @@ package resources
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
@@ -258,13 +259,16 @@ func TestKVServiceDeploymentVolumesPortsAndSecurity(t *testing.T) {
 func TestKVServiceTLSProtocolMetadata(t *testing.T) {
 	tests := []struct {
 		name         string
+		scheme       string
 		certs        []enterpriseApi.CertSpec
 		wantPortName string
 		wantScheme   corev1.URIScheme
 	}{
-		{name: "http", wantPortName: "http-kvservice", wantScheme: corev1.URISchemeHTTP},
+		{name: "default", wantPortName: "http-kvservice", wantScheme: corev1.URISchemeHTTP},
+		{name: "http with certs", scheme: "http", certs: []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "unused-cert"}}}, wantPortName: "http-kvservice", wantScheme: corev1.URISchemeHTTP},
 		{
 			name:         "https",
+			scheme:       "https",
 			certs:        []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "server-cert"}, Role: enterpriseApi.CertRoleServer}},
 			wantPortName: "https-kvservice",
 			wantScheme:   corev1.URISchemeHTTPS,
@@ -274,15 +278,14 @@ func TestKVServiceTLSProtocolMetadata(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := &enterpriseApi.KVService{Name: "kv", Namespace: "test"}
 			cr.Spec.Certs = tt.certs
+			cr.Spec.Scheme = tt.scheme
 			service := GetKVServiceService(cr, &cr.Spec)
 			deployment := NewKVServiceDeployment(cr)
 			container := deployment.Spec.Template.Spec.Containers[0]
 			if len(container.Command) != 1 || container.Command[0] != "kvstore-server" {
 				t.Errorf("container command=%q, want [kvstore-server]", container.Command)
 			}
-			if len(container.Args) != 2 || container.Args[0] != "--scheme" || container.Args[1] != tt.name {
-				t.Errorf("container args=%q, want [--scheme %s]", container.Args, tt.name)
-			}
+			assert.Equal(t, []string{"--scheme", strings.ToLower(string(tt.wantScheme)), "--host", "0.0.0.0", "--port", "8066"}, container.Args)
 
 			if len(service.Spec.Ports) != 1 || service.Spec.Ports[0].Port != splcommon.KVServicePort || service.Spec.Ports[0].Name != tt.wantPortName {
 				t.Errorf("Service ports=%+v, want generated port %q on %d", service.Spec.Ports, tt.wantPortName, splcommon.KVServicePort)

@@ -71,6 +71,7 @@ var _ = Describe("KVService Controller", func() {
 					Annotations:  map[string]string{enterprisev4.KVServicePausedAnnotation: "true"},
 				},
 				Spec: enterprisev4.KVServiceSpec{
+					Scheme: "http",
 					CommonWorkloadSpec: enterprisev4.CommonWorkloadSpec{
 						Spec: enterprisev4.Spec{ImagePullPolicy: "IfNotPresent"},
 					},
@@ -156,6 +157,7 @@ var _ = Describe("KVService Controller", func() {
 			kvservice = &enterprisev4.KVService{
 				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: backendNamespace.Name},
 				Spec: enterprisev4.KVServiceSpec{
+					Scheme: "http",
 					CommonWorkloadSpec: enterprisev4.CommonWorkloadSpec{
 						Spec:                        enterprisev4.Spec{ImagePullPolicy: "IfNotPresent"},
 						ServiceAccount:              "kvservice-test-sa",

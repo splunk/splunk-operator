@@ -83,10 +83,21 @@ CRD defaults timeout, period and failure threshold for omitted probe objects;
 the controller supplies the initial-delay fallback so the separate delay fields
 remain effective. Probe paths and success threshold are fixed.
 
-Certificate configuration uses the shared certificate workflow. A nonempty
-`spec.certs` selects HTTPS. The first `role: server` entry is selected, or the first
-entry if no server role exists. The controller passes the scheme explicitly to
-`kvstore-server` and uses it for both probes. Certificate mounts must have distinct
-paths, and each role may select only one distinct Secret; role-free mounts use
-`/mnt/tls/<secret-name>/`. See [certificate operations](../operate/Certificates.md)
-for the shared mounting, issuance and rotation contract.
+Certificate configuration uses the shared certificate workflow. `spec.scheme`
+selects HTTP (the default) or HTTPS independently of certificate entries. HTTP
+ignores `spec.certs` and logs a warning on each reconcile; HTTPS requires
+certificates and the CertManagement feature gate. The first `role: server` entry
+is selected, or the first entry if no server role exists. The controller passes
+the scheme explicitly to `kvstore-server` and uses it for both probes.
+Certificate mounts must have distinct paths, and each role may select only one
+distinct Secret; role-free mounts use `/mnt/tls/<secret-name>/`. See
+[certificate operations](../operate/Certificates.md) for the shared mounting,
+issuance and rotation contract.
+
+Client protocol diagnostics compare selected namespace URLs with the configured
+listener independently of tenant provisioning. `ClientConfigurationReady` is
+Unknown until discovery runs, False for a mismatch and True when all selected
+namespace protocols match. Transition events follow a successful status write.
+Certificate preflight checks the serving PEM pair, validity, server usage and
+short Service DNS before either serving resource changes. It does not configure
+client trust or provide an atomic protocol cutover across rolling clients/pods.

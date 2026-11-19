@@ -28,6 +28,18 @@ tests:
           path: rules[0].verbs
           value: [get, list, watch]
         documentIndex: 0
+      - equal:
+          path: rules[1].apiGroups
+          value: [platform.splunk.com]
+        documentIndex: 0
+      - equal:
+          path: rules[1].resources
+          value: [postgresclusterclasses]
+        documentIndex: 0
+      - equal:
+          path: rules[1].verbs
+          value: [get, list, watch]
+        documentIndex: 0
       - isKind:
           of: ClusterRoleBinding
         documentIndex: 1

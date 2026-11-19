@@ -103,11 +103,13 @@ func checkTenantReservation(ctx context.Context, c splcommon.ControllerClient, c
 
 // tenantPostgresResult separates service readiness from tenant progress.
 type tenantPostgresResult struct {
-	dependencies     *k8sops.KVServicePostgresDependencies
-	ready            bool
-	message          string
-	tenantsEvaluated bool
-	retryTenants     bool
+	dependencies          *k8sops.KVServicePostgresDependencies
+	ready                 bool
+	message               string
+	tenantsEvaluated      bool
+	retryTenants          bool
+	clientProtocolChecked bool
+	protocolMismatches    []string
 }
 
 // ensureTenantPostgresReady gates deployment only on the service database.
@@ -142,6 +144,8 @@ func ensureTenantPostgresReady(ctx context.Context, c splcommon.ControllerClient
 	if err != nil {
 		return result, fmt.Errorf("discover KVService tenants: %w", err)
 	}
+	result.clientProtocolChecked = true
+	result.protocolMismatches = discovery.ProtocolMismatches
 	mapping := discovery.Members
 	statuses := slices.Clone(discovery.Blocked)
 	// Removals and authentication updates are published before service readiness is checked.

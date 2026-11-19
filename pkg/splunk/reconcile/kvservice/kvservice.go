@@ -89,6 +89,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	cr.Status.Phase = enterpriseApi.PhaseError
 	var statusMessage string
 	var tenantsEvaluated bool
+	var postgres tenantPostgresResult
 	if cr.Status.ResourceRevMap == nil {
 		cr.Status.ResourceRevMap = make(map[string]string)
 	}
@@ -105,6 +106,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 		}
 		setConditions(cr, false, message)
 		setTenantCondition(cr, tenantsEvaluated)
+		setClientProtocolCondition(cr, postgres)
 		if terminal {
 			reason, _ := splcommon.TerminalReason(err)
 			cr.Status.Phase = enterpriseApi.PhaseError
@@ -127,6 +129,7 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 			if tenantsEvaluated {
 				recordTenantEvents(ctx, publisher, cr, previousTenants)
 			}
+			recordClientProtocolEvent(ctx, publisher, cr, previousConditions)
 			k8sops.EmitStalledTransitionEvents(ctx, publisher, cr.Name, previousConditions, cr.Status.Conditions)
 			if previousPhase != enterpriseApi.PhaseReady && cr.Status.Phase == enterpriseApi.PhaseReady {
 				publisher.Normal(ctx, splcommon.EventReasonReady, fmt.Sprintf("KVService %s is ready with %d replicas", cr.Name, cr.Status.ReadyReplicas))
@@ -151,6 +154,9 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 		}
 		return result, nil
 	}
+	if (cr.Spec.Scheme == "" || cr.Spec.Scheme == "http") && len(cr.Spec.Certs) > 0 {
+		logger.WarnContext(ctx, "spec.certs is ignored because spec.scheme is http; set spec.scheme to https to enable TLS", "name", cr.Name, "namespace", cr.Namespace)
+	}
 	if err = validateKVServiceSpec(ctx, c, cr); err != nil {
 		publisher.Warning(ctx, splcommon.EventReasonValidateSpecFailed, "KVService spec validation failed")
 		return result, fmt.Errorf("validate KVService spec: %w", err)
@@ -162,7 +168,8 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 			return result, fmt.Errorf("reconcile KVService autoscaler: %w", err)
 		}
 	}
-	postgres, postgresErr := ensureTenantPostgresReady(ctx, c, cr)
+	var postgresErr error
+	postgres, postgresErr = ensureTenantPostgresReady(ctx, c, cr)
 	statusMessage = postgres.message
 	tenantsEvaluated = postgres.tenantsEvaluated
 	if postgresErr != nil {
@@ -173,13 +180,14 @@ func ApplyKVService(ctx context.Context, c splcommon.ControllerClient, recorder 
 	}
 	cr.Status.Replicas = ptr.Deref(cr.Spec.Replicas, 0)
 	cr.Status.Selector = fmt.Sprintf("app.kubernetes.io/instance=splunk-%s-kvservice", cr.Name)
-	if err = k8sops.ApplyService(ctx, c, resources.GetKVServiceService(cr, &cr.Spec)); err != nil {
-		publisher.Warning(ctx, splcommon.EventReasonApplyServiceFailed, "KVService Service reconciliation failed")
-		return result, fmt.Errorf("apply KVService Service: %w", err)
-	}
+	// Validate TLS before changing either serving resource.
 	certMounts, extraEnv, certErr := reconcileKVServiceCertificates(ctx, c, cr)
 	if certErr != nil {
 		return result, certErr
+	}
+	if err = k8sops.ApplyService(ctx, c, resources.GetKVServiceService(cr, &cr.Spec)); err != nil {
+		publisher.Warning(ctx, splcommon.EventReasonApplyServiceFailed, "KVService Service reconciliation failed")
+		return result, fmt.Errorf("apply KVService Service: %w", err)
 	}
 	deployment, err := k8sops.GetKVServiceDeploymentWithPostgresDependencies(ctx, c, cr, postgres.dependencies, extraEnv)
 	if err != nil {

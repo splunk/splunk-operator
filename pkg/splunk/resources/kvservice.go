@@ -151,7 +151,7 @@ func NewKVServiceDeployment(cr *enterpriseApi.KVService) *appsv1.Deployment {
 						ImagePullPolicy: corev1.PullPolicy(spec.ImagePullPolicy),
 						Name:            "kvservice",
 						Command:         []string{"kvstore-server"},
-						Args:            []string{"--scheme", kvServiceProtocol(spec)},
+						Args:            []string{"--scheme", kvServiceProtocol(spec), "--host", "0.0.0.0", "--port", strconv.Itoa(splcommon.KVServicePort)},
 						Ports:           ports,
 					},
 				},
@@ -176,7 +176,7 @@ func NewKVServiceDeployment(cr *enterpriseApi.KVService) *appsv1.Deployment {
 }
 
 func kvServiceProtocol(spec *enterpriseApi.KVServiceSpec) string {
-	if len(spec.Certs) > 0 {
+	if spec.Scheme == "https" {
 		return "https"
 	}
 	return "http"
@@ -204,7 +204,7 @@ func getKVServiceServicePort(spec *enterpriseApi.KVServiceSpec) corev1.ServicePo
 }
 
 func kvServiceProbeScheme(spec *enterpriseApi.KVServiceSpec) corev1.URIScheme {
-	if len(spec.Certs) > 0 {
+	if spec.Scheme == "https" {
 		return corev1.URISchemeHTTPS
 	}
 	return corev1.URISchemeHTTP

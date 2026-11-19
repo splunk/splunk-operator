@@ -38,9 +38,18 @@ type KVServicePostgresSpec struct {
 }
 
 // KVServiceSpec defines the desired state of KVService.
+// +kubebuilder:validation:XValidation:rule="self.scheme != 'https' || (has(self.certs) && size(self.certs) > 0)",message="spec.certs must contain a serving certificate when spec.scheme is https"
 type KVServiceSpec struct {
 	// Common workload spec
 	CommonWorkloadSpec `json:",inline"`
+
+	// Scheme selects the listener protocol. HTTPS requires a serving certificate
+	// in Certs. HTTP ignores Certs, including issuance, mounts and rotation watches.
+	// The API defaults omitted values to HTTP before validating the required field.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=http;https
+	// +kubebuilder:default=http
+	Scheme string `json:"scheme"`
 
 	// LivenessProbe overrides HTTP probe timings. Defaults are a 30-second delay,
 	// a 1-second timeout, a 5-second period, and a failure threshold of 3.
@@ -217,5 +226,8 @@ func init() {
 
 // GetCerts returns the certificate declarations used by the cert Secret watch.
 func (cr *KVService) GetCerts() []CertSpec {
+	if cr.Spec.Scheme != "https" {
+		return nil
+	}
 	return cr.Spec.Certs
 }

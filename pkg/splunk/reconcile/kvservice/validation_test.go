@@ -108,12 +108,13 @@ func TestValidateKVServiceCertsFeatureGate(t *testing.T) {
 		assert.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): previous}))
 	})
 	cr := &enterpriseApi.KVService{Spec: enterpriseApi.KVServiceSpec{Postgres: enterpriseApi.KVServicePostgresSpec{ClusterRef: corev1.LocalObjectReference{Name: "pg"}}}}
+	cr.Spec.Scheme = "https"
 	cr.Spec.Certs = []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "postgres-ca"}}}
 	err := validateKVServiceSpec(context.Background(), spltest.NewMockClient(), cr)
 	assert.ErrorContains(t, err, "CertManagement")
 }
 
-func TestKVServiceReservesTLSOverridesOnlyWithCerts(t *testing.T) {
+func TestKVServiceReservesTLSOverridesOnlyWithHTTPS(t *testing.T) {
 	t.Setenv("SPLUNK_GENERAL_TERMS", "--accept-sgt-current-at-splunk-com")
 	previous := config.DefaultMutableFeatureGate.Enabled(config.CertManagement)
 	require.NoError(t, config.DefaultMutableFeatureGate.SetFromMap(map[string]bool{string(config.CertManagement): true}))
@@ -128,6 +129,7 @@ func TestKVServiceReservesTLSOverridesOnlyWithCerts(t *testing.T) {
 				}}
 				cr.Spec.ExtraEnv = []corev1.EnvVar{{Name: name, Value: "override"}}
 				if withCerts {
+					cr.Spec.Scheme = "https"
 					cr.Spec.Certs = []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "tls"}}}
 				}
 				err := validateKVServiceSpec(t.Context(), spltest.NewMockClient(), cr)
@@ -140,4 +142,9 @@ func TestKVServiceReservesTLSOverridesOnlyWithCerts(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateKVServiceHTTPSRequiresCertificate(t *testing.T) {
+	cr := &enterpriseApi.KVService{Spec: enterpriseApi.KVServiceSpec{Scheme: "https"}}
+	assert.ErrorContains(t, validateKVServiceSpec(t.Context(), spltest.NewMockClient(), cr), "spec.scheme https requires a serving certificate")
 }

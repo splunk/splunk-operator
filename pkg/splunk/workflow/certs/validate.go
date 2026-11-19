@@ -16,6 +16,11 @@ package certs
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
+	"slices"
+	"time"
 
 	splcommon "github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
@@ -60,4 +65,30 @@ func ValidateCertSecret(ctx context.Context, c client.Client, namespace, secretN
 		}
 	}
 	return secret, nil
+}
+
+// ValidateServingCertificate checks a serving key pair, validity, server usage
+// and the expected hostname. It does not verify a trust chain; clients configure
+// their own CA trust.
+func ValidateServingCertificate(certificatePEM, privateKeyPEM []byte, hostname string) error {
+	pair, err := tls.X509KeyPair(certificatePEM, privateKeyPEM)
+	if err != nil {
+		return fmt.Errorf("tls.crt and tls.key must contain a matching PEM certificate and private key: %w", err)
+	}
+	leaf, err := x509.ParseCertificate(pair.Certificate[0])
+	if err != nil {
+		return fmt.Errorf("parse serving certificate: %w", err)
+	}
+	now := time.Now()
+	if now.Before(leaf.NotBefore) || !now.Before(leaf.NotAfter) {
+		return fmt.Errorf("serving certificate is not currently valid; check NotBefore and NotAfter")
+	}
+	hasUsageRestriction := len(leaf.ExtKeyUsage) > 0 || len(leaf.UnknownExtKeyUsage) > 0
+	if hasUsageRestriction && !slices.Contains(leaf.ExtKeyUsage, x509.ExtKeyUsageServerAuth) && !slices.Contains(leaf.ExtKeyUsage, x509.ExtKeyUsageAny) {
+		return fmt.Errorf("serving certificate does not allow TLS server authentication")
+	}
+	if err := leaf.VerifyHostname(hostname); err != nil {
+		return fmt.Errorf("serving certificate must cover hostname %q: %w", hostname, err)
+	}
+	return nil
 }

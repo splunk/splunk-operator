@@ -167,6 +167,7 @@ func newKVServiceWatchFixture(ctx context.Context, invalidTenant, missingKey boo
 		cr: &enterpriseApi.KVService{
 			ObjectMeta: metav1.ObjectMeta{Name: "watch", Namespace: backend.Name},
 			Spec: enterpriseApi.KVServiceSpec{
+				Scheme: "http",
 				CommonWorkloadSpec: enterpriseApi.CommonWorkloadSpec{Spec: enterpriseApi.Spec{
 					Image: "kvstore/kvservice:watch-test", ImagePullPolicy: "IfNotPresent",
 				}},

@@ -277,12 +277,13 @@ func testKVServicePostgresReconciliationLifecycle(t *testing.T) {
 func testKVServicePostgresTLSReconciliation(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, config.DefaultMutableFeatureGate, config.CertManagement, true)
 	cr, _, c := postgresReadinessFixture(t)
+	cr.Spec.Scheme = "https"
 	cr.Spec.Certs = []enterpriseApi.CertSpec{{SecretRef: corev1.LocalObjectReference{Name: "serving-cert"}, Role: enterpriseApi.CertRoleServer}}
 	require.NoError(t, c.Update(t.Context(), cr))
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "serving-cert", Namespace: cr.Namespace},
 		Type:       corev1.SecretTypeTLS,
-		Data:       map[string][]byte{"tls.crt": []byte("test-cert"), "tls.key": []byte("test-key")},
+		Data:       servingCertificateData(t, cr.Name, cr.Namespace),
 	}
 	require.NoError(t, c.Create(t.Context(), secret))
 	_, err := Apply(t.Context(), c, client.ObjectKeyFromObject(cr), events.NewFakeRecorder(20))
