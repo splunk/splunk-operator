@@ -169,7 +169,6 @@ Inspect the latest `status.postgresMajorUpgradeStatus` entry:
 | `blueGreen.recoverability.backupVerifiedAt`, `walArchiveBaselineVerifiedAt` | Verified backup and WAL baseline |
 | `blueGreen.completion.replicationRemovedAt` | Verified replication teardown |
 | `blueGreen.completion.sourceCredentialsRetiredAt`, `credentialsRemovedAt` | Source password retirement and attempt Secret removal |
-
 | `blueGreen.cleanup.environmentRef`, `retirementGeneration` | Exact retiring environment and independent retirement revision |
 | `blueGreen.cleanup.retirementAcknowledgements` | Child/resource inventory and aggregated retirement proofs |
 | `blueGreen.cleanup.retiredResources` | Exact parent-owned resource identities retained through deletion retries |
@@ -284,7 +283,7 @@ attempt's frozen baseline, is valid:
 The attempt then records `blueGreen.rebuildRequired`, reports
 `CandidateRebuildRequired` and `RetryAvailable=False`, and ignores retry
 timestamps. Cancel it instead. A new attempt can start only after
-retained-environment cleanup, a later workflow stage. You cannot force the
+retained-environment cleanup. You cannot force the
 operator to reuse an attempt it cannot prove valid.
 
 ### Cancel an attempt
@@ -325,7 +324,32 @@ The admission webhook rejects `cancel: true` after Endpoint Committed. If a
 cancel races the commit, the operator ignores it and continues toward green.
 
 While a retained environment remains, `CleanupRequired=True` and a new major
-upgrade cannot start. Retained-environment cleanup is a later workflow stage
-and is not yet available. After it completes, starting another attempt for the
+upgrade cannot start. After cleanup completes, starting another attempt for the
 same version pair requires setting `allow: false`, letting the operator observe
 it, and then setting `allow: true`.
+
+### Clean up the retained environment
+
+After `Completed` or `Cancelled`, set
+`postgresMajorUpgradeConfig.blueGreen.cleanup: true`. A failed attempt must
+first be retried or cancelled. Cleanup retires blue after completion and green
+after cancellation, preserving the authoritative environment and recovery backups.
+
+Before deleting the retired Cluster, cleanup transfers shared CA Secrets still
+used by the authoritative Cluster to that Cluster. It preserves Backup records
+and detaches Cluster-owned data, WAL and tablespace VolumeSnapshots so garbage
+collection cannot remove the recovery snapshots.
+
+Cleanup records its permission before making changes. Once consumed, it
+continues even if `cleanup` or `allow` becomes `false`. Its independent status
+changes from `Cleaning` to `Cleaned`; the upgrade remains `Completed` or
+`Cancelled`. Errors report `CleanupFailed` and retry without reopening the
+retired environment.
+
+Children remove their retired CNPG Database declarations and acknowledge the
+exact environment UID and retirement generation. The parent independently
+checks those proofs and declaration absence before deleting retired resources.
+Child changes invalidate the barrier and require fresh acknowledgements.
+`Cleaned` also requires removal of retired storage and workloads; a terminating
+resource or storage finalizer keeps cleanup pending. Do not remove finalizers
+to advance it.

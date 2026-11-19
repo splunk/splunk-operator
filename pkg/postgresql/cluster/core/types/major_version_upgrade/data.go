@@ -64,6 +64,8 @@ type Intent struct {
 	// CancelRequested reflects the current blue/green cancel gate. The flow
 	// latches it into status; a later false value does not resume the attempt.
 	CancelRequested bool
+	// Cleanup resumes a terminal attempt independently of allow or live versions.
+	RequiresBlueGreenCleanup bool
 	// RequiresBlueGreenRearm identifies the one-step, controller-owned action
 	// that records a false allow gate after a cleaned blue/green attempt. It is
 	// an execution directive only: Schedule may discover it but must not

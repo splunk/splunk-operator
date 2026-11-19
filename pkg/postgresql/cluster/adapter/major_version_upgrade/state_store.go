@@ -75,13 +75,15 @@ func (r *majorUpgradeInfoStoreAdapter) ReadMajorUpgradeIntent(ctx context.Contex
 	}
 	var sourceVersion string
 	if len(entries) > 0 {
-		entry := entries[len(entries)-1]
+		entry := *mvutypes.LatestAttempt(entries)
 		stage := mvutypes.CutoverStageOf(entry)
-		if stage.OwnsRecovery() || mvutypes.BlueGreenCancellationPending(spec, entry) {
+		cleanupPending := mvutypes.BlueGreenCleanupPending(spec, entry)
+		if stage.OwnsRecovery() || mvutypes.BlueGreenCancellationPending(spec, entry) || cleanupPending {
 			intent, err := intentFromDurableAttempt(entry, entries)
 			if err != nil {
 				return mvutypes.Intent{}, false, err
 			}
+			intent.RequiresBlueGreenCleanup = cleanupPending
 			return r.withCurrentCutoverPolicy(ctx, intent, spec)
 		}
 		if stage == mvutypes.CutoverRestored && entry.SourcePgVersion != nil {
@@ -144,10 +146,38 @@ func (r *majorUpgradeInfoStoreAdapter) SaveMajorUpgradeProgress(ctx context.Cont
 		if err := mvutypes.ValidateBlueGreenProgress(latest, progress); err != nil {
 			return nil, err
 		}
+		if err := r.validateCleanupPermission(ctx, latest, progress); err != nil {
+			return nil, err
+		}
 		saved = progress
 		return stateWithProgress(latest, progress), nil
 	})
 	return saved, err
+}
+
+// validateCleanupPermission rechecks unconsumed permission inside the optimistic write.
+func (r *majorUpgradeInfoStoreAdapter) validateCleanupPermission(ctx context.Context, intent mvutypes.Intent, progress mvutypes.Progress) error {
+	bg := progress.BlueGreen
+	if bg == nil || bg.Gates == nil || bg.Gates.Cleanup == nil {
+		return nil
+	}
+	for _, entry := range intent.State {
+		if mvutypes.MatchesIntent(entry, intent) && entry.BlueGreen.Gates != nil && entry.BlueGreen.Gates.Cleanup != nil {
+			return nil
+		}
+	}
+	spec, _, err := r.store.GetSpecificationWithAnnotations(ctx)
+	if err != nil {
+		return err
+	}
+	generation, err := r.store.GetGeneration(ctx)
+	if err != nil {
+		return err
+	}
+	if !mvutypes.BlueGreenCleanupRequestedInSpec(spec) || generation != intent.Generation || bg.Gates.Cleanup.Generation != generation {
+		return fmt.Errorf("cleanup permission changed before consumption")
+	}
+	return nil
 }
 
 // Endpoint orchestration persists its own barriers and commit receipt. Merge
@@ -195,6 +225,9 @@ func MajorUpgradeInputFromCluster(cluster *platformv1alpha1.PostgresCluster) (mv
 }
 
 func MajorUpgradeInputFromParts(spec *platformv1alpha1.PostgresClusterSpec, entries []platformv1alpha1.PostgresMajorUpgradeStatus, annotations map[string]string, fallbackPgVersion string) (mvutypes.Intent, bool, error) {
+	if intent, selected, err := durableCleanupIntent(spec, entries); selected || err != nil {
+		return intent, selected, err
+	}
 	if spec == nil || spec.PostgresVersion == nil {
 		return mvutypes.Intent{}, false, nil
 	}
@@ -238,6 +271,17 @@ func MajorUpgradeInputFromParts(spec *platformv1alpha1.PostgresClusterSpec, entr
 	}
 
 	return intent, true, nil
+}
+
+// durableCleanupIntent keeps the attempt identity after current and target majors match.
+func durableCleanupIntent(spec *platformv1alpha1.PostgresClusterSpec, entries []platformv1alpha1.PostgresMajorUpgradeStatus) (mvutypes.Intent, bool, error) {
+	entry := mvutypes.LatestAttempt(entries)
+	if entry == nil || !mvutypes.BlueGreenCleanupPending(spec, *entry) {
+		return mvutypes.Intent{}, false, nil
+	}
+	intent, err := intentFromDurableAttempt(*entry, entries)
+	intent.RequiresBlueGreenCleanup = true
+	return intent, true, err
 }
 
 func majorUpgradeAllowed(config *platformv1alpha1.PostgresMajorUpgradeConfig) bool {

@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -69,7 +70,8 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 	ctx = logging.WithLogger(ctx, logging.FromContext(ctx).With("func", "PostgresClusterService", "postgresCluster", parent.Name))
 	// Mode ownership comes from durable protocol state, not component blocking.
 	stage := cutoverStage(parent)
-	pendingCancellation := len(parent.Status.PostgresMajorUpgradeStatus) > 0 && mvutypes.BlueGreenCancellationPending(&parent.Spec, parent.Status.PostgresMajorUpgradeStatus[len(parent.Status.PostgresMajorUpgradeStatus)-1])
+	latest := mvutypes.LatestAttempt(parent.Status.PostgresMajorUpgradeStatus)
+	pendingCancellation := latest != nil && mvutypes.BlueGreenCancellationPending(&parent.Spec, *latest)
 	if parent.DeletionTimestamp == nil && (stage.OwnsRecovery() || pendingCancellation) {
 		class := new(platformv1alpha1.PostgresClusterClass)
 		configErr := rc.APIReader.Get(ctx, client.ObjectKey{Name: parent.Spec.Class}, class)
@@ -81,7 +83,52 @@ func PostgresClusterService(ctx context.Context, rc *ReconcileContext, req ctrl.
 		}
 		return reconcileCutoverHandoff(ctx, rc, parent, stage, class, merged, configErr, newRoleSweeper, customMetricsFactory)
 	}
+	if parent.DeletionTimestamp == nil && mvutypes.ClusterCleanupPending(parent) {
+		result, cleanupErr := reconcileEnvironmentCleanup(ctx, rc, parent)
+		if err := refreshCutoverParent(ctx, rc.APIReader, parent); err != nil {
+			return result, errors.Join(cleanupErr, err)
+		}
+		ordinary := *rc
+		if rc.UseCaseRegistryProvider != nil {
+			ordinary.UseCaseRegistryProvider = func(key types.NamespacedName, cluster *platformv1alpha1.PostgresCluster, config *MergedConfig) map[string]usecases.Factory {
+				registry := maps.Clone(rc.UseCaseRegistryProvider(key, cluster, config))
+				delete(registry, mvutypes.UseCaseName)
+				return registry
+			}
+		}
+		ordinaryResult, ordinaryErr := reconcileOrdinaryCluster(ctx, &ordinary, parent, newRoleSweeper, backupBackend, customMetricsFactory, recoveryBackend)
+		return soonerRequeue(result, ordinaryResult), errors.Join(cleanupErr, ordinaryErr)
+	}
 	return reconcileOrdinaryCluster(ctx, rc, parent, newRoleSweeper, backupBackend, customMetricsFactory, recoveryBackend)
+}
+
+func reconcileEnvironmentCleanup(ctx context.Context, rc *ReconcileContext, parent *platformv1alpha1.PostgresCluster) (ctrl.Result, error) {
+	if rc.UseCaseRegistryProvider == nil {
+		return ctrl.Result{}, fmt.Errorf("retirement requires its use case registry")
+	}
+	factory := rc.UseCaseRegistryProvider(client.ObjectKeyFromObject(parent), parent, nil)[mvutypes.UseCaseName]
+	if factory == nil {
+		return ctrl.Result{}, fmt.Errorf("retirement use case is unavailable")
+	}
+	runtime, err := factory()
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if runtime == nil {
+		return ctrl.Result{}, fmt.Errorf("retirement runtime is unavailable")
+	}
+	if err := runtime.Prerequisites(ctx); err != nil {
+		return ctrl.Result{}, err
+	}
+	active, err := runtime.Schedule(ctx)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !active {
+		return ctrl.Result{}, fmt.Errorf("pending retirement was not scheduled")
+	}
+	report, err := runtime.Act(ctx)
+	return soonerRequeue(resultFromUseCaseReport(&report), ctrl.Result{RequeueAfter: time.Second}), err
 }
 
 func reconcileOrdinaryCluster(ctx context.Context, rc *ReconcileContext, postgresCluster *platformv1alpha1.PostgresCluster, newRoleSweeper ports.NewRoleSweeperFunc, backupBackend BackupBackend, customMetricsFactory CustomMetricsFactory, recoveryBackend RecoveryBackend) (ctrl.Result, error) {
