@@ -152,6 +152,18 @@ func (r *PostgresClusterReconciler) useCaseRegistry(key types.NamespacedName, cl
 // already decided this use case is relevant before registering it).
 func (r *PostgresClusterReconciler) newMajorUpgradeUseCase(key types.NamespacedName, cluster *platformv1alpha1.PostgresCluster, mergedConfig *clustercore.MergedConfig) usecases.Factory {
 	return func() (usecases.UseCase, error) {
+		if majorversionupgradetypes.ClusterCleanupPending(cluster) {
+			stateStore, err := clusterk8s.NewClusterStateStoreWithReader(r.Client, r.APIReader, key)
+			if err != nil {
+				return nil, fmt.Errorf("construct cleanup state store: %w", err)
+			}
+			cleaner, err := majorupgradeadapter.NewBlueGreenCleanup(r.Client, r.APIReader, key, cluster)
+			if err != nil {
+				return nil, err
+			}
+			notifier := majorupgradeadapter.NewUpgradeNotifier(&recorderEventEmitter{r.Recorder}, cluster)
+			return majorversionupgrade.NewCleanupUseCase(majorupgradeadapter.NewMajorUpgradeStateStore(stateStore), cleaner, notifier), nil
+		}
 		targetImage, err := clustercore.EffectivePostgresImage(mergedConfig)
 		recovery := activeCutoverStage(cluster).OwnsRecovery()
 		if cluster != nil && len(cluster.Status.PostgresMajorUpgradeStatus) > 0 {

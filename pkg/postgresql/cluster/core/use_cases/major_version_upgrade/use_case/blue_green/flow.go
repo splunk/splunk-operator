@@ -57,6 +57,11 @@ type Completion interface {
 	AdvanceCompletion(context.Context, mvutypes.Intent, *platformv1alpha1.PostgresBlueGreenUpgradeStatus) (Outcome, error)
 }
 
+// Cleaner retires an environment without changing the terminal production outcome.
+type Cleaner interface {
+	AdvanceCleanup(context.Context, mvutypes.Intent) (Outcome, error)
+}
+
 // Outcome is the single durable result of one source-preparation transition.
 type Outcome struct {
 	Report    reconciliationTypes.Report

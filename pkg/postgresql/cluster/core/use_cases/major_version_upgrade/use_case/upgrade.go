@@ -363,7 +363,8 @@ func (h *MajorUpgradeUseCase) readIntent(ctx context.Context) (mvutypes.Intent, 
 	if h.store == nil {
 		return mvutypes.Intent{}, false, errors.Join(mvutypes.ErrStateTemporarilyUnavailable, errors.New("major upgrade info store is not configured"))
 	}
-	return h.store.ReadMajorUpgradeIntent(ctx)
+	intent, enabled, err := h.store.ReadMajorUpgradeIntent(ctx)
+	return intent, enabled && !intent.RequiresBlueGreenCleanup, err
 }
 
 func (h *MajorUpgradeUseCase) strategyFor(intent mvutypes.Intent) upgradeStrategy {
