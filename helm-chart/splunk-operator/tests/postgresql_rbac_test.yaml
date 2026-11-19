@@ -68,6 +68,12 @@ tests:
       - contains:
           path: rules
           content: *networkPolicyReads
+      - contains:
+          path: rules
+          content: &snapshotPreservation
+            apiGroups: [snapshot.storage.k8s.io]
+            resources: [volumesnapshots]
+            verbs: [get, list, patch]
   - it: limits namespaced reconciliation to the existing Role
     template: templates/rbac/role.yaml
     set: &namespacePostgres
@@ -88,6 +94,9 @@ tests:
       - contains:
           path: rules
           content: *networkPolicyReads
+      - contains:
+          path: rules
+          content: *snapshotPreservation
   - it: grants only class and issuer reads plus CRD discovery outside the namespace
     template: templates/rbac/postgresql_cluster_reader.yaml
     documentIndex: 0
