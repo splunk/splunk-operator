@@ -18,5 +18,3 @@ For a process inside the Splunk container, use
 ## Design documentation
 
 - [Architecture overview](architecture-overview.md) describes reconciliation and resource lifecycles.
-- [RFC summary](rfc-summary.md) explains the problem and the alternatives considered.
-- [Architecture Decision Records](adr/README.md) explain the design decisions.

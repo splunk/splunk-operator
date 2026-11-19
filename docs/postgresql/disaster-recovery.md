@@ -28,7 +28,7 @@ in the first place, see [Backup and Restore Choices](backup-and-restore-choices.
 > **You cannot recover what you did not back up.** DR readiness is decided when
 > you configure the `PostgresClusterClass`, not when disaster strikes. Confirm a
 > usable backup exists *before* you need it — that is what the [testing
-> schedule](#7-dr-testing-schedule) is for.
+> schedule](#6-dr-testing-schedule) is for.
 
 ---
 
@@ -69,26 +69,7 @@ restore to a validated, application-ready cluster.
 
 > **Backup-based recovery is not zero-RPO.** Continuous WAL archiving gives a *small, bounded* RPO (the `archive_timeout` window above), not RPO = 0. In PostgreSQL/CloudNativePG, true **RPO = 0 requires synchronous replication** — a high-availability property that prioritizes durability over write availability, distinct from these backup/restore paths. **The Splunk Operator does not currently expose synchronous replication** (the CNPG `dataDurability` / `spec.postgresql.synchronous` settings are not surfaced through the `PostgresClusterClass` API), so the DR methods documented here are the recoverability tools available today. If a workload requires zero-loss durability, raise it as a platform requirement rather than assuming these backup paths provide it.
 
-> **RTO is driven by base-backup frequency.** For object-storage and PITR, RTO = time to fetch the base backup + time to replay WAL from that base up to the target. The more WAL there is to replay since the last base backup, the longer recovery takes. CloudNativePG notes a **weekly base backup is typically sufficient**; increase base-backup frequency if measured WAL-replay time pushes RTO past your objective. This is why the [testing schedule](#7-dr-testing-schedule) measures RTO against production-representative data.
-
-### Measured reference values
-
-Measured on a KIND cluster with small (~1 GiB) test databases, operator build
-`dr-cpi1867`, on 2026-07-29. **These are indicative, not SLAs.** RTO scales with
-database size, WAL volume to replay, object-store bandwidth, and instance count.
-Re-measure against production-representative data — that is a goal of the
-[testing schedule](#7-dr-testing-schedule).
-
-| Method | Measured RTO (1 GiB test DB) | What was measured |
-|---|---|---|
-| Volume snapshot | **~36 s** | Restore CR created → CNPG `ClusterReady=True` + credential sweep complete |
-| Object storage (latest WAL) | **~83 s** | Restore CR created → credential sweep complete (base pull + WAL replay) |
-| PITR (`recoveryTarget: time`) | **~105 s** | Restore CR created → credential sweep complete (base pull + WAL replay to target) |
-
-Re-provisioning application access with a `PostgresDatabase` after the sweep added
-~35 s in each drill and is part of end-to-end RTO — see [§4.4](#44-application-cutover).
-
----
+> **RTO is driven by base-backup frequency.** For object-storage and PITR, RTO = time to fetch the base backup + time to replay WAL from that base up to the target. The more WAL there is to replay since the last base backup, the longer recovery takes. CloudNativePG notes a **weekly base backup is typically sufficient**; increase base-backup frequency if measured WAL-replay time pushes RTO past your objective. This is why the [testing schedule](#6-dr-testing-schedule) measures RTO against production-representative data.
 
 ## 3. Failure mode → recovery path
 
@@ -424,81 +405,7 @@ Expected. The credential sweep disables them. Re-provision via `PostgresDatabase
 
 ---
 
-## 6. Validation evidence
-
-All three recovery paths were executed end-to-end on a KIND cluster (operator
-build `dr-cpi1867`) on 2026-07-29 and verified for correctness. The three
-restores were applied together from a single manifest, each with a fresh name and
-`clusterDeletionPolicy: Delete`, recovering from two live source clusters:
-
-- `vol-src` — database `appdb`, table `public.orders` with 3 rows (ids 1,2,3);
-  used by Scenario A (from its CSI snapshot) and Scenario B (from its S3 archive).
-- `pitr-src` — database `pitrdb`, table `public.events`; rows 1,2,3 and 6,7 were
-  committed **before** the recovery target `2026-07-29T10:05:53.159125Z`, rows 8,9
-  **after** it.
-
-**Restore status — all three reached `Ready` with the credential sweep complete,
-and each recorded the correct source:**
-
-```text
-$ kubectl get postgrescluster dr-ev-vol -n dr-test \
-    -o jsonpath='PHASE={.status.phase} RESTORE={.status.restore}'
-PHASE=Ready  RESTORE={"credentialSweep":{"completed":true},
-  "source":{"volumeSnapshot":"vol-src-backup-20260729103000"}}
-
-$ kubectl get postgrescluster dr-ev-os -n dr-test -o jsonpath='...'
-PHASE=Ready  RESTORE={"credentialSweep":{"completed":true},
-  "source":{"objectStorage":"vol-src"}}
-
-$ kubectl get postgrescluster dr-ev-pitr -n dr-test -o jsonpath='...'
-PHASE=Ready  RESTORE={"credentialSweep":{"completed":true},
-  "source":{"objectStorage":"pitr-src",
-    "requestedRecoveryTarget":{"type":"time","value":"2026-07-29T10:05:53.159125Z"}}}
-```
-
-**Data verification — each recovered exactly the expected rows:**
-
-```text
-# A — volume snapshot: appdb.public.orders
-3 rows: 1,2,3                                    ✓ snapshot contents intact
-
-# B — object storage (latest WAL): appdb.public.orders
-3 rows: 1,2,3                                    ✓ recovered from S3 base + WAL
-
-# C — PITR to 2026-07-29T10:05:53.159125Z: pitrdb.public.events
- id |      label      |          created_at
-----+-----------------+-------------------------------
-  1 | before-target-1 | 2026-07-29 10:02:33.123522+00
-  2 | before-target-2 | 2026-07-29 10:02:33.123522+00
-  3 | before-target-3 | 2026-07-29 10:02:33.123522+00
-  6 | phase2-before-1 | 2026-07-29 10:05:50.154103+00
-  7 | phase2-before-2 | 2026-07-29 10:05:50.154103+00
-(5 rows)                                         ✓ rows 8,9 (10:05:56, AFTER
-                                                   target) correctly excluded
-```
-
-**Credential sweep — recovered application roles were login-disabled**, so stale
-source credentials cannot authenticate against the restored cluster:
-
-```text
-$ kubectl exec -n dr-test dr-ev-vol-1 -c postgres -- \
-    psql -U postgres -tAc \
-    "select rolname, rolcanlogin from pg_roles where rolname like 'appdb%';"
-appdb_admin|f
-appdb_rw|f
-```
-
-> **Note on timing.** This verification run applied all three restores
-> **concurrently** on a single-node KIND cluster already hosting the source
-> clusters, so the observed times to `Ready` (~1–3.5 min) reflect that contention
-> and are **not** representative RTO. The per-method RTO figures in
-> [§2](#measured-reference-values) come from **sequential** drills and remain the
-> reference. This run's purpose was functional correctness, which passed on all
-> three paths.
-
----
-
-## 7. DR testing schedule
+## 6. DR testing schedule
 
 DR procedures are only real if they are exercised. Run these drills on a
 non-production copy and record RTO, RPO, and any deviation each time.
@@ -525,8 +432,8 @@ Each drill should:
 1. Use a **fresh restore-target name** and `clusterDeletionPolicy: Delete`
    ([§4.5](#45-critical-do-not-reuse-a-restore-name)).
 2. Record **measured RTO** (restore CR created → sweep complete) and re-provision
-   time, comparing against the [reference values](#measured-reference-values)
-   scaled for data size.
+   time. Compare the results against your recovery objectives and previous drills
+   with production-representative data.
 3. Confirm the **RPO** matches expectations for the method
    (snapshot interval vs. latest WAL vs. chosen target).
 4. Tear down the drill cluster afterwards.
@@ -536,7 +443,7 @@ bandwidth limits and should feed back into capacity and backup-schedule planning
 
 ---
 
-## 8. Related documentation
+## 7. Related documentation
 
 - [Backup and Restore Choices](backup-and-restore-choices.md) — choosing a strategy
 - [Restoring a PostgresCluster](restore-from-volume-snapshot.md) — full restore API reference

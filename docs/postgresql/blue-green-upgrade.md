@@ -329,7 +329,3 @@ upgrade cannot start. Retained-environment cleanup is a later workflow stage
 and is not yet available. After it completes, starting another attempt for the
 same version pair requires setting `allow: false`, letting the operator observe
 it, and then setting `allow: true`.
-
-For the complete design and subsequent lifecycle stages, see
-[ADR-0007](adr/0007-minimum-downtime-major-upgrades.md) and its
-[deployment design](adr/appendices/0007-bluegreen-deployment-design.md).
