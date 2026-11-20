@@ -807,9 +807,9 @@ Tests run automatically on:
 
 For integration test workflows, CI provisions or reuses a provider-specific cluster, builds and pushes operator images, then runs the selected suite. Smoke tests run on existing CI infrastructure or an ephemeral Kraken vCluster.
 
-Integration workflow cleanup is best-effort: cleanup failures are emitted as
-warnings and recorded in the job's cleanup log, while the job result continues
-to reflect test execution and setup failures.
+For integration workflows, cleanup failures are emitted as warnings and
+recorded in the job's cleanup log, while test and setup failures still control
+the job result.
 
 **JUnit report naming:**
 
