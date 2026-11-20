@@ -39,18 +39,38 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *fie
 	// - LivenessInitialDelaySeconds: +kubebuilder:validation:Minimum=0
 	// - ReadinessInitialDelaySeconds: +kubebuilder:validation:Minimum=0
 
-	// Reject spec.certs[] when the CertManagement feature is disabled, since the
-	// reconciler silently no-ops it in that state (see certs.ReconcileCerts).
-	if len(spec.Certs) > 0 && !config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
-		allErrs = append(allErrs, field.Forbidden(fldPath.Child("certs"),
-			"the CertManagement feature is not enabled; set --feature-gates=CertManagement=true to activate"))
-	}
+	allErrs = append(allErrs, validateCommonWorkloadSpec(&spec.CommonWorkloadSpec, fldPath)...)
 
 	// Validate EtcVolumeStorageConfig
 	allErrs = append(allErrs, validateStorageConfig(&spec.EtcVolumeStorageConfig, fldPath.Child("etcVolumeStorageConfig"))...)
 
 	// Validate VarVolumeStorageConfig
 	allErrs = append(allErrs, validateStorageConfig(&spec.VarVolumeStorageConfig, fldPath.Child("varVolumeStorageConfig"))...)
+
+	// Validate probe configurations
+	if spec.LivenessProbe != nil {
+		allErrs = append(allErrs, validateProbe(spec.LivenessProbe, fldPath.Child("livenessProbe"))...)
+	}
+	if spec.ReadinessProbe != nil {
+		allErrs = append(allErrs, validateProbe(spec.ReadinessProbe, fldPath.Child("readinessProbe"))...)
+	}
+	if spec.StartupProbe != nil {
+		allErrs = append(allErrs, validateProbe(spec.StartupProbe, fldPath.Child("startupProbe"))...)
+	}
+
+	return allErrs
+}
+
+// validateCommonWorkloadSpec validates workload settings shared by Enterprise and KVService.
+func validateCommonWorkloadSpec(spec *enterpriseApi.CommonWorkloadSpec, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Reject spec.certs[] when the CertManagement feature is disabled, since the
+	// reconciler silently no-ops it in that state (see certs.ReconcileCerts).
+	if len(spec.Certs) > 0 && !config.DefaultMutableFeatureGate.Enabled(config.CertManagement) {
+		allErrs = append(allErrs, field.Forbidden(fldPath.Child("certs"),
+			"the CertManagement feature is not enabled; set --feature-gates=CertManagement=true to activate"))
+	}
 
 	// Validate extraEnv uniqueness by Name
 	seenEnvNames := make(map[string]int) // map name -> first index seen
@@ -79,17 +99,6 @@ func validateCommonSplunkSpec(spec *enterpriseApi.CommonSplunkSpec, fldPath *fie
 		} else {
 			seenSecretNames[secret.Name] = i
 		}
-	}
-
-	// Validate probe configurations
-	if spec.LivenessProbe != nil {
-		allErrs = append(allErrs, validateProbe(spec.LivenessProbe, fldPath.Child("livenessProbe"))...)
-	}
-	if spec.ReadinessProbe != nil {
-		allErrs = append(allErrs, validateProbe(spec.ReadinessProbe, fldPath.Child("readinessProbe"))...)
-	}
-	if spec.StartupProbe != nil {
-		allErrs = append(allErrs, validateProbe(spec.StartupProbe, fldPath.Child("startupProbe"))...)
 	}
 
 	// Validate resource requests <= limits
