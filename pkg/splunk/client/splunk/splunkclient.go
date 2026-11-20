@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -743,23 +744,19 @@ func (c *SplunkClient) AutomateMCApplyChanges() error {
 			str := []string{configuredPeers, e.Name}
 			configuredPeers = strings.Join(str, ",")
 		}
-		for _, s := range e.Content.ServerRoles {
-			if s == "indexer" {
-				indexerMemberList = indexerMemberList + "&member=" + e.Name
-			}
-			if s == "license_master" || s == "license_manager" {
-				licenseManagerMemberList = licenseManagerMemberList + "&member=" + e.Name
-			}
+		if isMCIndexer(e.Name, e.Content.ServerRoles) {
+			indexerMemberList = indexerMemberList + "&member=" + e.Name
+		}
+		if hasMCLicenseManagerRole(e.Content.ServerRoles) {
+			licenseManagerMemberList = licenseManagerMemberList + "&member=" + e.Name
 		}
 	}
 
-	for _, e := range apiResponseServerRoles.ServerRoles {
-		if e == "indexer" {
-			indexerMemberList = "&member=localhost:localhost" + indexerMemberList
-		}
-		if e == "license_master" || e == "license_manager" {
-			licenseManagerMemberList = licenseManagerMemberList + "&member=localhost:localhost"
-		}
+	if isMCIndexer("localhost:localhost", apiResponseServerRoles.ServerRoles) {
+		indexerMemberList = "&member=localhost:localhost" + indexerMemberList
+	}
+	if hasMCLicenseManagerRole(apiResponseServerRoles.ServerRoles) {
+		licenseManagerMemberList = licenseManagerMemberList + "&member=localhost:localhost"
 	}
 	reqBodyIndexer := indexerMemberList + "&default=true"
 	reqBodyLicenseManager := licenseManagerMemberList + "&default=false"
@@ -820,6 +817,29 @@ func (c *SplunkClient) AutomateMCApplyChanges() error {
 	}
 	err = c.UpdateMonitoringConsoleApp()
 	return err
+}
+
+// hasMCLicenseManagerRole reports whether the server roles include a license manager role
+func hasMCLicenseManagerRole(serverRoles []string) bool {
+	for _, s := range serverRoles {
+		if s == "license_master" || s == "license_manager" {
+			return true
+		}
+	}
+	return false
+}
+
+// mcLicenseManagerPeerRegexp matches the service, headless service or pod name of an
+// operator-managed LicenseManager. The CR name stays within the first DNS label.
+var mcLicenseManagerPeerRegexp = regexp.MustCompile(`^splunk-[^.:]+-license-(manager|master)-(service|headless|[0-9]+)([.:]|$)`)
+
+// isMCIndexer reports whether a peer belongs in dmc_group_indexer. A LicenseManager is
+// excluded by name, as a self-licensed Standalone reports the same roles.
+func isMCIndexer(peerName string, serverRoles []string) bool {
+	if !slices.Contains(serverRoles, "indexer") {
+		return false
+	}
+	return !hasMCLicenseManagerRole(serverRoles) || !mcLicenseManagerPeerRegexp.MatchString(peerName)
 }
 
 // GetMonitoringconsoleServerRoles to retrieve server roles of the local host or SplunkMonitoringConsole
