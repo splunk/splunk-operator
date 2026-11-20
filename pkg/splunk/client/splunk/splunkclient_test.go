@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -502,6 +503,168 @@ func TestAutomateMCApplyChanges(t *testing.T) {
 	}
 	splunkClientMultipleRequestTester(t, "TestAutomateMCApplyChanges", status, body, wantRequests, test)
 }
+
+// mcPeersBody builds a /services/search/distributed/peers response where each
+// peer is given as {name, comma separated server roles}. No peer has a cluster label.
+func mcPeersBody(peers [][2]string) string {
+	entries := make([]string, 0, len(peers))
+	for _, p := range peers {
+		roles := make([]string, 0)
+		for _, r := range strings.Split(p[1], ",") {
+			roles = append(roles, `"`+r+`"`)
+		}
+		entries = append(entries, `{"name":"`+p[0]+`","content":{"server_roles":[`+strings.Join(roles, ",")+`],"cluster_label":[]}}`)
+	}
+	return `{"entry":[` + strings.Join(entries, ",") + `]}`
+}
+
+// applyMCChanges runs AutomateMCApplyChanges against a mock MC whose own roles are
+// mcRoles and whose distributed peers are peers. It returns the request bodies sent
+// to set dmc_group_indexer and the license manager group.
+func applyMCChanges(t *testing.T, mcRoles string, peers [][2]string) (indexerBody, licenseBody string) {
+	t.Helper()
+	const base = "https://localhost:8089"
+	navBody := loadFixture(t, "get_mc_nav_default_distributed.json")
+
+	roles := make([]string, 0)
+	for _, r := range strings.Split(mcRoles, ",") {
+		roles = append(roles, `"`+r+`"`)
+	}
+	serverInfo := `{"entry":[{"content":{"server_roles":[` + strings.Join(roles, ",") + `]}}]}`
+
+	mock := &spltest.MockHTTPClient{}
+	add := func(method, url string, status int, body string) {
+		req, _ := http.NewRequest(method, url, nil)
+		mock.AddHandler(req, status, body, nil)
+	}
+	add("GET", base+"/services/server/info/server-info?count=0&output_mode=json", 200, serverInfo)
+	add("GET", base+"/services/search/distributed/peers?count=0&output_mode=json", 200, mcPeersBody(peers))
+	add("POST", base+"/services/search/distributed/groups/dmc_group_indexer/edit", 200, "")
+	add("POST", splcommon.LocalURLLicenseManagerEdit, 200, "")
+	add("GET", base+"/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full?count=0&output_mode=json", 200, navBody)
+	add("POST", base+"/servicesNS/nobody/splunk_monitoring_console/saved/searches/DMC%20Asset%20-%20Build%20Full/dispatch", 201, "")
+	add("GET", base+"/servicesNS/nobody/splunk_monitoring_console/data/ui/nav/default.distributed?count=0&output_mode=json", 200, navBody)
+	add("POST", base+"/servicesNS/nobody/splunk_monitoring_console/configs/conf-splunk_monitoring_console_assets/settings", 200, "")
+	add("POST", base+"/servicesNS/nobody/system/apps/local/splunk_monitoring_console", 200, "")
+
+	c := splunk.NewSplunkClient(base, "admin", "")
+	c.Client = mock
+	if err := c.AutomateMCApplyChanges(); err != nil {
+		t.Fatalf("AutomateMCApplyChanges() err = %v", err)
+	}
+
+	posted := map[string]string{}
+	for _, req := range mock.GotRequests {
+		if req.Method != "POST" || req.GetBody == nil {
+			continue
+		}
+		rc, err := req.GetBody()
+		if err != nil {
+			t.Fatalf("GetBody() err = %v", err)
+		}
+		b, _ := io.ReadAll(rc)
+		posted[req.URL.String()] = string(b)
+	}
+	indexerBody, ok := posted[base+"/services/search/distributed/groups/dmc_group_indexer/edit"]
+	if !ok {
+		t.Fatalf("no POST to dmc_group_indexer; got %v", posted)
+	}
+	return indexerBody, posted[splcommon.LocalURLLicenseManagerEdit]
+}
+
+// assertMember fails the test unless body contains (or, for want=false, does not
+// contain) the exact member entry for peer.
+func assertMember(t *testing.T, group, body, peer string, want bool) {
+	t.Helper()
+	has := strings.Contains(body, "member="+peer+"&") || strings.HasSuffix(body, "member="+peer)
+	if has != want {
+		t.Errorf("%s body %q: contains %q = %v; want %v", group, body, peer, has, want)
+	}
+}
+
+// TestAutomateMCApplyChangesLicenseManagerNotInIndexerGroup checks that an
+// operator-managed license manager, which also reports the "indexer" server role,
+// is only added to the license manager group and not to dmc_group_indexer.
+func TestAutomateMCApplyChangesLicenseManagerNotInIndexerGroup(t *testing.T) {
+	lmNames := []string{
+		"splunk-lm-license-manager-service:8089",
+		"splunk-lm-license-manager-0.splunk-lm-license-manager-headless.splunk-operator.svc.cluster.local:8089",
+		"splunk-lm-license-master-service:8089",
+	}
+	for _, lmName := range lmNames {
+		for _, lmRole := range []string{"license_master", "license_manager"} {
+			t.Run(lmName+"/"+lmRole, func(t *testing.T) {
+				indexerBody, lmBody := applyMCChanges(t, "search_head", [][2]string{
+					{"100.64.0.1:8089", "indexer,cluster_peer"},
+					{"100.64.0.2:8089", "indexer,cluster_peer"},
+					{lmName, "indexer," + lmRole},
+				})
+				assertMember(t, "dmc_group_indexer", indexerBody, "100.64.0.1:8089", true)
+				assertMember(t, "dmc_group_indexer", indexerBody, "100.64.0.2:8089", true)
+				assertMember(t, "dmc_group_indexer", indexerBody, lmName, false)
+				assertMember(t, "license manager group", lmBody, lmName, true)
+			})
+		}
+	}
+}
+
+// TestAutomateMCApplyChangesSelfLicensedStandaloneStaysInIndexerGroup checks that a
+// Standalone sharing the MC with an indexer cluster and a license manager stays in
+// dmc_group_indexer. A self-licensed Standalone reports the same roles as a
+// dedicated license manager (indexer, license_master, license_manager, kv_store)
+// but is a real indexing instance.
+func TestAutomateMCApplyChangesSelfLicensedStandaloneStaysInIndexerGroup(t *testing.T) {
+	const (
+		idx        = "100.64.0.1:8089"
+		standalone = "splunk-sa-standalone-service:8089"
+		// a Standalone whose CR name looks like a license manager must not be mistaken for one
+		oddStandalone = "splunk-license-manager-standalone-service:8089"
+		// pod FQDN of a Standalone in a namespace whose name ends like a license manager service
+		fqdnStandalone = "splunk-sa-standalone-0.splunk-sa-standalone-headless.team-license-manager-service.svc.cluster.local:8089"
+		lm             = "splunk-lm-license-manager-service:8089"
+		selfLicensed   = "indexer,license_master,license_manager,kv_store"
+	)
+	indexerBody, lmBody := applyMCChanges(t, "search_head", [][2]string{
+		{idx, "indexer,cluster_peer"},
+		{standalone, selfLicensed},
+		{oddStandalone, selfLicensed},
+		{fqdnStandalone, selfLicensed},
+		{lm, selfLicensed},
+	})
+	assertMember(t, "dmc_group_indexer", indexerBody, idx, true)
+	assertMember(t, "dmc_group_indexer", indexerBody, standalone, true)
+	assertMember(t, "dmc_group_indexer", indexerBody, oddStandalone, true)
+	assertMember(t, "dmc_group_indexer", indexerBody, fqdnStandalone, true)
+	assertMember(t, "dmc_group_indexer", indexerBody, lm, false)
+	assertMember(t, "license manager group", lmBody, lm, true)
+}
+
+// TestAutomateMCApplyChangesIndexersReportingLicenseRole checks that clustered
+// indexers stay in dmc_group_indexer when they report a license manager role, as
+// every instance does when no license manager is configured.
+func TestAutomateMCApplyChangesIndexersReportingLicenseRole(t *testing.T) {
+	indexerBody, _ := applyMCChanges(t, "search_head", [][2]string{
+		{"100.64.0.1:8089", "indexer,license_master,license_manager,cluster_slave,cluster_peer"},
+		{"100.64.0.2:8089", "indexer,license_master,license_manager,cluster_slave,cluster_peer"},
+		{"splunk-cm-cluster-manager-service:8089", "license_master,license_manager,cluster_master,cluster_manager,search_head"},
+	})
+	assertMember(t, "dmc_group_indexer", indexerBody, "100.64.0.1:8089", true)
+	assertMember(t, "dmc_group_indexer", indexerBody, "100.64.0.2:8089", true)
+	assertMember(t, "dmc_group_indexer", indexerBody, "splunk-cm-cluster-manager-service:8089", false)
+}
+
+// TestAutomateMCApplyChangesMCHandling checks that the Monitoring Console's own
+// entry is handled as before: it is a member of dmc_group_indexer when it reports
+// the indexer role, and of the license manager group when it reports a license role.
+func TestAutomateMCApplyChangesMCHandling(t *testing.T) {
+	indexerBody, lmBody := applyMCChanges(t, "indexer,license_master", [][2]string{
+		{"100.64.0.1:8089", "indexer,cluster_peer"},
+	})
+	assertMember(t, "dmc_group_indexer", indexerBody, "localhost:localhost", true)
+	assertMember(t, "dmc_group_indexer", indexerBody, "100.64.0.1:8089", true)
+	assertMember(t, "license manager group", lmBody, "localhost:localhost", true)
+}
+
 func TestGetMonitoringconsoleServerRoles(t *testing.T) {
 	wantRequest, _ := http.NewRequest("GET", "https://localhost:8089/services/server/info/server-info?count=0&output_mode=json", nil)
 	test := func(c splunk.SplunkClient) error {
