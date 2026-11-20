@@ -30,6 +30,8 @@ import (
 
 // GVR constants for all CRDs handled by the shared validation webhook.
 var (
+	KVServiceGVR = schema.GroupVersionResource{Group: "enterprise.splunk.com", Version: "v4", Resource: "kvservices"}
+
 	StandaloneGVR = schema.GroupVersionResource{
 		Group:    "enterprise.splunk.com",
 		Version:  "v4",
@@ -123,6 +125,17 @@ var (
 
 // DefaultValidators is the registry of validators for all supported CRDs.
 var DefaultValidators = map[schema.GroupVersionResource]Validator{
+	// Gate creation only; existing resources must remain editable for cleanup.
+	KVServiceGVR: &GenericValidator[*enterpriseApi.KVService]{
+		ValidateCreateFunc:            ValidateKVServiceCreate,
+		ValidateCreateWithContextFunc: ValidateKVServiceCreateWithContext,
+		ValidateUpdateFunc:            ValidateKVServiceUpdate,
+		GroupKind: schema.GroupKind{
+			Group: "enterprise.splunk.com",
+			Kind:  "KVService",
+		},
+	},
+
 	StandaloneGVR: &GenericValidator[*enterpriseApi.Standalone]{
 		ValidateCreateFunc:            ValidateStandaloneCreate,
 		ValidateUpdateFunc:            ValidateStandaloneUpdate,

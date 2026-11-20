@@ -22,6 +22,51 @@ The webhook validates the following Custom Resource Definitions:
 - ClusterManager
 - LicenseManager
 - MonitoringConsole
+- KVService
+
+### KVService admission checks
+
+When validation is enabled, KVService CREATE admission requires the KVService
+and PostgresController feature gates and rejects a second KVService in the
+hosting namespace, including one still being deleted. UPDATE and DELETE remain
+available when those controller gates are disabled. CREATE and UPDATE also
+validate common workload and probe settings and reject overrides of
+Operator-managed environment variables. Partial liveness/readiness probe
+overrides are allowed: omitted or zero-valued timings retain runtime defaults.
+Admission validates the submitted timings without applying defaults or changing
+the CR. The CRD schema enforces the listener scheme and requires certificates
+for HTTPS; the webhook additionally checks active certificate Secret names.
+
+On a terminating KVService, updates that leave the spec unchanged remain allowed
+so finalizer cleanup can complete even when a feature gate has been disabled.
+Spec changes remain subject to validation. Reconciliation retains its validation
+independently of admission.
+
+The namespace check is advisory admission protection: concurrent CREATE requests
+can race. Reconciliation and keyring ownership still enforce the singleton rule
+when admission is disabled, unavailable, or raced. PostgreSQL requirements remain
+enforced by the CRD schema independently of the webhook.
+
+### KVService validation with OLM
+
+The OLM bundle registers a dedicated webhook for CREATE and UPDATE of v4
+KVService resources. It does not enable validation of other Enterprise CRs.
+Enable `ValidationWebhook=true` together with `KVService=true` and
+`PostgresController=true` in the Operator Subscription's
+`spec.config.env` entry named `FEATURE_GATES`. Preserve any other feature gates
+already configured there. With `ValidationWebhook=false` (the default), the
+handler allows these requests without admission checks; the CRD schema still
+requires `spec.postgres.clusterRef.name`.
+
+The OLM entry uses `failurePolicy: Ignore`, matching the bundle's cross-version
+guard. Invalid requests are rejected while the validator is reachable, but
+requests can proceed if the optional webhook is unavailable. OLM manages the
+webhook Service, serving certificates and CA bundle. Allow API-server traffic
+to the Operator on TCP 9443 when using restrictive NetworkPolicies.
+
+Every KVService must specify a non-empty `spec.postgres.clusterRef.name`.
+This mandatory reference is enforced by the CRD schema even when admission
+validation is disabled.
 
 ## Enabling the Validation Webhook
 

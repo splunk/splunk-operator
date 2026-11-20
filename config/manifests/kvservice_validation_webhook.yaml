@@ -1,0 +1,31 @@
+# OLM registers this entry even when ValidationWebhook is off. The handler
+# bypasses spec validation while that gate is off, and Ignore prevents an
+# unavailable optional webhook server from blocking KVService writes.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: kvservice-validation
+webhooks:
+- name: vkvservice.enterprise.splunk.com
+  admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: $(SERVICE_NAME)
+      namespace: $(SERVICE_NAMESPACE)
+      path: /validate
+  failurePolicy: Ignore
+  matchPolicy: Exact
+  sideEffects: None
+  timeoutSeconds: 5
+  rules:
+  - apiGroups:
+    - enterprise.splunk.com
+    apiVersions:
+    - v4
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - kvservices
+    scope: Namespaced

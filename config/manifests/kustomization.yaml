@@ -5,6 +5,10 @@ resources:
 - ../default
 - ../samples
 - ../scorecard
+- kvservice_validation_webhook.yaml
+
+configurations:
+- webhook_kustomizeconfig.yaml
 
 # OLM-only changes to ../default; see docs/develop/WebhookDevelopment.md.
 patches:

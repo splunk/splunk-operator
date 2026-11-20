@@ -96,6 +96,7 @@ webhooks:
     - licensemanagers
     - monitoringconsoles
     - ingestorclusters
+    - kvservices
   - apiGroups:
     - platform.splunk.com
     apiVersions:
