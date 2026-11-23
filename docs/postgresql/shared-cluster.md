@@ -24,9 +24,11 @@ the names from the resources; do not reconstruct the hash.
 Defaults are three PostgreSQL instances separated by a **required**
 anti-affinity rule on `kubernetes.io/hostname`. Provide at least three eligible
 worker nodes, 100Gi of persistent storage per instance, and 2 CPU/8Gi memory
-requests per instance (limits 4 CPU/16Gi). Include capacity for the three
+requests per instance (limits 4 CPU/16Gi). Both read-write and read-only
+PgBouncer poolers are enabled, each with three pods. Include capacity for six
 PgBouncer pods and the controllers. These are starting values, not a workload
-sizing guarantee.
+sizing guarantee. For a single-instance PostgreSQL deployment, set
+`sharedPostgres.connectionPooler.readOnly: false`.
 
 Set `sharedPostgres.storage`, `storageClass`, `resources`, and `affinity` to
 match the workload and infrastructure. An empty `storageClass` uses the default

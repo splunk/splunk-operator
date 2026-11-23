@@ -303,7 +303,8 @@ sharedPostgres:
   connectionPooler:
     enabled: true
     readWrite: true
-    readOnly: false
+    # Disable for single-instance PostgreSQL deployments.
+    readOnly: true
     instances: 3
     mode: transaction
     config: {}
