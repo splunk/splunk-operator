@@ -28,6 +28,12 @@ sva:
 
   # Distributed Clustered Deployment + SHC - Single Site (C3)
   # reference: https://www.splunk.com/pdfs/technical-briefs/splunk-validated-architectures.pdf#page=14
+  # With noahCluster.enabled, C3 renders the Noah topology instead: the same indexer and
+  # search head clusters from the lists below, with a noahClusterRef, and NO ClusterManager
+  # (no other resource refers to one). Whether the search head cluster gets a deployer is
+  # decided by the operator, not by this chart. If a list is empty, one cluster is rendered,
+  # named after indexerCluster.name or searchHeadCluster.name
+  # The ingestor stays a separate ingestorCluster block, as for classic C3
   c3:
 
     enabled: false
@@ -81,6 +87,50 @@ existingMonitoringConsole: {}
 existingLicenseManager: {}
   # name:
   # namespace:
+
+# EXPERIMENTAL: Noah support is experimental and off by default. It is not supported for
+# production use and may change or be removed without notice
+# Configure the Noah connection (NoahCluster) used by the indexer and search head clusters
+# The indexer and search head clusters then get a noahClusterRef to it (the Noah topology)
+# Only available with sva.c3, where enabling this selects the Noah topology (see sva.c3);
+# sva.c3 without it is the classic C3, unchanged. The Noah topology has no cluster manager,
+# so this cannot be combined with clusterManager or existingClusterManager
+# NOTE: noahClusterRef cannot be added to, removed from or changed on an existing
+# IndexerCluster or SearchHeadCluster, so it must be set when they are first created
+noahCluster:
+
+  # Deploy a NoahCluster and reference it from the indexer and search head clusters
+  enabled: false
+
+  # Specify the custom resource name
+  name: "noah"
+
+  # Override the custom resource namespace
+  # Default deploys to the release namespace
+  # The referencing clusters must be in the same namespace: the chart fails at render time
+  # if indexerCluster.namespaceOverride or searchHeadCluster.namespaceOverride differ from this
+  namespaceOverride: ""
+
+  additionalLabels: {}
+
+  additionalAnnotations: {}
+
+  # Base URL of the Noah service: an absolute http or https URL with a host and no
+  # credentials, path, query or fragment. Required when enabled; there is no default
+  endpoint: ""
+
+  # Noah tenant that scopes peer membership and bucket maps. Required when enabled;
+  # there is no default. Immutable once created
+  tenant: ""
+
+  # Secret holding the Noah pass4SymmKey under the "pass4SymmKey" key. It must exist in the
+  # same namespace and is not created by this chart. Required when enabled
+  authSecretRef:
+    name: ""
+
+  # Optional. Operator defaults apply when unset
+  # cacheWarmScaleOutEnabled: true
+  # cacheWarmScaleOutTimeoutSeconds: 3600
 
 # Configure a Splunk Cluster Manager instance
 clusterManager:

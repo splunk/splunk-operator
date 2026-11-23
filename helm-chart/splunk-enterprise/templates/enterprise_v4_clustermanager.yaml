@@ -1,4 +1,4 @@
-{{- if or .Values.clusterManager.enabled ( and (not $.Values.existingClusterManager) ( or .Values.sva.c3.enabled .Values.sva.m4.enabled ) )}}
+{{- if or .Values.clusterManager.enabled ( and (not $.Values.existingClusterManager) ( or (and .Values.sva.c3.enabled (not .Values.noahCluster.enabled)) .Values.sva.m4.enabled ) )}}
 apiVersion:  enterprise.splunk.com/v4
 kind: ClusterManager
 metadata:
