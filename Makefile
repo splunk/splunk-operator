@@ -229,8 +229,13 @@ helm-lint: helm-dependencies ## Lint Helm charts
 
 .PHONY: helm-test
 helm-test: setup/helm-unittest helm-dependencies ## Run Helm chart unit tests
+	@mkdir -p $(HELM_ENTERPRISE_CHART)/charts
+	@rm -f $(HELM_ENTERPRISE_CHART)/charts/splunk-operator-*.tgz $(HELM_ENTERPRISE_CHART)/charts/splunk-universalforwarder-*.tgz
+	helm package $(HELM_OPERATOR_CHART) --destination $(HELM_ENTERPRISE_CHART)/charts
+	helm package $(HELM_UF_CHART) --destination $(HELM_ENTERPRISE_CHART)/charts
 	helm unittest $(HELM_OPERATOR_CHART)
 	helm unittest $(HELM_UF_CHART)
+	helm unittest $(HELM_ENTERPRISE_CHART)
 
 .PHONY: helm-check
 helm-check: helm-lint helm-test ## Run Helm lint and unit tests

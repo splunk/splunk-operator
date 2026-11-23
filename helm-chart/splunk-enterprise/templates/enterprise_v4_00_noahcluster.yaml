@@ -1,0 +1,30 @@
+{{- include "splunk-enterprise.validateNoah" . -}}
+{{- if .Values.noahCluster.enabled }}
+apiVersion: v1
+kind: List
+items:
+- apiVersion: enterprise.splunk.com/v4
+  kind: NoahCluster
+  metadata:
+    name: {{ .Values.noahCluster.name }}
+    namespace: {{ default .Release.Namespace .Values.noahCluster.namespaceOverride }}
+  {{- with .Values.noahCluster.additionalLabels }}
+    labels:
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  {{- with .Values.noahCluster.additionalAnnotations }}
+    annotations:
+{{ toYaml . | indent 6 }}
+  {{- end }}
+  spec:
+    endpoint: {{ required "noahCluster.endpoint is required when noahCluster.enabled" .Values.noahCluster.endpoint | quote }}
+    tenant: {{ required "noahCluster.tenant is required when noahCluster.enabled" .Values.noahCluster.tenant | quote }}
+    authSecretRef:
+      name: {{ required "noahCluster.authSecretRef.name is required when noahCluster.enabled" .Values.noahCluster.authSecretRef.name | quote }}
+  {{- if hasKey .Values.noahCluster "cacheWarmScaleOutEnabled" }}
+    cacheWarmScaleOutEnabled: {{ .Values.noahCluster.cacheWarmScaleOutEnabled }}
+  {{- end }}
+  {{- if hasKey .Values.noahCluster "cacheWarmScaleOutTimeoutSeconds" }}
+    cacheWarmScaleOutTimeoutSeconds: {{ .Values.noahCluster.cacheWarmScaleOutTimeoutSeconds }}
+  {{- end }}
+{{- end }}

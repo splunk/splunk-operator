@@ -1,0 +1,553 @@
+suite: sva.c3 with Noah
+templates:
+  - templates/enterprise_v4_00_noahcluster.yaml
+  - templates/enterprise_v4_clustermanager.yaml
+  - templates/enterprise_v4_indexercluster.yaml
+  - templates/enterprise_v4_ingestorcluster.yaml
+  - templates/enterprise_v4_licensemanager.yaml
+  - templates/enterprise_v4_monitoringconsole.yaml
+  - templates/enterprise_v4_searchheadcluster.yaml
+set:
+  splunk-operator:
+    enabled: false
+tests:
+  - it: renders the indexer and search head clusters with noahClusterRef and no cluster manager
+    set:
+      sva:
+        c3:
+          enabled: true
+          indexerClusters:
+            - name: idx1
+            - name: idx2
+          searchHeadClusters:
+            - name: shc1
+      noahCluster:
+        enabled: true
+        name: noah
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/enterprise_v4_00_noahcluster.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/enterprise_v4_clustermanager.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/enterprise_v4_licensemanager.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/enterprise_v4_monitoringconsole.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/enterprise_v4_ingestorcluster.yaml
+      - equal:
+          path: items[0].kind
+          value: IndexerCluster
+        template: templates/enterprise_v4_indexercluster.yaml
+      - equal:
+          path: items[0].metadata.name
+          value: idx1
+        template: templates/enterprise_v4_indexercluster.yaml
+      - equal:
+          path: items[1].metadata.name
+          value: idx2
+        template: templates/enterprise_v4_indexercluster.yaml
+      - equal:
+          path: items[0].spec.noahClusterRef.name
+          value: noah
+        template: templates/enterprise_v4_indexercluster.yaml
+      - equal:
+          path: items[1].spec.noahClusterRef.name
+          value: noah
+        template: templates/enterprise_v4_indexercluster.yaml
+      - notExists:
+          path: items[0].spec.clusterManagerRef
+        template: templates/enterprise_v4_indexercluster.yaml
+      - notExists:
+          path: items[0].spec.licenseManagerRef
+        template: templates/enterprise_v4_indexercluster.yaml
+      - notExists:
+          path: items[0].spec.monitoringConsoleRef
+        template: templates/enterprise_v4_indexercluster.yaml
+      - equal:
+          path: items[0].kind
+          value: SearchHeadCluster
+        template: templates/enterprise_v4_searchheadcluster.yaml
+      - equal:
+          path: items[0].metadata.name
+          value: shc1
+        template: templates/enterprise_v4_searchheadcluster.yaml
+      - equal:
+          path: items[0].spec.noahClusterRef.name
+          value: noah
+        template: templates/enterprise_v4_searchheadcluster.yaml
+      - notExists:
+          path: items[0].spec.clusterManagerRef
+        template: templates/enterprise_v4_searchheadcluster.yaml
+      - notExists:
+          path: items[0].spec.licenseManagerRef
+        template: templates/enterprise_v4_searchheadcluster.yaml
+      - notExists:
+          path: items[0].spec.monitoringConsoleRef
+        template: templates/enterprise_v4_searchheadcluster.yaml
+
+  - it: renders one cluster named after indexerCluster.name and searchHeadCluster.name when the lists are empty
+    set:
+      sva:
+        c3:
+          enabled: true
+      indexerCluster:
+        name: idc
+      searchHeadCluster:
+        name: shc
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/enterprise_v4_indexercluster.yaml
+      - equal:
+          path: items[0].metadata.name
+          value: idc
+        template: templates/enterprise_v4_indexercluster.yaml
+      - lengthEqual:
+          path: items
+          count: 1
+        template: templates/enterprise_v4_indexercluster.yaml
+      - equal:
+          path: items[0].metadata.name
+          value: shc
+        template: templates/enterprise_v4_searchheadcluster.yaml
+      - lengthEqual:
+          path: items
+          count: 1
+        template: templates/enterprise_v4_searchheadcluster.yaml
+
+  - it: adds the Noah restmap settings to the IndexerCluster defaults
+    set:
+      sva:
+        c3:
+          enabled: true
+          indexerClusters:
+            - name: idx1
+          searchHeadClusters:
+            - name: shc1
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+    template: templates/enterprise_v4_indexercluster.yaml
+    asserts:
+      - matchRegex:
+          path: items[0].spec.defaults
+          pattern: "admin:certificates:\\n\\s+authKeyStanza: noahService"
+      - matchRegex:
+          path: items[0].spec.defaults
+          pattern: "streams:search:\\n\\s+authKeyStanza: noahService\\n\\s+capability: search"
+      - matchRegex:
+          path: items[0].spec.defaults
+          pattern: "authKeyStanza: parallelreduce noahService"
+      - matchRegex:
+          path: items[0].spec.defaults
+          pattern: "directory: /opt/splunk/etc/system/local"
+
+  - it: adds the Noah restmap settings to every IndexerCluster, not only the first
+    set:
+      sva:
+        c3:
+          enabled: true
+          indexerClusters:
+            - name: idx1
+            - name: idx2
+          searchHeadClusters:
+            - name: shc1
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+    template: templates/enterprise_v4_indexercluster.yaml
+    asserts:
+      - lengthEqual:
+          path: items
+          count: 2
+      - matchRegex:
+          path: items[0].spec.defaults
+          pattern: "admin:certificates:\\n\\s+authKeyStanza: noahService"
+      - matchRegex:
+          path: items[1].spec.defaults
+          pattern: "admin:certificates:\\n\\s+authKeyStanza: noahService"
+
+  - it: leaves indexerCluster.defaults untouched when noahCluster is off
+    set:
+      sva:
+        c3:
+          enabled: true
+          indexerClusters:
+            - name: idx1
+          searchHeadClusters:
+            - name: shc1
+      indexerCluster:
+        defaults:
+          splunk:
+            conf:
+              server:
+                directory: /opt/splunk/etc/system/local
+                content:
+                  general:
+                    site: site1
+    template: templates/enterprise_v4_indexercluster.yaml
+    asserts:
+      - matchRegex:
+          path: items[0].spec.defaults
+          pattern: "site: site1"
+      - notMatchRegex:
+          path: items[0].spec.defaults
+          pattern: "restmap|noahService"
+
+  - it: merges the Noah restmap settings with indexerCluster.defaults and lets the user's values win
+    set:
+      sva:
+        c3:
+          enabled: true
+          indexerClusters:
+            - name: idx1
+          searchHeadClusters:
+            - name: shc1
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+      indexerCluster:
+        defaults:
+          splunk:
+            conf:
+              server:
+                directory: /opt/splunk/etc/system/local
+                content:
+                  general:
+                    site: site1
+              restmap:
+                content:
+                  "streams:search":
+                    authKeyStanza: custom
+    template: templates/enterprise_v4_indexercluster.yaml
+    asserts:
+      - matchRegex:
+          path: items[0].spec.defaults
+          pattern: "site: site1"
+      - matchRegex:
+          path: items[0].spec.defaults
+          pattern: "authKeyStanza: custom"
+      - matchRegex:
+          path: items[0].spec.defaults
+          pattern: "admin:certificates:\\n\\s+authKeyStanza: noahService"
+      - matchRegex:
+          path: items[0].spec.defaults
+          pattern: "streams:rdin:"
+
+  - it: leaves the ingestor to its own ingestorCluster block
+    set:
+      sva:
+        c3:
+          enabled: true
+          indexerClusters:
+            - name: idx1
+          searchHeadClusters:
+            - name: shc1
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+      ingestorCluster:
+        enabled: true
+        name: ing
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/enterprise_v4_ingestorcluster.yaml
+      - equal:
+          path: kind
+          value: IngestorCluster
+        template: templates/enterprise_v4_ingestorcluster.yaml
+
+  - it: does not give an explicitly enabled license manager or monitoring console a cluster manager reference
+    set:
+      sva:
+        c3:
+          enabled: true
+          indexerClusters:
+            - name: idx1
+          searchHeadClusters:
+            - name: shc1
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+      licenseManager:
+        enabled: true
+      monitoringConsole:
+        enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/enterprise_v4_licensemanager.yaml
+      - notExists:
+          path: spec.clusterManagerRef
+        template: templates/enterprise_v4_licensemanager.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/enterprise_v4_monitoringconsole.yaml
+      - notExists:
+          path: spec.clusterManagerRef
+        template: templates/enterprise_v4_monitoringconsole.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/enterprise_v4_clustermanager.yaml
+
+  - it: still requires endpoint, tenant and authSecretRef.name from noahCluster
+    set:
+      sva:
+        c3:
+          enabled: true
+      noahCluster:
+        enabled: true
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+    template: templates/enterprise_v4_00_noahcluster.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: noahCluster.endpoint is required
+
+  - it: fails with sva.m4 because Noah is only available with sva.c3
+    set:
+      sva:
+        m4:
+          enabled: true
+          indexerClusters:
+            - name: idx1
+              site: site1
+          searchHeadClusters:
+            - name: shc1
+              site: site1
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+    template: templates/enterprise_v4_00_noahcluster.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: noahCluster is only available with sva.c3
+
+  - it: fails with sva.s1 because Noah is only available with sva.c3
+    set:
+      sva:
+        s1:
+          enabled: true
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+    template: templates/enterprise_v4_00_noahcluster.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: noahCluster is only available with sva.c3
+
+  - it: fails without a preset because Noah is only available with sva.c3
+    set:
+      indexerCluster:
+        enabled: true
+      searchHeadCluster:
+        enabled: true
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+    template: templates/enterprise_v4_00_noahcluster.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: noahCluster is only available with sva.c3
+
+  - it: fails when combined with clusterManager
+    set:
+      sva:
+        c3:
+          enabled: true
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+      clusterManager:
+        enabled: true
+    template: templates/enterprise_v4_00_noahcluster.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: noahCluster cannot be combined with clusterManager or existingClusterManager, and is only available with sva.c3
+
+  - it: fails when combined with existingClusterManager
+    set:
+      sva:
+        c3:
+          enabled: true
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+      existingClusterManager:
+        name: cm
+    template: templates/enterprise_v4_00_noahcluster.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: noahCluster cannot be combined with clusterManager or existingClusterManager, and is only available with sva.c3
+
+  - it: keeps the classic sva.c3 unchanged when noahCluster is off
+    set:
+      sva:
+        c3:
+          enabled: true
+          indexerClusters:
+            - name: idx1
+          searchHeadClusters:
+            - name: shc1
+      licenseManager:
+        enabled: true
+      monitoringConsole:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.clusterManagerRef.name
+          value: cm
+        template: templates/enterprise_v4_licensemanager.yaml
+      - equal:
+          path: spec.clusterManagerRef.name
+          value: cm
+        template: templates/enterprise_v4_monitoringconsole.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/enterprise_v4_clustermanager.yaml
+      - equal:
+          path: items[0].spec.clusterManagerRef.name
+          value: cm
+        template: templates/enterprise_v4_indexercluster.yaml
+      - equal:
+          path: items[0].spec.clusterManagerRef.name
+          value: cm
+        template: templates/enterprise_v4_searchheadcluster.yaml
+      - notExists:
+          path: items[0].spec.noahClusterRef
+        template: templates/enterprise_v4_indexercluster.yaml
+      - notExists:
+          path: items[0].spec.noahClusterRef
+        template: templates/enterprise_v4_searchheadcluster.yaml
+      - notExists:
+          path: items[0].spec.defaults
+        template: templates/enterprise_v4_indexercluster.yaml
+
+  - it: passes the shared queueRef to the indexer and ingestor and keeps noahClusterRef off the ingestor
+    set:
+      sva:
+        c3:
+          enabled: true
+          indexerClusters:
+            - name: idx1
+          searchHeadClusters:
+            - name: shc1
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+      indexerCluster:
+        replicaCount: 3
+        queueRef:
+          name: q
+        objectStorageRef:
+          name: os
+      ingestorCluster:
+        enabled: true
+        name: ing
+        replicaCount: 1
+        queueRef:
+          name: q
+        objectStorageRef:
+          name: os
+    asserts:
+      - equal:
+          path: items[0].spec.replicas
+          value: 3
+        template: templates/enterprise_v4_indexercluster.yaml
+      - equal:
+          path: items[0].spec.queueRef.name
+          value: q
+        template: templates/enterprise_v4_indexercluster.yaml
+      - equal:
+          path: items[0].spec.objectStorageRef.name
+          value: os
+        template: templates/enterprise_v4_indexercluster.yaml
+      - equal:
+          path: spec.queueRef.name
+          value: q
+        template: templates/enterprise_v4_ingestorcluster.yaml
+      - equal:
+          path: spec.objectStorageRef.name
+          value: os
+        template: templates/enterprise_v4_ingestorcluster.yaml
+      - notExists:
+          path: spec.noahClusterRef
+        template: templates/enterprise_v4_ingestorcluster.yaml
+      - equal:
+          path: items[0].spec.noahClusterRef.name
+          value: noah
+        template: templates/enterprise_v4_indexercluster.yaml
+
+  - it: fails with sva.c3 when noahCluster.namespaceOverride differs from the cluster namespaces
+    release:
+      namespace: relns
+    set:
+      sva:
+        c3:
+          enabled: true
+          indexerClusters:
+            - name: idx1
+          searchHeadClusters:
+            - name: shc1
+      noahCluster:
+        enabled: true
+        namespaceOverride: noahns
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+    template: templates/enterprise_v4_00_noahcluster.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: the NoahCluster is in namespace "noahns" but the IndexerCluster is in namespace "relns"

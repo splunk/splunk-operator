@@ -67,3 +67,53 @@ Define namespace of release and allow for namespace override
 {{- define "splunk-enterprise.namespace" -}}
 {{- default .Release.Namespace .Values.namespaceOverride }}
 {{- end }}
+
+{{/*
+Noah is only supported with the sva.c3 preset, and the Noah topology has no cluster manager: the
+CRDs reject noahClusterRef together with clusterManagerRef. Fail at render time with a clear
+message instead of at apply time.
+*/}}
+{{- define "splunk-enterprise.validateNoah" -}}
+{{- if .Values.noahCluster.enabled -}}
+{{- if not .Values.sva.c3.enabled -}}
+{{- fail "noahCluster is only available with sva.c3: set sva.c3.enabled=true" -}}
+{{- end -}}
+{{- if or .Values.clusterManager.enabled .Values.existingClusterManager -}}
+{{- fail "noahCluster cannot be combined with clusterManager or existingClusterManager, and is only available with sva.c3: the Noah topology has no cluster manager" -}}
+{{- end -}}
+{{- /* noahClusterRef has no namespace field: the operator looks the NoahCluster up in the namespace of the referencing cluster, so they must match. */ -}}
+{{- $noahNamespace := default .Release.Namespace .Values.noahCluster.namespaceOverride -}}
+{{- $indexerNamespace := default .Release.Namespace .Values.indexerCluster.namespaceOverride -}}
+{{- if ne $noahNamespace $indexerNamespace -}}
+{{- fail (printf "the NoahCluster is in namespace %q but the IndexerCluster is in namespace %q: noahClusterRef has no namespace, so they must match. Set noahCluster.namespaceOverride and indexerCluster.namespaceOverride to the same value" $noahNamespace $indexerNamespace) -}}
+{{- end -}}
+{{- $searchHeadNamespace := default .Release.Namespace .Values.searchHeadCluster.namespaceOverride -}}
+{{- if ne $noahNamespace $searchHeadNamespace -}}
+{{- fail (printf "the NoahCluster is in namespace %q but the SearchHeadCluster is in namespace %q: noahClusterRef has no namespace, so they must match. Set noahCluster.namespaceOverride and searchHeadCluster.namespaceOverride to the same value" $noahNamespace $searchHeadNamespace) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Splunk configuration that indexers need when they use Noah. The restmap stanzas make the
+instance-to-instance calls authenticate with the noahService key; without them the search head's
+POST /services/admin/certificates to an indexer returns 401 and every indexer is excluded from
+searches. Merged under the user's indexerCluster.defaults, which take precedence.
+*/}}
+{{- define "splunk-enterprise.noahIndexerDefaults" -}}
+splunk:
+  conf:
+    restmap:
+      directory: /opt/splunk/etc/system/local
+      content:
+        "admin:certificates":
+          authKeyStanza: noahService
+          match: /admin/certificates
+        "streams:search":
+          match: /streams/search
+          capability: search
+          authKeyStanza: noahService
+        "streams:rdin":
+          match: /streams/rdin
+          authKeyStanza: parallelreduce noahService
+{{- end }}

@@ -284,6 +284,43 @@ release "splunk-enterprise-test" uninstalled
 
 Note: Helm by default does not cleanup Custom Resource Definitions and Persistent Volume Claims. Splunk Admin needs to manually clean them.
 
+### Noah deployments
+
+> **Experimental:** Noah support (`noahCluster.enabled`) is experimental and off by default. It is not supported for production use and may change or be removed without notice. With it off, the chart renders exactly what it rendered before.
+
+The Splunk Enterprise chart can create a Noah topology, in which an Indexer Cluster and a Search Head Cluster coordinate through a `NoahCluster` instead of a Cluster Manager. Noah is only available with the `sva.c3` preset: the chart fails at render time if `noahCluster.enabled` is set without `sva.c3.enabled`. The other presets do not support it: `sva.s1` is a standalone deployment, and `sva.m4` requires a Cluster Manager.
+
+With `noahCluster.enabled`, `sva.c3` selects the Noah topology. The chart renders a `NoahCluster`, and the `IndexerCluster` and `SearchHeadCluster` resources from the `indexerClusters` and `searchHeadClusters` lists, with a `noahClusterRef` and no `ClusterManager`:
+
+```
+sva:
+  c3:
+    enabled: true
+    indexerClusters:
+      - name: idxc-test
+    searchHeadClusters:
+      - name: shc-test
+
+noahCluster:
+  enabled: true
+  endpoint: http://noah.splunk-operator.svc:8443
+  tenant: tenant-1
+  authSecretRef:
+    name: noah-auth
+```
+
+`sva.c3` without `noahCluster.enabled` is the classic C3 with a Cluster Manager, unchanged. If a list is empty, one cluster is rendered, named after `indexerCluster.name` or `searchHeadCluster.name`. The ingestor stays a separate `ingestorCluster` block, and the operator decides whether the search head cluster gets a deployer. With Noah, the license manager and monitoring console, if you enable them, do not get a reference to a Cluster Manager.
+
+- `endpoint`, `tenant` and `authSecretRef.name` are required when `noahCluster.enabled` is set and have no defaults. The chart does not create the authentication Secret: it must already exist in the release namespace and hold the Noah `pass4SymmKey` under the `pass4SymmKey` key.
+- The `NoahCluster` is rendered in the release namespace (or `noahCluster.namespaceOverride`). It must be in the same namespace as the clusters that reference it, because `noahClusterRef` has no namespace field. The chart fails at render time if `noahCluster.namespaceOverride` differs from `indexerCluster.namespaceOverride` or `searchHeadCluster.namespaceOverride`.
+- The Noah topology has no Cluster Manager. The chart fails at render time if Noah is combined with `clusterManager.enabled` or `existingClusterManager`.
+- With Noah, the chart adds the `restmap` settings the indexers need (the `admin:certificates`, `streams:search` and `streams:rdin` stanzas, which authenticate instance-to-instance calls with the Noah service key) to the `IndexerCluster` `defaults`. They are merged with `indexerCluster.defaults`, and your values win. Without them, the search head's call to an indexer is rejected with a 401 and the indexers are left out of searches. Other Splunk settings that Noah needs, such as the remote store and index settings, are not set by the chart: put them in `indexerCluster.defaults`.
+- `noahClusterRef` cannot be added to, removed from or changed on an existing `IndexerCluster` or `SearchHeadCluster`. Set it when you first install the release. To change it, uninstall the release and install it again. This also means a release installed as a classic C3 cannot be switched to the Noah topology by enabling `noahCluster` later.
+- `cacheWarmScaleOutEnabled` and `cacheWarmScaleOutTimeoutSeconds` are optional. When they are not set, the operator defaults apply.
+- With `noahCluster` disabled, the chart renders exactly what it rendered before.
+
+For the `NoahCluster` and `noahClusterRef` fields, see [Custom Resources](../operate/CustomResources.md).
+
 ### Troubleshooting Splunk Enterprise Deployments
 
 #### CRDs are not installed

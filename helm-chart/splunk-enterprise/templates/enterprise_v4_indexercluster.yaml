@@ -3,6 +3,11 @@ apiVersion: v1
 kind: List
 items:
 {{- range default (default (list (dict "name" .Values.indexerCluster.name)) .Values.sva.c3.indexerClusters) .Values.sva.m4.indexerClusters }}
+{{- /* With Noah, add the restmap settings Noah needs to the defaults. The user's indexerCluster.defaults take precedence. */ -}}
+{{- $defaults := $.Values.indexerCluster.defaults }}
+{{- if $.Values.noahCluster.enabled }}
+{{- $defaults = merge (deepCopy (default dict $.Values.indexerCluster.defaults)) (fromYaml (include "splunk-enterprise.noahIndexerDefaults" $)) }}
+{{- end }}
 - apiVersion:  enterprise.splunk.com/v4
   kind: IndexerCluster
   metadata:
@@ -34,12 +39,16 @@ items:
     {{- if $.Values.existingClusterManager.namespace }}
       namespace: {{ $.Values.existingClusterManager.namespace }}
     {{- end }}
-  {{- else if or $.Values.clusterManager.enabled $.Values.sva.c3.enabled $.Values.sva.m4.enabled }}
+  {{- else if or $.Values.clusterManager.enabled (and $.Values.sva.c3.enabled (not $.Values.noahCluster.enabled)) $.Values.sva.m4.enabled }}
     clusterManagerRef:
       name: {{ $.Values.clusterManager.name }}
     {{- if $.Values.clusterManager.namespaceOverride }}
       namespace: {{ $.Values.clusterManager.namespaceOverride }}
     {{- end }}
+  {{- end }}
+  {{- if $.Values.noahCluster.enabled }}
+    noahClusterRef:
+      name: {{ $.Values.noahCluster.name }}
   {{- end }}
   {{- if $.Values.existingLicenseManager }}
     licenseManagerRef:
@@ -100,9 +109,9 @@ items:
       splunk:
         multisite_master: splunk-{{ $cm_name }}-cluster-manager-service
         site: {{ .site }}
-  {{- else if $.Values.indexerCluster.defaults }}
+  {{- else if $defaults }}
     defaults: |-
-{{ toYaml $.Values.indexerCluster.defaults | indent 6 }}
+{{ toYaml $defaults | indent 6 }}
   {{- end }}
   {{- with $.Values.indexerCluster.extraEnv }}
     extraEnv:

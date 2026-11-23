@@ -1,0 +1,227 @@
+suite: Noah support
+templates:
+  - templates/enterprise_v4_00_noahcluster.yaml
+  - templates/enterprise_v4_indexercluster.yaml
+  - templates/enterprise_v4_searchheadcluster.yaml
+set:
+  splunk-operator:
+    enabled: false
+  sva:
+    c3:
+      enabled: true
+      indexerClusters:
+        - name: idc
+      searchHeadClusters:
+        - name: shc
+  indexerCluster:
+    replicaCount: 3
+  searchHeadCluster:
+    replicaCount: 3
+tests:
+  - it: renders no NoahCluster and no noahClusterRef by default
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/enterprise_v4_00_noahcluster.yaml
+      - notExists:
+          path: items[0].spec.noahClusterRef
+        template: templates/enterprise_v4_indexercluster.yaml
+      - notExists:
+          path: items[0].spec.noahClusterRef
+        template: templates/enterprise_v4_searchheadcluster.yaml
+
+  - it: renders a NoahCluster when enabled
+    set:
+      noahCluster:
+        enabled: true
+        name: noah
+        endpoint: http://noah.splunk-operator.svc:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+    template: templates/enterprise_v4_00_noahcluster.yaml
+    asserts:
+      - equal:
+          path: items[0].kind
+          value: NoahCluster
+      - equal:
+          path: items[0].metadata.name
+          value: noah
+      - equal:
+          path: items[0].spec.endpoint
+          value: http://noah.splunk-operator.svc:8443
+      - equal:
+          path: items[0].spec.tenant
+          value: t1
+      - equal:
+          path: items[0].spec.authSecretRef.name
+          value: noah-auth
+      - notExists:
+          path: items[0].spec.cacheWarmScaleOutEnabled
+      - notExists:
+          path: items[0].spec.cacheWarmScaleOutTimeoutSeconds
+
+  - it: passes the optional cache warm settings through, including zero and false
+    set:
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+        cacheWarmScaleOutEnabled: false
+        cacheWarmScaleOutTimeoutSeconds: 0
+    template: templates/enterprise_v4_00_noahcluster.yaml
+    asserts:
+      - equal:
+          path: items[0].spec.cacheWarmScaleOutEnabled
+          value: false
+      - equal:
+          path: items[0].spec.cacheWarmScaleOutTimeoutSeconds
+          value: 0
+
+  - it: sets noahClusterRef on the indexer and search head clusters when enabled
+    set:
+      noahCluster:
+        enabled: true
+        name: noah
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+    asserts:
+      - equal:
+          path: items[0].spec.noahClusterRef.name
+          value: noah
+        template: templates/enterprise_v4_indexercluster.yaml
+      - equal:
+          path: items[0].spec.noahClusterRef.name
+          value: noah
+        template: templates/enterprise_v4_searchheadcluster.yaml
+      - notExists:
+          path: items[0].spec.clusterManagerRef
+        template: templates/enterprise_v4_indexercluster.yaml
+      - notExists:
+          path: items[0].spec.clusterManagerRef
+        template: templates/enterprise_v4_searchheadcluster.yaml
+
+  - it: requires endpoint, tenant and authSecretRef.name when enabled
+    set:
+      noahCluster:
+        enabled: true
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+    template: templates/enterprise_v4_00_noahcluster.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: noahCluster.endpoint is required
+
+  - it: creates the NoahCluster in the namespace of the clusters that reference it when only namespaceOverride is set
+    release:
+      namespace: relns
+    set:
+      namespaceOverride: ovns
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+    asserts:
+      - equal:
+          path: items[0].metadata.namespace
+          value: relns
+        template: templates/enterprise_v4_00_noahcluster.yaml
+      - equal:
+          path: items[0].metadata.namespace
+          value: relns
+        template: templates/enterprise_v4_indexercluster.yaml
+      - equal:
+          path: items[0].metadata.namespace
+          value: relns
+        template: templates/enterprise_v4_searchheadcluster.yaml
+
+  - it: creates the NoahCluster and the clusters that reference it in noahCluster.namespaceOverride when all three are set
+    release:
+      namespace: relns
+    set:
+      noahCluster:
+        enabled: true
+        namespaceOverride: noahns
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+      indexerCluster:
+        namespaceOverride: noahns
+      searchHeadCluster:
+        namespaceOverride: noahns
+    asserts:
+      - equal:
+          path: items[0].metadata.namespace
+          value: noahns
+        template: templates/enterprise_v4_00_noahcluster.yaml
+      - equal:
+          path: items[0].metadata.namespace
+          value: noahns
+        template: templates/enterprise_v4_indexercluster.yaml
+      - equal:
+          path: items[0].metadata.namespace
+          value: noahns
+        template: templates/enterprise_v4_searchheadcluster.yaml
+
+  - it: fails when the NoahCluster and the IndexerCluster are in different namespaces
+    release:
+      namespace: relns
+    set:
+      noahCluster:
+        enabled: true
+        namespaceOverride: noahns
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+      searchHeadCluster:
+        namespaceOverride: noahns
+    template: templates/enterprise_v4_00_noahcluster.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: the NoahCluster is in namespace "noahns" but the IndexerCluster is in namespace "relns"
+
+  - it: fails when the NoahCluster and the SearchHeadCluster are in different namespaces
+    release:
+      namespace: relns
+    set:
+      noahCluster:
+        enabled: true
+        namespaceOverride: noahns
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+      indexerCluster:
+        namespaceOverride: noahns
+    template: templates/enterprise_v4_00_noahcluster.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: the NoahCluster is in namespace "noahns" but the SearchHeadCluster is in namespace "relns"
+
+  - it: fails when the clusters are in a namespace override and the NoahCluster is not
+    release:
+      namespace: relns
+    set:
+      noahCluster:
+        enabled: true
+        endpoint: http://noah:8443
+        tenant: t1
+        authSecretRef:
+          name: noah-auth
+      indexerCluster:
+        namespaceOverride: otherns
+      searchHeadCluster:
+        namespaceOverride: otherns
+    template: templates/enterprise_v4_00_noahcluster.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: the NoahCluster is in namespace "relns" but the IndexerCluster is in namespace "otherns"
