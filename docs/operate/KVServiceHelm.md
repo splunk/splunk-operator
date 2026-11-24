@@ -55,7 +55,7 @@ sharedKVService:
 For disposable testing only, replace the backup configuration with
 `sharedPostgres.backup.acknowledgeNoBackups: true`. Disabling backups is never
 acknowledged automatically. PostgreSQL defaults still request three instances
-and node separation; see [shared PostgreSQL](../postgresql/shared-cluster.md).
+and node separation; see [PostgreSQL backend configuration](../deploy/Helm.md#postgresql-backend-controllers).
 
 ```bash
 helm upgrade --install sok ./helm-chart/splunk-operator \
@@ -70,7 +70,7 @@ timeout instead. `--no-hooks` bypasses the readiness check and is not a supporte
 way to establish shared-service readiness. If enabling validation on an existing
 release, first enable its controllers with shared provisioning disabled and wait
 for the Operator to be Ready, then enable the shared services; follow the
-[PostgreSQL admission ordering guidance](../postgresql/shared-cluster.md).
+[PostgreSQL backend configuration](../deploy/Helm.md#postgresql-backend-controllers).
 
 ## Readiness and failure handling
 

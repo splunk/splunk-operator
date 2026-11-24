@@ -276,7 +276,7 @@ extraEnvs: []
 #      fieldRef:
 #        fieldPath: status.podIP
 
-# One shared PostgreSQL cluster owned by this Helm release. See docs/postgresql/shared-cluster.md.
+# One shared PostgreSQL cluster owned by this Helm release. See docs/deploy/Helm.md#postgresql-backend-controllers.
 sharedPostgres:
   enabled: false
   # Select 18 explicitly only when compatibility with future non-Kubernetes migrations is unnecessary.
