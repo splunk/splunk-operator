@@ -16,6 +16,7 @@ package monitoringconsole
 import (
 	"context"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/gomega"
 
@@ -82,21 +83,29 @@ func deployAndVerifyC3WithMC(ctx context.Context, deployment *testenv.Deployment
 	indexerReplicas := 3
 	mcName := deployment.GetName()
 
+	phaseDone := profileMCPhase(testcaseEnvInst, "baseline-create-mc")
 	mc, resourceVersion, err := testcaseEnvInst.DeployMCAndGetVersion(ctx, deployment, deployment.GetName(), "")
 	Expect(err).To(Succeed(), "Unable to deploy Monitoring Console")
+	phaseDone()
 
+	phaseDone = profileMCPhase(testcaseEnvInst, "baseline-create-c3")
 	err = cfg.DeployC3WithMC(ctx, deployment, deployment.GetName(), indexerReplicas, true, mcName)
 	Expect(err).To(Succeed(), "Unable to deploy cluster")
+	phaseDone()
 
+	phaseDone = profileMCPhase(testcaseEnvInst, "baseline-readiness")
 	Expect(testcaseEnvInst.VerifyC3ClusterReady(ctx, deployment, func(ctx2 context.Context, d *testenv.Deployment) error {
 		return cfg.VerifyCMReady(ctx2, d, testcaseEnvInst)
 	})).To(Succeed(), "C3 cluster not ready")
 
 	Expect(testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, mc, resourceVersion)).To(Succeed(), "MC version not changed or not ready")
+	phaseDone()
 
+	phaseDone = profileMCPhase(testcaseEnvInst, "baseline-mc-validation")
 	shPods := testenv.GeneratePodNameSlice(testenv.SearchHeadPod, deployment.GetName(), shReplicas, false, 0)
 	indexerPods := testenv.GeneratePodNameSlice(testenv.IndexerPod, deployment.GetName(), indexerReplicas, false, 0)
 	Expect(testenv.VerifyMCConfigForCluster(ctx, deployment, testcaseEnvInst, cfg, mcName, shPods, indexerPods)).To(Succeed(), "MC config verification failed for C3 cluster")
+	phaseDone()
 
 	return c3MCSetupResult{mc: mc, mcName: mcName, shPods: shPods, indexerPods: indexerPods, shReplicas: shReplicas, indexerReplicas: indexerReplicas}
 }
@@ -148,17 +157,17 @@ func RunC3MCReconfigTest(ctx context.Context, deployment *testenv.Deployment, te
 // configuration, scales SHC and indexers, adds a standalone, and verifies the MC
 // is updated correctly after scale up. Works for both V3 (master) and V4 (manager).
 func RunC3MCScaleUpTest(ctx context.Context, deployment *testenv.Deployment, testcaseEnvInst *testenv.TestCaseEnv, cfg testenv.MCVersionConfig) {
+	phaseDone := profileMCPhase(testcaseEnvInst, "baseline")
 	setup := deployAndVerifyC3WithMC(ctx, deployment, testcaseEnvInst, cfg)
+	phaseDone()
 
-	// Scale Search Head Cluster
+	// Submit both requests before waiting; retain every completion assertion.
 	scaledSHReplicas := setup.shReplicas + 1
-	testcaseEnvInst.Log.Info("Scaling up Search Head Cluster", "Current Replicas", setup.shReplicas, "New Replicas", scaledSHReplicas)
-	Expect(testcaseEnvInst.ScaleSearchHeadCluster(ctx, deployment, scaledSHReplicas)).To(Succeed(), "Unable to scale Search Head Cluster")
-
-	// Scale indexers
 	scaledIndexerReplicas := setup.indexerReplicas + 1
-	testcaseEnvInst.Log.Info("Scaling up Indexer Cluster", "Current Replicas", setup.indexerReplicas, "New Replicas", scaledIndexerReplicas)
-	Expect(testcaseEnvInst.ScaleIndexerCluster(ctx, deployment, scaledIndexerReplicas)).To(Succeed(), "Unable to scale Indexer Cluster")
+	phaseDone = profileMCPhase(testcaseEnvInst, "scale-requests")
+	Expect(testcaseEnvInst.RequestC3ScaleUp(ctx, deployment, scaledSHReplicas, scaledIndexerReplicas)).To(Succeed(), "Unable to request C3 scale up")
+	Expect(testcaseEnvInst.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp, deployment.GetName()+"-idxc")).To(Succeed(), "Indexers did not start scaling")
+	phaseDone()
 
 	// Get revision number of the resource
 	resourceVersion := testcaseEnvInst.GetResourceVersion(ctx, deployment, setup.mc)
@@ -168,13 +177,19 @@ func RunC3MCScaleUpTest(ctx context.Context, deployment *testenv.Deployment, tes
 	Expect(err).To(Succeed(), "Unable to deploy Standalone with MC reference")
 
 	// Ensure Indexer Cluster goes to Ready phase
+	phaseDone = profileMCPhase(testcaseEnvInst, "indexer-readiness")
 	Expect(testcaseEnvInst.VerifySingleSiteIndexersReady(ctx, deployment)).To(Succeed(), "Indexers not ready after scale up")
+	phaseDone()
 
 	// Ensure Search Head Cluster goes to Ready Phase
 	// Adding this check in the end as SHC take the longest time to scale up due recycle of SHC members
+	phaseDone = profileMCPhase(testcaseEnvInst, "search-head-readiness")
+	Expect(testcaseEnvInst.WaitForSearchHeadClusterScaleComplete(ctx, deployment, int32(scaledSHReplicas))).To(Succeed(), "Search Head Cluster scale not reconciled")
 	Expect(testcaseEnvInst.VerifySearchHeadClusterReady(ctx, deployment)).To(Succeed(), "Search Head Cluster not ready after scale up")
+	phaseDone()
 
 	// Wait for custom resource resource version to change and verify MC is ready
+	phaseDone = profileMCPhase(testcaseEnvInst, "final-mc-validation")
 	Expect(testcaseEnvInst.VerifyMCVersionChangedAndReady(ctx, deployment, setup.mc, resourceVersion)).To(Succeed(), "MC version not changed or not ready after scale up")
 
 	// Verify Standalone configured on Monitoring Console
@@ -188,6 +203,15 @@ func RunC3MCScaleUpTest(ctx context.Context, deployment *testenv.Deployment, tes
 	Expect(testenv.VerifyMCConfigForCluster(ctx, deployment, testcaseEnvInst, cfg, setup.mcName, shPods, indexerPods)).To(Succeed(), "MC config verification failed after scale up")
 
 	Expect(testcaseEnvInst.VerifyC3ConditionsReady(ctx, deployment)).To(Succeed(), "C3 Ready conditions not met")
+	phaseDone()
+}
+
+func profileMCPhase(env *testenv.TestCaseEnv, phase string) func() {
+	started := time.Now()
+	env.Log.Info("mc-profile:start", "phase", phase)
+	return func() {
+		env.Log.Info("mc-profile:complete", "phase", phase, "elapsedSeconds", time.Since(started).Seconds())
+	}
 }
 
 // RunS1StandaloneAddDeleteMCTest deploys two standalone instances with a Monitoring Console,

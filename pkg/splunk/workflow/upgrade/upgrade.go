@@ -66,69 +66,98 @@ func Validate(state State) (Result, error) {
 		return continueResult(), nil
 	}
 
-	if state.HasLicenseManagerRef && state.LicenseManager != nil {
-		if state.LicenseManager.Image != state.Image {
-			return waitResult(), fmt.Errorf("license manager current image (%s) is different than CR image (%s)", state.LicenseManager.Image, state.Image)
-		}
-		if state.LicenseManager.Phase != phaseReady {
-			return waitResult(), nil
-		}
+	if result, err := validateLicenseManager(state); err != nil || !result.Continue {
+		return result, err
 	}
 
 	if state.Kind == "ClusterManager" {
 		return continueResult(), nil
 	}
 
-	if state.ClusterManager != nil {
-		if state.ClusterManager.Phase != phaseReady {
-			return waitResult(), fmt.Errorf("cluster manager %s is not ready (phase: %s). IndexerCluster upgrade is waiting for ClusterManager to be ready", state.ClusterManager.Name, state.ClusterManager.Phase)
-		}
-		if state.ClusterManager.Image != state.Image {
-			message := fmt.Sprintf("Upgrade blocked: ClusterManager version %s != IndexerCluster version %s. Upgrade ClusterManager first.", state.ClusterManager.Image, state.Image)
-			return Result{
-				Continue: false,
-				Events: []Event{{
-					Reason:  string(splcommon.EventReasonUpgradeBlockedVersionMismatch),
-					Message: message,
-				}},
-			}, fmt.Errorf("cluster manager %s image (%s) does not match IndexerCluster image (%s). Please upgrade ClusterManager and IndexerCluster together using the operator's RELATED_IMAGE_SPLUNK_ENTERPRISE or upgrade the ClusterManager first", state.ClusterManager.Name, state.ClusterManager.Image, state.Image)
-		}
+	if result, err := validateClusterManager(state); err != nil || !result.Continue {
+		return result, err
 	}
 
 	if state.Kind == "IndexerCluster" && state.ValidateIndexerCluster {
-		// Documented upgrade order is ClusterManager -> SearchHeadCluster -> IndexerCluster.
-		for _, searchHead := range state.SearchHeadClusters {
-			if searchHead.Phase != phaseReady || searchHead.Image != state.Image {
-				return waitResult(), nil
-			}
-		}
-		if state.ClusterInfo != nil && state.ClusterInfo.MultiSite == "true" && state.PreviousIndexer != nil {
-			if state.PreviousIndexer.Phase != phaseReady || state.PreviousIndexer.Image != state.Image {
-				return waitResult(), nil
-			}
-		}
-		return continueResult(), nil
+		return validateIndexerCluster(state), nil
 	}
 
 	if state.Kind == "SearchHeadCluster" {
 		return continueResult(), nil
 	}
 
+	return validateRemainingDependencies(state), nil
+}
+
+func validateLicenseManager(state State) (Result, error) {
+	if !state.HasLicenseManagerRef || state.LicenseManager == nil {
+		return continueResult(), nil
+	}
+	if state.LicenseManager.Image != state.Image {
+		return waitResult(), fmt.Errorf("license manager current image (%s) is different than CR image (%s)", state.LicenseManager.Image, state.Image)
+	}
+	if state.LicenseManager.Phase != phaseReady {
+		return waitResult(), nil
+	}
+	return continueResult(), nil
+}
+
+func validateClusterManager(state State) (Result, error) {
+	if state.ClusterManager == nil {
+		return continueResult(), nil
+	}
+	if state.ClusterManager.Phase != phaseReady {
+		if state.Kind == "MonitoringConsole" {
+			return waitResult(), nil
+		}
+		return waitResult(), fmt.Errorf("cluster manager %s is not ready (phase: %s). IndexerCluster upgrade is waiting for ClusterManager to be ready", state.ClusterManager.Name, state.ClusterManager.Phase)
+	}
+	if state.ClusterManager.Image != state.Image {
+		message := fmt.Sprintf("Upgrade blocked: ClusterManager version %s != IndexerCluster version %s. Upgrade ClusterManager first.", state.ClusterManager.Image, state.Image)
+		return Result{
+			Continue: false,
+			Events: []Event{{
+				Reason:  string(splcommon.EventReasonUpgradeBlockedVersionMismatch),
+				Message: message,
+			}},
+		}, fmt.Errorf("cluster manager %s image (%s) does not match IndexerCluster image (%s). Please upgrade ClusterManager and IndexerCluster together using the operator's RELATED_IMAGE_SPLUNK_ENTERPRISE or upgrade the ClusterManager first", state.ClusterManager.Name, state.ClusterManager.Image, state.Image)
+	}
+	return continueResult(), nil
+}
+
+func validateIndexerCluster(state State) Result {
+	// Documented upgrade order is ClusterManager -> SearchHeadCluster -> IndexerCluster.
+	for _, searchHead := range state.SearchHeadClusters {
+		if searchHead.Phase != phaseReady || searchHead.Image != state.Image {
+			return waitResult()
+		}
+	}
+	if state.ClusterInfo != nil && state.ClusterInfo.MultiSite == "true" && state.PreviousIndexer != nil {
+		if state.PreviousIndexer.Phase != phaseReady || state.PreviousIndexer.Image != state.Image {
+			return waitResult()
+		}
+	}
+	return continueResult()
+}
+
+func validateRemainingDependencies(state State) Result {
 	if state.SearchHeadCluster != nil {
 		if state.SearchHeadCluster.Phase != phaseReady || state.SearchHeadCluster.Image != state.Image {
-			return waitResult(), nil
+			return waitResult()
 		}
 	}
 
 	if state.Kind == "MonitoringConsole" {
 		for _, dependency := range state.MonitoringConsoleDependencies {
 			if dependency.Phase != phaseReady {
-				return waitResult(), fmt.Errorf("%s %s is not ready", dependency.Type, dependency.Name)
+				// Preserve the caller's bounded retry; an error would instead
+				// select controller-runtime's exponential error backoff.
+				return waitResult()
 			}
 		}
 	}
 
-	return continueResult(), nil
+	return continueResult()
 }
 
 func continueResult() Result {

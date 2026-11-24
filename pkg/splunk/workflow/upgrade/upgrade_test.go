@@ -49,3 +49,47 @@ func TestIndexerClusterGateChecksEverySearchHeadCluster(t *testing.T) {
 		})
 	}
 }
+
+func TestMonitoringConsoleWaitsWithoutError(t *testing.T) {
+	for _, kind := range []string{"cluster manager", "search head", "indexer", "standalone"} {
+		for _, phase := range []string{"", "Pending", "Updating", phaseReady} {
+			t.Run(kind+"/"+phase, func(t *testing.T) {
+				state := State{Kind: "MonitoringConsole", MonitoringConsoleDependencies: []ResourceState{
+					{Type: "standalone", Name: "ready", Phase: phaseReady},
+					{Type: kind, Name: "dependency", Phase: phase},
+				}}
+				result, err := Validate(state)
+				if err != nil || result.Continue != (phase == phaseReady) {
+					t.Fatalf("Validate() = %+v, %v; want Continue=%v without error", result, err, phase == phaseReady)
+				}
+			})
+		}
+	}
+	if result, err := Validate(State{Kind: "MonitoringConsole"}); err != nil || !result.Continue {
+		t.Fatalf("no dependencies: got %+v, %v", result, err)
+	}
+}
+
+func TestMonitoringConsoleClusterManagerGate(t *testing.T) {
+	tests := []struct {
+		name, kind, phase, image string
+		wantContinue, wantError  bool
+	}{
+		{"MC pending", "MonitoringConsole", "Updating", "new", false, false},
+		{"MC ready", "MonitoringConsole", phaseReady, "new", true, false},
+		{"MC incompatible image", "MonitoringConsole", phaseReady, "old", false, true},
+		{"indexer pending unchanged", "IndexerCluster", "Updating", "new", false, true},
+		{"SHC pending unchanged", "SearchHeadCluster", "Updating", "new", false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := Validate(State{
+				Kind: tt.kind, Image: "new", HasClusterManagerRef: true,
+				ClusterManager: &ResourceState{Name: "cm", Phase: tt.phase, Image: tt.image},
+			})
+			if result.Continue != tt.wantContinue || (err != nil) != tt.wantError {
+				t.Fatalf("Validate() = %+v, %v; want Continue=%v, error=%v", result, err, tt.wantContinue, tt.wantError)
+			}
+		})
+	}
+}
