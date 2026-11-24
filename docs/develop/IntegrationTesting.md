@@ -797,6 +797,14 @@ export TEST_TIMEOUT="120m"
 ./test/trigger-tests.sh <operator-image> <enterprise-image>
 ```
 
+The MC C3 scale-up scenario submits search-head and indexer scale requests before
+waiting for either cluster to finish. It retains the indexer ScalingUp check,
+full SHC generation/replica/captain/deployer completion check, both Ready checks,
+and the original MC peer/configuration and CR-condition assertions. Other callers
+of `ScaleSearchHeadCluster` retain its synchronous completion contract. The MC
+scenario emits `mc-profile:start`/`mc-profile:complete` phase timings without
+changing labels, timeouts, replica counts or test selection.
+
 ### In CI
 
 Tests run automatically on:

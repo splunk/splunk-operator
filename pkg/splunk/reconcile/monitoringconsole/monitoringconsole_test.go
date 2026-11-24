@@ -775,6 +775,22 @@ func TestMonitoringConsoleWithReadyState(t *testing.T) {
 		t.Errorf("Unexpected get monitoring console. Error = %v", err)
 		debug.PrintStack()
 	}
+	// A dependency becoming ready must use the bounded reconcile timer instead
+	// of controller-runtime's exponential error backoff.
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(statefulset), statefulset))
+	statefulset.CreationTimestamp = metav1.Now()
+	require.NoError(t, c.Update(ctx, statefulset))
+	manager := &enterpriseApi.ClusterManager{ObjectMeta: metav1.ObjectMeta{Name: "different-name", Namespace: "default"}}
+	manager.Spec.MonitoringConsoleRef.Name = monitoringconsole.Name
+	manager.Status.Phase = enterpriseApi.PhaseUpdating
+	require.NoError(t, c.Create(ctx, manager))
+	waitResult, waitErr := ApplyMonitoringConsole(ctx, c, monitoringconsole)
+	require.NoError(t, waitErr)
+	require.Equal(t, 5*time.Second, waitResult.RequeueAfter)
+	require.NoError(t, c.Get(ctx, namespacedName, monitoringconsole))
+	require.Equal(t, enterpriseApi.PhasePending, monitoringconsole.Status.Phase)
+	require.NoError(t, c.Delete(ctx, manager))
+
 	// simulate Ready state
 	monitoringconsole.Status.Phase = enterpriseApi.PhaseReady
 	monitoringconsole.Spec.ServiceTemplate.Annotations = map[string]string{

@@ -103,6 +103,42 @@ func singleSiteClusterInfo(context.Context) (*splclient.ClusterInfo, error) {
 	return &splclient.ClusterInfo{MultiSite: "false"}, nil
 }
 
+func TestMonitoringConsoleDependencyListErrors(t *testing.T) {
+	for _, kind := range []string{"ClusterManagerList", "SearchHeadClusterList", "IndexerClusterList", "StandaloneList"} {
+		t.Run(kind, func(t *testing.T) {
+			want := errors.New("dependency API unavailable")
+			c := newTestClientWithInterceptor(t, dependencyListError(kind, want))
+			mc := &enterpriseApi.MonitoringConsole{ObjectMeta: metav1.ObjectMeta{Name: "mc", Namespace: testNamespace}}
+			mc.SetGroupVersionKind(enterpriseApi.GroupVersion.WithKind("MonitoringConsole"))
+			proceed, err := UpgradePathValidation(context.Background(), c, mc, mc.Spec.CommonSplunkSpec, nil)
+			if proceed || !errors.Is(err, want) {
+				t.Fatalf("UpgradePathValidation() = %v, %v; want false, %v", proceed, err, want)
+			}
+		})
+	}
+}
+
+func dependencyListError(kind string, want error) interceptor.Funcs {
+	return interceptor.Funcs{
+		List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+			if list.GetObjectKind().GroupVersionKind().Kind == kind {
+				return want
+			}
+			// Typed lists do not necessarily have their GVK populated yet.
+			gvks, _, err := c.Scheme().ObjectKinds(list)
+			if err != nil {
+				return err
+			}
+			for _, gvk := range gvks {
+				if gvk.Kind == kind {
+					return want
+				}
+			}
+			return c.List(ctx, list, opts...)
+		},
+	}
+}
+
 // TestIndexerUpgradeWaitsForEverySearchHeadCluster covers the documented
 // ClusterManager -> SearchHeadCluster -> IndexerCluster order: an indexer image
 // change must wait until every SHC on the same ClusterManager is Ready on the

@@ -27,6 +27,13 @@ import (
 
 // ScaleSearchHeadCluster scales a Search Head Cluster to the specified replica count
 func (testcaseenv *TestCaseEnv) ScaleSearchHeadCluster(ctx context.Context, deployment *Deployment, newReplicas int) error {
+	if err := testcaseenv.requestSearchHeadClusterScale(ctx, deployment, newReplicas); err != nil {
+		return err
+	}
+	return testcaseenv.WaitForSearchHeadClusterScaleComplete(ctx, deployment, int32(newReplicas))
+}
+
+func (testcaseenv *TestCaseEnv) requestSearchHeadClusterScale(ctx context.Context, deployment *Deployment, newReplicas int) error {
 	shcName := deployment.GetName() + "-shc"
 
 	// Get instance of current SHC CR with latest config
@@ -41,12 +48,29 @@ func (testcaseenv *TestCaseEnv) ScaleSearchHeadCluster(ctx context.Context, depl
 		return fmt.Errorf("failed to scale Search Head Cluster: %w", err)
 	}
 
-	// Verify the requested generation and replica count were fully reconciled.
-	return testcaseenv.WaitForSearchHeadClusterScaleComplete(ctx, deployment, int32(newReplicas))
+	return nil
 }
 
 // ScaleIndexerCluster scales an Indexer Cluster to the specified replica count
 func (testcaseenv *TestCaseEnv) ScaleIndexerCluster(ctx context.Context, deployment *Deployment, newReplicas int) error {
+	if err := testcaseenv.requestIndexerClusterScale(ctx, deployment, newReplicas); err != nil {
+		return err
+	}
+	return testcaseenv.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp, deployment.GetName()+"-idxc")
+}
+
+// RequestC3ScaleUp submits both independent scale requests without waiting for
+// either reconciliation. Callers must retain the phase and completion checks.
+func (testcaseenv *TestCaseEnv) RequestC3ScaleUp(ctx context.Context, deployment *Deployment, searchHeads, indexers int) error {
+	testcaseenv.Log.Info("mc-profile:scale-request", "resource", "SearchHeadCluster", "replicas", searchHeads)
+	if err := testcaseenv.requestSearchHeadClusterScale(ctx, deployment, searchHeads); err != nil {
+		return err
+	}
+	testcaseenv.Log.Info("mc-profile:scale-request", "resource", "IndexerCluster", "replicas", indexers)
+	return testcaseenv.requestIndexerClusterScale(ctx, deployment, indexers)
+}
+
+func (testcaseenv *TestCaseEnv) requestIndexerClusterScale(ctx context.Context, deployment *Deployment, newReplicas int) error {
 	idxcName := deployment.GetName() + "-idxc"
 
 	// Get instance of current Indexer CR with latest config
@@ -61,8 +85,7 @@ func (testcaseenv *TestCaseEnv) ScaleIndexerCluster(ctx context.Context, deploym
 		return fmt.Errorf("failed to scale Indexer Cluster: %w", err)
 	}
 
-	// Verify Indexer Cluster scales up and goes to ScalingUp phase
-	return testcaseenv.VerifyIndexerClusterPhase(ctx, deployment, enterpriseApi.PhaseScalingUp, idxcName)
+	return nil
 }
 
 // UpdateMonitoringConsoleRefAndVerify updates the MonitoringConsoleRef in a CR and waits for the change to apply
