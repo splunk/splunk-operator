@@ -29,7 +29,7 @@ backups, no PgBouncer, and a Postgres Operator deletion policy that cleans up it
 cluster. Do not use it unchanged for a workload that stores data you need to retain.
 
 For choosing a production, shared-cluster, or pooled-connection configuration after the first
-connection works, see [Integration & Onboarding Guide](integration-patterns.md).
+connection works, see the [configuration examples](#configuration-examples).
 
 For Helm, follow [SOK backend setup](../deploy/Helm.md#postgresql-backend-controllers)
 and skip the standalone backend installation below.
@@ -449,9 +449,86 @@ kubectl wait --namespace "$NAMESPACE" \
   postgresdatabase/quickstart-db --timeout=5m
 ```
 
-For database creation and runtime settings such as encoding, locale,
-connection limits, tablespaces, and connection disablement, see
-[PostgresDatabase options](postgresdatabase-options.md).
+### Database options
+
+Each `PostgresDatabase.spec.databases[]` entry can configure PostgreSQL-native database properties.
+The operator maps these fields to the CNPG `Database` resource.
+The owner comes from `adminRoleName`, or `<name>_admin` when that field is omitted.
+Direct owner configuration is not supported.
+
+This independent API example illustrates the fields, rather than adding another step to the quickstart:
+
+```yaml
+apiVersion: platform.splunk.com/v1alpha1
+kind: PostgresDatabase
+metadata:
+  name: application-databases
+spec:
+  clusterRef:
+    name: application-cluster
+  databases:
+    - name: reporting
+      adminRoleName: reporting_owner
+      template: template0
+      encoding: UTF8
+      localeProvider: icu
+      icuLocale: en-US
+      connectionLimit: 20
+      allowConnections: true
+      deletionPolicy: Delete
+```
+
+#### Creation-only options
+
+Choose these fields before creating the database entry.
+Admission rejects adding, removing, or changing them later.
+
+| Field | Purpose | PostgreSQL availability |
+| --- | --- | --- |
+| `template` | Source template database | Supported versions |
+| `encoding` | Character-set encoding | Supported versions |
+| `locale` | Default collation and character classification | Supported versions |
+| `localeProvider` | Locale implementation | PostgreSQL 16+ |
+| `localeCollate` | `LC_COLLATE` | Supported versions |
+| `localeCType` | `LC_CTYPE` | Supported versions |
+| `icuLocale` | ICU locale. Requires `localeProvider: icu` | PostgreSQL 15+ |
+| `icuRules` | Additional ICU collation rules. Requires `localeProvider: icu` | PostgreSQL 16+ |
+| `builtinLocale` | Builtin locale. Requires `localeProvider: builtin` | PostgreSQL 17+ |
+| `collationVersion` | Collation version recorded at creation | Supported versions |
+
+To use different creation options, create a new database entry and plan the data migration.
+Recreating a resource does not copy the existing database contents.
+
+#### Mutable options
+
+| Field | Behavior |
+| --- | --- |
+| `isTemplate` | Allows or prevents using the database as a template |
+| `allowConnections` | Allows or prevents new connections |
+| `connectionLimit` | Sets concurrent connections. `-1` means unlimited, and values below `-1` are rejected |
+| `tablespace` | Selects a PostgreSQL tablespace that must already be usable by the target cluster |
+
+An omitted field preserves previous operator behavior and lets CNPG or PostgreSQL apply its default.
+Explicit `false`, `0`, and `-1` values are preserved.
+
+For a new database with `allowConnections: false`, the operator first creates it in a connectable state.
+It waits for CNPG and grants the managed application privileges.
+It then closes the database and keeps `PostgresDatabase` in `Provisioning` until CNPG reports that exact change as applied.
+This temporary connection window supports initial bootstrap. The final declared state remains closed.
+
+When another database is added later, privilege bootstrap targets only the new database.
+Existing databases with `allowConnections: false` remain closed and receive no new connection attempts.
+
+CNPG/PostgreSQL validates version-specific values and tablespace availability.
+A rejected value keeps `DatabasesReady=False`, with the provider error in the database's status message.
+Reconciliation retries continue.
+Correct mutable options in place.
+For creation-only options, make the target compatible or replace the database through a planned data migration.
+
+Do not combine `allowConnections: false` with managed `extensions`.
+CNPG needs a connection to reconcile extensions.
+If an update removes the last managed extension and closes the database, the operator stages those changes.
+It keeps the database connectable until CNPG confirms extension removal, then applies the closed state.
 
 ## 5. Retrieve connection details and connect
 
@@ -534,8 +611,9 @@ kubectl delete pod postgres-client -n "$NAMESPACE"
 
 A successful result shows `appdb` and `appdb_rw`. Your application should use the read-write
 credential Secret and database access ConfigMap in the same way, ideally by mounting them rather
-than copying their values into a workload manifest. See [Connecting to PostgreSQL with TLS](connecting-to-postgres-with-TLS.md)
-for the complete ConfigMap and certificate contract.
+than copying their values into a workload manifest. This temporary client is an initial smoke test, not full certificate verification.
+For an application client, use `sslmode=verify-full` and mount the CA identified by the cluster's `SERVER_CA_SECRET_REF`.
+The upstream [CNPG certificate guide](https://cloudnative-pg.io/docs/1.30/certificates) describes certificate behavior.
 
 ## 6. Troubleshoot the quickstart
 
@@ -828,8 +906,7 @@ deleted. Team A uses `Delete`, so the Postgres Operator removes the managed back
 generated Secrets, ConfigMap, and managed PostgreSQL roles. Team B uses `Retain`, so deletion
 orphans the application resources and leaves its PostgreSQL database and roles in place. Neither
 per-database choice protects data if the `PostgresCluster` itself is deleted; that is controlled by
-`clusterDeletionPolicy`. See [shared-cluster guidance](integration-patterns.md#shared-cluster-vs-dedicated-cluster)
-for the retention and namespace-isolation details.
+`clusterDeletionPolicy`. Select both policies explicitly and keep the database resource in its parent cluster's namespace.
 
 ### `postgresql-dedicated`: one cluster for one workload
 
@@ -894,10 +971,9 @@ spec:
       deletionPolicy: Retain
 ```
 
-The current API does not provide custom server-certificate fields. The PostgreSQL certificate
-management workflow is in progress and will be documented separately when it is available. Until
-then, `pgHBA` is the supported way to enforce TLS, using the server certificate lifecycle provided
-by CNPG. See [Connecting to PostgreSQL with TLS](connecting-to-postgres-with-TLS.md).
+The current API supports CNPG-default certificates and cert-manager certificate policy on the class.
+Use [certificate configuration](certificate-manager-tls.md) for issuers, renewal, DNS names, and retention.
+Keep certificate-chain and hostname verification enabled in the application client.
 
 ### `postgresql-pooler-transaction`: transaction-mode read-write pooler
 
@@ -957,9 +1033,7 @@ detail.
 
 ## Next steps
 
-- Use the full [Integration & Onboarding Guide](integration-patterns.md) to choose shared versus
-  dedicated topology, apply RBAC, and tune PgBouncer.
-- Read [Connecting to PostgreSQL with TLS](connecting-to-postgres-with-TLS.md) before deploying an
-  application that requires certificate verification.
+- Use the [configuration examples](#configuration-examples) for shared, dedicated, or pooled resource shapes.
+- Configure application certificate-chain and hostname verification before relying on the connection outside this development smoke test.
 - See [PostgresDatabase Managed Roles](postgresdatabase-managed-roles.md) for generated Secret names,
   role ownership, and deletion behavior.
