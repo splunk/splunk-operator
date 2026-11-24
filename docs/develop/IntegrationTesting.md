@@ -32,7 +32,7 @@ in-cluster E2E to prove behavior that unit or envtest coverage can establish.
 Use `make helm-shared-postgresql-test` for the shared-cluster Helm lifecycle suite.
 The [runner](../../kuttl/tests/helm-shared-postgresql/run.sh) checks the authorized
 context, namespace and required CRDs before starting KUTTL; see the
-[shared-cluster guide](../postgresql/shared-cluster.md) for installation prerequisites.
+[backend Helm guide](../deploy/Helm.md#postgresql-backend-controllers) for installation prerequisites.
 
 ### KVService Helm readiness hook
 

@@ -1,4 +1,4 @@
-# Run via make helm-shared-postgresql-test; see docs/postgresql/shared-cluster.md.
+# Run via make helm-shared-postgresql-test; see docs/deploy/Helm.md#postgresql-backend-controllers.
 apiVersion: kuttl.dev/v1beta1
 kind: TestSuite
 testDirs:
