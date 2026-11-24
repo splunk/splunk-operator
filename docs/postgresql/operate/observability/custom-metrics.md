@@ -1,21 +1,15 @@
 ---
-title: Custom PostgreSQL Metrics
+title: Custom PostgreSQL metrics
 parent: PostgreSQL
 nav_order: 8
 ---
 
-Image references below are template variables. Set them to approved complete
-`tag@sha256` references and render standalone YAML with `envsubst` before applying.
-See [image configuration](quickstart.md#3-create-a-postgresql-cluster) for the
-required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
-
-
 # Custom PostgreSQL metrics
 
-Custom metrics let you expose information that matters to your application as
-Prometheus metrics. You provide a small SQL query definition in a Kubernetes
-`ConfigMap`; the Splunk Operator combines the definitions for a PostgreSQL
-cluster and prepares them for collection by CloudNativePG (CNPG).
+Custom metrics expose SQL query results as Prometheus metrics.
+You provide a query definition in a Kubernetes `ConfigMap`.
+The Splunk Operator combines the definitions for a PostgreSQL cluster and prepares them for CloudNativePG collection.
+This page uses CNPG as the abbreviation for CloudNativePG.
 
 For example, a team can publish the number of waiting orders, grouped by region,
 without managing CNPG's monitoring configuration directly.
@@ -31,6 +25,11 @@ Use database scope for queries against application tables. Use cluster scope for
 PostgreSQL catalog and instance-level information such as connection counts.
 
 ## Before you begin
+
+Cluster examples use complete `tag@sha256` image references in template variables.
+PostgreSQL tags must begin with their numeric major, and pull Secrets must be namespace-local.
+Use [image configuration](../../quickstart.md#3-create-a-postgresql-cluster) before rendering those examples.
+For application queries on an existing cluster, use database scope rather than changing the cluster manifest.
 
 PostgreSQL metrics must be enabled in the `PostgresClusterClass`, or enabled for
 the individual cluster:
@@ -58,12 +57,11 @@ Custom metrics are exposed through the PostgreSQL metrics endpoint. This feature
 does not install Prometheus, an OpenTelemetry Collector, Grafana, or another
 metrics backend. Your monitoring system must scrape that endpoint.
 
-The source `ConfigMap` must:
+The source `ConfigMap` must meet these requirements:
 
-- be in the same namespace as the `PostgresCluster` or `PostgresDatabase` that
-  references it;
-- exist before the reference is created or changed; and
-- contain the referenced data key.
+- Use the same namespace as the resource that references it.
+- Create the source before adding or changing its reference.
+- Include the referenced data key.
 
 When applying separate manifests, create the source `ConfigMap` first. A missing
 `ConfigMap` is rejected immediately. A missing data key is reported through the
@@ -91,14 +89,14 @@ A source data key contains one or more query definitions:
 | Field | Required | Meaning |
 |---|---|---|
 | Map key, such as `active_connections` | Yes | Name of the custom query and the base of the exported metric name |
-| `type` | Yes | `gauge` for a value that may rise or fall, or `counter` for a cumulative value |
+| `type` | Yes | `gauge` for a value that can rise or fall, or `counter` for a cumulative value |
 | `help` | Yes | Human-readable description of the value |
 | `query` | Yes | SQL statement used to collect samples |
 | `value` | Yes | Result column containing the numeric value |
 | `labels` | No | Result columns to attach as Prometheus labels |
 
-The `value` and every label must be returned by the SQL query. A query may return
-several rows; each distinct label combination becomes a separate metric series.
+The `value` and every label must be returned by the SQL query. A query can return
+several rows. Each distinct label combination becomes a separate metric series.
 Query names, value columns, and labels must match
 `[a-zA-Z_][a-zA-Z0-9_]*`. Labels beginning with `__` are reserved by
 Prometheus. Labels must also be unique, and the `value` column cannot be used as
@@ -122,13 +120,12 @@ GRANT SELECT ON TABLE public.orders TO cnpg_metrics_exporter;
 ```
 
 Keep label values bounded. A customer ID, request ID, or other nearly unique
-value creates too many Prometheus series and should not be used as a label.
+value creates too many Prometheus series and must not be used as a label.
 
 The operator validates the definition's shape, but it does not execute the SQL
-or verify its result columns. `CustomMetricsReady=True` means the configuration was
-accepted and installed; it does not guarantee that the query can run. SQL syntax,
-permissions, and returned column names should be verified at the metrics endpoint
-and in the CNPG pod logs.
+or verify its result columns.
+`CustomMetricsReady=True` means the operator accepted and installed the configuration, not that the query can run.
+Inspect SQL execution, permissions, and returned columns at the metrics endpoint and in CNPG pod logs.
 
 ## Example: a cluster-wide metric
 
@@ -182,8 +179,8 @@ spec:
 ```
 
 The operator translates the source and creates
-`orders-postgres-metrics`. The relevant generated content looks like this;
-Kubernetes metadata and YAML ordering may vary:
+`orders-postgres-metrics`. The relevant generated content looks like this.
+Kubernetes metadata and YAML ordering can vary:
 
 ```yaml
 apiVersion: v1
@@ -323,13 +320,11 @@ cnpg_splunk_operator_database_orders_waiting_orders_order_count{database="orders
 If several `PostgresDatabase` resources target the same cluster, their valid
 queries are combined into this same generated `ConfigMap`.
 
-Database-scoped metrics participate in the database's readiness. The database
-controller publishes custom-metrics participation before unrelated provisioning
-gates, so an external-secret or role failure cannot hide the database's
-monitoring intent from the cluster controller. The `PostgresDatabase` reports
+Database-scoped metrics participate in the database's readiness. The database controller publishes custom-metrics participation before unrelated provisioning gates.
+An external-secret or role failure therefore cannot hide the database's monitoring intent from the cluster controller. The `PostgresDatabase` reports
 `CustomMetricsReady=Unknown/CustomMetricsPending` and remains `Provisioning`
 until the cluster confirms that the current complete contribution was applied.
-This exchange is automatic; do not copy selectors into the `PostgresCluster`.
+This exchange is automatic. Do not copy selectors into the `PostgresCluster`.
 
 ## Use more than one source
 
@@ -371,8 +366,8 @@ Query names must be unique within the scope where they run:
 
 - Two cluster-wide definitions with the same name collide.
 - Two definitions for the same database with the same name collide.
-- The same name may be used in two different databases.
-- A cluster-wide definition and a database-scoped definition may use the same
+- The same name can be used in two different databases.
+- A cluster-wide definition and a database-scoped definition can use the same
   name.
 
 User-defined metrics always use the exported
@@ -386,18 +381,18 @@ later package, including its non-conflicting queries. It still publishes the
 earlier package and other non-conflicting packages. This avoids installing only
 part of a team's monitoring definition while keeping unaffected metrics current.
 
-Do not rely on which package wins; rename or remove the duplicate.
+Do not rely on which package wins. Rename or remove the duplicate.
 
 For cluster-wide sources, reference order is used to resolve conflicts. This
 ordering is deterministic for recovery, not a recommended override mechanism.
-Database-scoped sources retain the order declared on that database; older
-`PostgresDatabase` resources win before newer contributors are considered.
+Database-scoped sources retain the order declared on that database.
+Older `PostgresDatabase` resources win before newer contributors are considered.
 
 ## Updates, errors, and recovery
 
 The source `ConfigMap` is your configuration. The generated
 `<cluster-name>-metrics` `ConfigMap` is managed by the operator, owned by the
-underlying CNPG cluster, and safe to inspect—but not to edit. Manual edits are
+underlying CNPG cluster, and safe to inspect. Do not edit it. Manual edits are
 overwritten, and deletion causes the operator to recreate it.
 
 The operator publishes a new combined configuration only after it can read and
@@ -414,15 +409,14 @@ The generated configuration must fit within Kubernetes' 1 MiB ConfigMap data
 limit. The operator checks the translated aggregate before writing anything. If
 it is too large, the previous complete configuration remains active and the
 condition reports the actual and maximum sizes. Reduce the number or size of the
-query definitions; raising the 100-reference limit does not raise the ConfigMap
-size limit.
+query definitions. Raising the 100-reference limit does not raise the ConfigMap size limit.
 
 | Change | Result |
 |---|---|
 | Add or update valid source content | The generated configuration is refreshed |
-| Delete a source, remove its key, or publish malformed YAML | `CustomMetricsReady=False`; the previous complete configuration remains active, if one exists. A database-scoped failure marks that contributor not ready. A cluster-scoped failure also blocks contributors that do not already have an exact positive acknowledgement for the active revision. |
-| Introduce a duplicate name in one scope | The complete later source package is excluded; accepted packages are published and the condition reports the collision |
-| Exceed the fixed 1 MiB generated ConfigMap size limit | Nothing is written; the previous complete configuration remains active |
+| Delete a source, remove its key, or publish malformed YAML | `CustomMetricsReady=False`. The previous complete configuration remains active, if one exists. A database-scoped failure marks that contributor not ready. A cluster-scoped failure also blocks contributors that do not already have an exact positive acknowledgement for the active revision. |
+| Introduce a duplicate name in one scope | The complete later source package is excluded. Accepted packages are published and the condition reports the collision |
+| Exceed the fixed 1 MiB generated ConfigMap size limit | Nothing is written. The previous complete configuration remains active |
 | Fix or recreate the source | Reconciliation runs again and the condition recovers |
 | Remove every cluster-wide and database-scoped reference | The generated `ConfigMap` is removed and monitoring reports `CustomMetricsDisabled` |
 | Put a foreign object at the generated name while metrics are enabled | The operator disconnects its generated selector, leaves the foreign object untouched, reports an ownership conflict, and marks current database contributors not ready |
@@ -441,25 +435,23 @@ kubectl get postgresdatabase orders-database -n apps \
 ```
 
 After a successful apply, the operator stores a private safety copy of the
-confirmed complete payload. While a mutable source is invalid, it uses that copy
-to recreate or repair the active generated ConfigMap and CNPG selector without
-depending on the invalid source. The cluster condition remains `False` until the
-source itself is fixed. A database revision may therefore still appear as
-applied while its status is `False`; the status and reason are authoritative.
+confirmed complete payload.
+While a mutable source is invalid, the operator uses that copy to repair the generated ConfigMap and CNPG selector.
+It does not depend on the invalid source for that repair. The cluster condition remains `False` until the
+source itself is fixed. A database revision can therefore still appear as
+applied while its status is `False`. The status and reason are authoritative.
 Fixing the source causes the cluster acknowledgement and database readiness to
 recover automatically.
 
-The operator emits a normal `CustomMetricsQueryApplied` Event only after CNPG
-reports the exact generated ConfigMap resource version active and the operator
-saves that newly confirmed revision.
+The operator waits for CNPG to report the exact generated ConfigMap resource version active.
+It saves that confirmed revision before emitting the normal `CustomMetricsQueryApplied` Event.
 It emits `CustomMetricsQueryRepaired` when the safety copy restores active state
 during source invalidity. Readiness remains configuring until CNPG observes the
 restored resource version. Idempotent reconciliations do not repeat these Events.
 
 For a structurally valid YAML document, an invalid-query message lists every
 missing or malformed field found across the selected package. Fix the reported
-issues together; you do not need to submit repeatedly to discover the next
-field error. A YAML syntax error can only report the parser failure because the
+issues together. You do not need repeated submissions to discover the next field error. A YAML syntax error can only report the parser failure because the
 document cannot be decoded into query definitions. For exceptionally large
 invalid packages, the message ends with `additional diagnostics omitted` before
 it reaches Kubernetes' condition-message size limit.
@@ -468,16 +460,16 @@ Common reasons are:
 
 | Reason | What to do |
 |---|---|
-| `CustomMetricsReady` | No action is needed; custom metrics are configured |
+| `CustomMetricsReady` | No action is needed. Custom metrics are configured |
 | `CustomMetricsDisabled` | No custom metric references exist |
-| `CustomMetricsPending` | Wait for the cluster to acknowledge the database contribution; if it persists, inspect both resources' status |
-| `CustomMetricsConfiguring` | CNPG has not yet confirmed the exact generated ConfigMap revision. This can occur during forward apply or while Safety restores last-known-good state; the operator rechecks automatically |
+| `CustomMetricsPending` | Wait for the cluster to acknowledge the database contribution. If it persists, inspect both resources' status |
+| `CustomMetricsConfiguring` | CNPG has not yet confirmed the exact generated ConfigMap revision. This can occur during forward apply or while the operator restores last-known-good state. The operator rechecks automatically |
 | `CustomMetricsConfigMapNotFound` | Restore the `ConfigMap` or its data key, or correct the reference |
-| `InvalidQueryDefinition` | Correct the YAML; ensure required fields are present and query, value, and label identifiers use Prometheus-compatible names |
+| `InvalidQueryDefinition` | Correct the YAML. Make sure that required fields are present and query, value, and label identifiers use Prometheus-compatible names |
 | `MetricNameCollision` | Rename or remove the duplicate in the reported scope |
-| `CustomMetricsConfigTooLarge` | Reduce the number or size of referenced query definitions; the message contains actual and maximum byte counts |
-| `CustomMetricsApplyRetrying` | A transient Kubernetes conflict, timeout, throttling, or service error interrupted apply; the operator retries automatically |
-| `GeneratedResourceOwnershipConflict` | A ConfigMap using the generated `<cluster>-metrics` name is not owned by the current CNPG cluster; the operator disconnects that selector and will not modify the object. Remove or rename it so the operator can recover |
+| `CustomMetricsConfigTooLarge` | Reduce the number or size of referenced query definitions. The message contains actual and maximum byte counts |
+| `CustomMetricsApplyRetrying` | A transient Kubernetes conflict, timeout, throttling, or service error interrupted apply. The operator retries automatically |
+| `GeneratedResourceOwnershipConflict` | A ConfigMap using the generated `<cluster>-metrics` name is not owned by the current CNPG cluster. The operator disconnects that selector and will not modify the object. Remove or rename it so the operator can recover |
 | `CustomMetricsApplyFailed` | Inspect the `PostgresCluster` events and operator logs for a Kubernetes or CNPG error |
 
 For troubleshooting, inspect the combined configuration and recent events:
@@ -489,5 +481,5 @@ kubectl describe postgrescluster orders-postgres -n apps
 
 Once your collector is scraping the PostgreSQL endpoint, use its query interface
 to confirm the new series and labels. The reference
-[observability dashboard](PostgreSQLObservabilityDashboard.md) describes the
+[observability dashboard](../../PostgreSQLObservabilityDashboard.md) describes the
 repository's example monitoring setup and assumptions.
