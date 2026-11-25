@@ -108,7 +108,7 @@ plugin-barman-cloud: {enabled: true}
 
 Pinned subcharts supply their tested image tags/digests; SOK overrides only public
 repositories/registries, including CNPG's bootstrap and Barman's sidecar. See
-[public artifacts](../postgresql/public-artifacts.md) for versions and verification.
+[public artifacts](../postgresql/deploy/public-artifacts.md) for versions and verification.
 Install SOK CRDs and cert-manager first when enabling the bundle; Barman requires
 cert-manager even when SOK uses another webhook certificate mechanism.
 
@@ -116,7 +116,7 @@ PostgreSQL RBAC follows the gate in both access modes. Bundling creates no datab
 backup policy by itself. Set `sharedPostgres.enabled=true` to provision a
 release-owned PostgreSQL backend. Configure backups, or explicitly set
 `sharedPostgres.backup.acknowledgeNoBackups=true` only for disposable data.
-Dedicated workloads remain covered by the [PostgreSQL quickstart](../postgresql/quickstart.md).
+For setup and readiness checks, see [Enable shared PostgreSQL](../postgresql/deploy/provision.md#enable-the-shared-helm-cluster).
 PG17/PG18/PgBouncer runtime compatibility remains subject to installation validation.
 
 For existing compatible controllers, leave their dependencies disabled and enable
