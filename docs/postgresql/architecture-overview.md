@@ -268,5 +268,5 @@ stateDiagram-v2
   [minor version upgrades](minor-version-upgrade.md),
   [backup to object storage](backup-object-storage.md),
   [backup with volume snapshots](backup-volume-snapshots.md),
-  [initial connection checks](quickstart.md#5-retrieve-connection-details-and-connect),
+  [shared cluster readiness checks](deploy/verify.md),
   [managed roles](postgresdatabase-managed-roles.md).

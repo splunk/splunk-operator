@@ -9,8 +9,8 @@ permalink: /docs/postgresql/
 These guides describe how to deploy and operate PostgreSQL databases with the Splunk Operator.
 They cover backups, upgrades, TLS connections, database roles, and observability.
 
-Start with the [PostgreSQL quickstart](quickstart.md) for cluster and database setup.
-Use [Public PostgreSQL artifacts](public-artifacts.md) to download and verify
+Start with [Deploy PostgreSQL](deploy/index.md) to enable and check the shared cluster.
+Use [Public PostgreSQL artifacts](deploy/public-artifacts.md) to download and verify
 the database images and backend operator charts from Docker Hub.
 Use [Custom PostgreSQL metrics](operate/observability/custom-metrics.md) to publish SQL query results for collection.
 

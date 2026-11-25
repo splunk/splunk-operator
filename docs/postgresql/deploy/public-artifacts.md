@@ -1,18 +1,12 @@
 ---
 title: Public PostgreSQL artifacts
-parent: PostgreSQL
-nav_order: 0.25
+parent: Deploy PostgreSQL
+nav_order: 0
 ---
 
 # Public PostgreSQL artifacts
 
-The PostgreSQL artifact release contains the backend operators, database images,
-connection pooler, and backup components used with the Postgres Operator.
-Use this guide to download the public images and charts and verify their
-signatures and checksums.
-The Splunk Operator itself is distributed separately; see the
-[Postgres Operator quickstart](quickstart.md) for its installation, prerequisites,
-and feature-gate configuration.
+Start with [controller installation](install.md). Use this page for the exact versions, signatures, and checksums of the backend operators, database images, pooler, and backup components. The official Splunk Operator chart includes its backend packages. Download a backend package separately only if you need it outside the packaged chart.
 
 ## Artifacts in a release
 
@@ -32,13 +26,11 @@ All artifacts use Docker Hub, with separate repositories for the components and
 share `splunk/postgresok-postgresql`, with distinct numeric-leading version tags.
 This gives seven repositories for eight release artifacts: five image
 repositories and two chart repositories.
-Use the complete reference for the required component from the release manifest;
-do not infer tags or use `latest`.
+Use the complete component reference from the release manifest. Do not guess tags or use `latest`.
 
 For example, `docker.io/splunk/postgresok-cnpg` is the familiar CNPG image
 reference. `registry-1.docker.io/splunk/postgresok-cnpg` identifies the same
-repository through Docker Hub's registry endpoint. Release manifest references
-may use that endpoint.
+repository through Docker Hub's registry endpoint. The release manifest can use that endpoint.
 
 ### Chart package names
 
@@ -53,9 +45,7 @@ versions are independent of PostgreSQL image versions.
 
 ## Published release
 
-The **November 6, 2026 release** is available under `releases/postgresok-2026-11-06/`.
-Its build release identifier is `postgresok-ac78e560-43371564`; retain that
-identifier when reporting an issue.
+The November 6, 2026 release is in `releases/postgresok-2026-11-06/`. Include the build identifier `postgresok-ac78e560-43371564` if you report an issue.
 It contains six images and two Helm charts. Each image includes `linux/amd64`
 and `linux/arm64`.
 
@@ -75,9 +65,9 @@ together with the digests in the release manifest.
 
 ## Select and verify a release
 
-The public [release manifest](releases/postgresok-2026-11-06/release-manifest.json),
-[production signing public key](releases/postgresok-2026-11-06/postgresok-production-signing.pub),
-and [key fingerprint](releases/postgresok-2026-11-06/postgresok-production-signing.spki.sha256)
+The public [release manifest](../releases/postgresok-2026-11-06/release-manifest.json),
+[production signing public key](../releases/postgresok-2026-11-06/postgresok-production-signing.pub),
+and [key fingerprint](../releases/postgresok-2026-11-06/postgresok-production-signing.spki.sha256)
 are linked above. Save all three files in the same directory. The manifest covers
 all six images and both charts. This public catalog retains artifact versions,
 source revisions, public references, digests, and chart package checksums.
@@ -98,10 +88,7 @@ test "$MANIFEST_SHA256" = \
   "d5926a0cc4cbc9c5ca30aab5879a22ab2d29743b216a53c85aac4f3ac1f72840"
 ```
 
-The checksum detects changed bytes; it does not authenticate the publisher or
-replace signature verification. Use the manifest's `public` references to
-download artifacts. Downloading and verifying these artifacts requires only
-public registry access and the verification material linked above.
+The checksum detects changes to the file. It does not identify the publisher or replace signature verification. Use the manifest's `public` references to download artifacts. You need only public registry access and the verification files above.
 
 Before using a release:
 
@@ -154,12 +141,7 @@ test "$SIGNING_KEY_SHA256" = \
 rm signing-key.der
 ```
 
-The release uses Cosign signatures stored in each public Docker Hub repository
-under `sha256-<artifact-digest>.sig`. It does not include a transparency-log
-bundle. The command therefore uses `--insecure-ignore-tlog=true` specifically
-for this signing format. Cryptographic signature verification and digest-claim
-validation remain enabled; this procedure does not verify transparency-log
-inclusion or a trusted signing timestamp. Cosign prints a warning about that
+Each public Docker Hub repository stores its Cosign signatures under `sha256-<artifact-digest>.sig`. The release does not include a transparency-log bundle. Use `--insecure-ignore-tlog=true` for this signing format. Cosign still checks cryptographic signatures and digest claims. It does not check the transparency log or a trusted signing timestamp. Cosign prints a warning about that
 limitation. See [Cosign verification](https://docs.sigstore.dev/cosign/verifying/verify/)
 for its verification model.
 
@@ -269,27 +251,10 @@ jq -er --arg cnpg "$CNPG_CHART_PACKAGE" --arg barman "$BARMAN_CHART_PACKAGE" '
 ' "$RELEASE_MANIFEST" | shasum -a 256 -c -
 ```
 
-A chart manifest digest identifies the OCI artifact, while `package_sha256`
-identifies the downloaded `.tgz` bytes; they are different checksums. These
-checks establish byte integrity, not the publisher's signing identity.
+The chart manifest digest identifies the OCI artifact. The `package_sha256` field identifies the downloaded `.tgz` file. These sums check the bytes, not the publisher. Use signature verification to check who published the chart.
 
-## Use with Splunk Operator
+## Continue the deployment
 
-Install CNPG and Barman through the
-[Splunk Operator Helm chart](../deploy/Helm.md#postgresql-backend-controllers).
-Those instructions cover prerequisites, feature gates, and existing backends.
+If your Helm values are ready, [apply the Helm configuration](install.md#apply-the-helm-configuration). If you are preparing a mirror, first add the [mirror image references and pull Secrets](install.md#use-a-mirror) to those values.
 
-The backend chart packages preserve their qualified image defaults. The SOK
-chart integration must configure their public controller and Barman sidecar image
-references from the same release manifest.
-
-For an existing Postgres Operator installation, configure database and pooler
-images on `PostgresCluster.spec.images` using the public PostgreSQL 17 or 18 and
-PgBouncer references from the same manifest; see
-[Create a PostgreSQL cluster](quickstart.md#3-create-a-postgresql-cluster).
-Preserve numeric-leading PostgreSQL tags and the complete digest. There is no
-automatic image discovery or fallback. Use `PostgresClusterClass`,
-`PostgresCluster`, and `PostgresDatabase` for database provisioning.
-
-For object-storage credentials and backup configuration, see
-[Automated backups via object storage](backup-object-storage.md).
+If your controllers are ready, return to [enable shared PostgreSQL](provision.md#enable-the-shared-helm-cluster). To use a mirror, keep the numeric-leading PostgreSQL tags and full digests in `sharedPostgres.images`.

@@ -28,7 +28,7 @@ PostgreSQL catalog and instance-level information such as connection counts.
 
 Cluster examples use complete `tag@sha256` image references in template variables.
 PostgreSQL tags must begin with their numeric major, and pull Secrets must be namespace-local.
-Use [image configuration](../../quickstart.md#3-create-a-postgresql-cluster) before rendering those examples.
+Use [image configuration](../../deploy/public-artifacts.md#pull-a-selected-image) before rendering those examples.
 For application queries on an existing cluster, use database scope rather than changing the cluster manifest.
 
 PostgreSQL metrics must be enabled in the `PostgresClusterClass`, or enabled for

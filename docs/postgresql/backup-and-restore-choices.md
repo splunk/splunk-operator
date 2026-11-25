@@ -6,11 +6,13 @@ nav_order: 0
 
 Image references below are template variables. Set them to approved complete
 `tag@sha256` references and render standalone YAML with `envsubst` before applying.
-See [image configuration](quickstart.md#3-create-a-postgresql-cluster) for the
+See [image configuration](deploy/public-artifacts.md#pull-a-selected-image) for the
 required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
 
 
 # Backup and Restore Choices
+
+If you are deploying the Helm-owned shared cluster, [configure Barman backups in Deploy](deploy/provision.md#configure-backups-before-enabling-the-cluster). The shared chart does not configure snapshot backups. Use the comparisons below to plan recovery. Use the restore paths that match your cluster's backup policy.
 
 This page helps platform administrators choose a PostgreSQL backup method, configure the platform, and select a restore path. It covers the supported choices at a practical level. The detailed provider and recovery procedures are linked at the [end](#detailed-procedures).
 

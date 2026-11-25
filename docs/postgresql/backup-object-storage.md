@@ -6,11 +6,13 @@ nav_order: 2
 
 Image references below are template variables. Set them to approved complete
 `tag@sha256` references and render standalone YAML with `envsubst` before applying.
-See [image configuration](quickstart.md#3-create-a-postgresql-cluster) for the
+See [image configuration](deploy/public-artifacts.md#pull-a-selected-image) for the
 required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
 
 
 # Automated Backups via Object Storage (Barman)
+
+If you are deploying the Helm-owned shared cluster, [configure backups in the Deploy guide](deploy/provision.md#configure-backups-before-enabling-the-cluster). Helm creates the class and cluster. Skip the class and cluster setup examples on this page for that deployment.
 
 This guide is for **platform teams** configuring automated PostgreSQL backups to S3-compatible object storage and **users** who need to understand backup status on their **`PostgresCluster`** instances.
 

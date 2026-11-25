@@ -6,7 +6,7 @@ nav_order: 6
 
 Image references below are template variables. Set them to approved complete
 `tag@sha256` references and render standalone YAML with `envsubst` before applying.
-See [image configuration](quickstart.md#3-create-a-postgresql-cluster) for the
+See [image configuration](deploy/public-artifacts.md#pull-a-selected-image) for the
 required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
 
 
