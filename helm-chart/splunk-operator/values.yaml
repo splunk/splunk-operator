@@ -365,7 +365,7 @@ sharedKVService:
     # Total budget for PostgreSQL and KVService, not a separate budget per stage.
     timeoutSeconds: 900
     # Override for your Kubernetes version or an air-gapped mirror.
-    image: registry.k8s.io/kubectl:v1.37.2@sha256:fe049faa65ae483ac200009a949a68fa4c9985daea12c9cb1195c9c7965301fc
+    image: registry.k8s.io/kubectl:v1.37.3@sha256:82f06779a0dcd86225ffdb96c005418b9716093a39907a5ecf686d7a22e6b788
     imagePullSecrets: []
     # Override numeric IDs for namespace-specific policies such as OpenShift SCCs.
     securityContext:
