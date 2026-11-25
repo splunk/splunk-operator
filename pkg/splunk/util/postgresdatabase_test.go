@@ -60,7 +60,7 @@ func TestValidatePostgresDatabaseMounts(t *testing.T) {
 	require.NoError(t, ValidatePostgresDatabaseMounts([]PostgresDatabaseMountInput{valid}, []string{"other-volume"}))
 	other := valid
 	other.Name = "other"
-	require.ErrorContains(t, ValidatePostgresDatabaseMounts([]PostgresDatabaseMountInput{valid, other}, nil), "conflicting")
+	require.NoError(t, ValidatePostgresDatabaseMounts([]PostgresDatabaseMountInput{valid, other}, nil), "sidecars may share a database because each has its own directory")
 	assert.NoError(t, ValidatePostgresDatabaseMounts(nil, []string{common.PostgresDatabaseVolumeName}))
 
 	var maximum []PostgresDatabaseMountInput

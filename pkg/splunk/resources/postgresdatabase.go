@@ -21,6 +21,7 @@ import (
 	"slices"
 	"strings"
 
+	pgdbtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/types"
 	"github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -32,8 +33,9 @@ const (
 )
 
 // PostgresDatabaseMount contains only references to producer-managed resources.
+// Name is the mount entry name and the directory that holds its files.
 type PostgresDatabaseMount struct {
-	Database      string
+	Name          string
 	ConfigMapName string
 	AdminPassword *corev1.SecretKeySelector
 	RWPassword    corev1.SecretKeySelector
@@ -44,8 +46,9 @@ type PostgresDatabaseMount struct {
 // or taking ownership of any ConfigMap, Secret, or certificate.
 type PostgresDatabaseBundle []PostgresDatabaseMount
 
-// Inject mounts raw ConfigMap values as <database>/<key> files and passwords
-// and CA as <database>-admin, <database>-rw and <database>-ca.crt. The whole
+// Inject mounts each entry's files in its own <name>/ directory: the raw
+// ConfigMap values as <name>/<key>, plus the password and CA files. The
+// PostgreSQL database types package owns the file and key names. The whole
 // projection is validated before the pod template is changed.
 func (bundle PostgresDatabaseBundle) Inject(pod *corev1.PodTemplateSpec) error {
 	if len(bundle) == 0 {
@@ -63,29 +66,25 @@ func (bundle PostgresDatabaseBundle) Inject(pod *corev1.PodTemplateSpec) error {
 		return err
 	}
 	mounts := slices.Clone(bundle)
-	slices.SortFunc(mounts, func(a, b PostgresDatabaseMount) int { return cmp.Compare(a.Database, b.Database) })
+	slices.SortFunc(mounts, func(a, b PostgresDatabaseMount) int { return cmp.Compare(a.Name, b.Name) })
 	var sources []corev1.VolumeProjection
 	for _, mount := range mounts {
 		metadata := &corev1.ConfigMapProjection{Name: mount.ConfigMapName}
-		for _, key := range []string{"CLUSTER_RW_ENDPOINT", "DEFAULT_CLUSTER_PORT", "DATABASE_NAME", "ADMIN_USER_NAME", "RW_USER_NAME"} {
-			metadata.Items = append(metadata.Items, corev1.KeyToPath{Key: key, Path: mount.Database + "/" + key})
+		for _, key := range pgdbtypes.MountedConnectionKeys {
+			metadata.Items = append(metadata.Items, corev1.KeyToPath{Key: key, Path: path.Join(mount.Name, key)})
+		}
+		secret := func(name, key, file string) corev1.VolumeProjection {
+			return corev1.VolumeProjection{Secret: &corev1.SecretProjection{
+				Name: name, Items: []corev1.KeyToPath{{Key: key, Path: path.Join(mount.Name, file)}},
+			}}
 		}
 		sources = append(sources,
 			corev1.VolumeProjection{ConfigMap: metadata},
-			corev1.VolumeProjection{Secret: &corev1.SecretProjection{
-				Name:  mount.RWPassword.Name,
-				Items: []corev1.KeyToPath{{Key: mount.RWPassword.Key, Path: mount.Database + "-rw"}},
-			}},
-			corev1.VolumeProjection{Secret: &corev1.SecretProjection{
-				Name:  mount.CASecretName,
-				Items: []corev1.KeyToPath{{Key: "ca.crt", Path: mount.Database + "-ca.crt"}},
-			}},
+			secret(mount.RWPassword.Name, mount.RWPassword.Key, pgdbtypes.MountedRWPasswordFile),
+			secret(mount.CASecretName, "ca.crt", pgdbtypes.MountedCAFile),
 		)
 		if mount.AdminPassword != nil {
-			sources = append(sources, corev1.VolumeProjection{Secret: &corev1.SecretProjection{
-				Name:  mount.AdminPassword.Name,
-				Items: []corev1.KeyToPath{{Key: mount.AdminPassword.Key, Path: mount.Database + "-admin"}},
-			}})
+			sources = append(sources, secret(mount.AdminPassword.Name, mount.AdminPassword.Key, pgdbtypes.MountedAdminPasswordFile))
 		}
 	}
 	pod.Spec.InitContainers = append(pod.Spec.InitContainers, initializer)
@@ -185,7 +184,7 @@ func validatePostgresDatabaseMountSpace(pod *corev1.PodTemplateSpec, index int, 
 
 // PreservePostgresDatabaseMounts copies only the last resolved projection for
 // the same requested bindings and mount location. It never restores a plan for
-// a different database or admin-permission setting.
+// a different directory, database or admin-permission setting.
 func PreservePostgresDatabaseMounts(previous, desired *corev1.PodTemplateSpec, binding string) (bool, error) {
 	if previous.Annotations[common.PostgresDatabaseBindingAnnotation] != binding {
 		return false, nil
