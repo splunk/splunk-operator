@@ -17,6 +17,7 @@ package resources
 import (
 	"testing"
 
+	spltest "github.com/splunk/splunk-operator/pkg/splunk/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -27,29 +28,23 @@ func TestInjectPostgresDatabaseMounts(t *testing.T) {
 	pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{Name: "sidecar"})
 	pod.Spec.InitContainers = []corev1.Container{{Name: "init"}}
 	bundle := PostgresDatabaseBundle{{
-		Database: "app", ConfigMapName: "producer-config",
+		Name: "sidecar-abc", ConfigMapName: "producer-config",
 		AdminPassword: &corev1.SecretKeySelector{Name: "admin", Key: "password"},
 		RWPassword:    corev1.SecretKeySelector{Name: "rw", Key: "custom"}, CASecretName: "primary-ca",
 	}}
 	require.NoError(t, bundle.Inject(pod))
 	require.Len(t, pod.Spec.Volumes, 2)
-	projection := pod.Spec.Volumes[1].Projected
-	require.NotNil(t, projection)
-	assert.Equal(t, int32(0440), *projection.DefaultMode)
-	require.Len(t, projection.Sources, 4)
-	assert.Equal(t, "producer-config", projection.Sources[0].ConfigMap.Name)
-	assert.Equal(t, []corev1.KeyToPath{
-		{Key: "CLUSTER_RW_ENDPOINT", Path: "app/CLUSTER_RW_ENDPOINT"},
-		{Key: "DEFAULT_CLUSTER_PORT", Path: "app/DEFAULT_CLUSTER_PORT"},
-		{Key: "DATABASE_NAME", Path: "app/DATABASE_NAME"},
-		{Key: "ADMIN_USER_NAME", Path: "app/ADMIN_USER_NAME"},
-		{Key: "RW_USER_NAME", Path: "app/RW_USER_NAME"},
-	}, projection.Sources[0].ConfigMap.Items)
-	assert.Equal(t, "admin", projection.Sources[3].Secret.Name)
-	assert.Equal(t, []corev1.KeyToPath{{Key: "password", Path: "app-admin"}}, projection.Sources[3].Secret.Items)
-	assert.Equal(t, []corev1.KeyToPath{{Key: "custom", Path: "app-rw"}}, projection.Sources[1].Secret.Items)
-	assert.Equal(t, "primary-ca", projection.Sources[2].Secret.Name)
-	assert.Equal(t, []corev1.KeyToPath{{Key: "ca.crt", Path: "app-ca.crt"}}, projection.Sources[2].Secret.Items)
+	assert.Equal(t, int32(0440), *pod.Spec.Volumes[1].Projected.DefaultMode)
+	assert.Equal(t, map[string]spltest.PostgresProjectedFile{
+		"sidecar-abc/CLUSTER_RW_ENDPOINT":  {Source: "producer-config", Key: "CLUSTER_RW_ENDPOINT"},
+		"sidecar-abc/DEFAULT_CLUSTER_PORT": {Source: "producer-config", Key: "DEFAULT_CLUSTER_PORT"},
+		"sidecar-abc/DATABASE_NAME":        {Source: "producer-config", Key: "DATABASE_NAME"},
+		"sidecar-abc/ADMIN_USER_NAME":      {Source: "producer-config", Key: "ADMIN_USER_NAME"},
+		"sidecar-abc/RW_USER_NAME":         {Source: "producer-config", Key: "RW_USER_NAME"},
+		"sidecar-abc/RW_PASSWORD":          {Source: "rw", Key: "custom"},
+		"sidecar-abc/ADMIN_PASSWORD":       {Source: "admin", Key: "password"},
+		"sidecar-abc/ca.crt":               {Source: "primary-ca", Key: "ca.crt"},
+	}, spltest.PostgresDatabaseFiles(t, pod))
 	assert.Equal(t, corev1.VolumeMount{Name: PostgresDatabaseVolumeName, MountPath: PostgresDatabaseMountRoot, ReadOnly: true}, pod.Spec.Containers[0].VolumeMounts[1])
 	assert.Empty(t, pod.Spec.Containers[1].VolumeMounts)
 	assert.Empty(t, pod.Spec.InitContainers[0].VolumeMounts)
@@ -60,16 +55,11 @@ func TestInjectPostgresDatabaseMounts(t *testing.T) {
 
 func TestPostgresDatabaseDefaultProjectionHasNoAdmin(t *testing.T) {
 	pod := postgresRuntimePod()
-	bundle := PostgresDatabaseBundle{{Database: "app", ConfigMapName: "metadata", RWPassword: corev1.SecretKeySelector{Name: "rw", Key: "password"}, CASecretName: "ca"}}
+	bundle := PostgresDatabaseBundle{{Name: "sidecar", ConfigMapName: "metadata", RWPassword: corev1.SecretKeySelector{Name: "rw", Key: "password"}, CASecretName: "ca"}}
 	require.NoError(t, bundle.Inject(pod))
-	require.Len(t, pod.Spec.Volumes[1].Projected.Sources, 3)
-	for _, source := range pod.Spec.Volumes[1].Projected.Sources {
-		if source.Secret != nil {
-			for _, item := range source.Secret.Items {
-				assert.NotEqual(t, "app-admin", item.Path)
-			}
-		}
-	}
+	files := spltest.PostgresDatabaseFiles(t, pod)
+	assert.Contains(t, files, "sidecar/RW_PASSWORD")
+	assert.NotContains(t, files, "sidecar/ADMIN_PASSWORD")
 }
 
 func TestPostgresDatabaseMountHome(t *testing.T) {
@@ -77,7 +67,7 @@ func TestPostgresDatabaseMountHome(t *testing.T) {
 		Name: "splunk", Env: []corev1.EnvVar{{Name: "SPLUNK_HOME", Value: "/custom/splunk"}},
 		VolumeMounts: []corev1.VolumeMount{{Name: "var", MountPath: "/custom/splunk/var"}},
 	}}}}
-	bundle := PostgresDatabaseBundle{{Database: "app", ConfigMapName: "producer-config"}}
+	bundle := PostgresDatabaseBundle{{Name: "sidecar", ConfigMapName: "producer-config"}}
 	require.NoError(t, bundle.Inject(pod))
 	assert.Equal(t, "/custom/splunk/var/run/supervisor/postgresok", pod.Spec.Containers[0].VolumeMounts[1].MountPath)
 	assert.False(t, pod.Spec.Containers[0].VolumeMounts[0].ReadOnly)
@@ -85,7 +75,7 @@ func TestPostgresDatabaseMountHome(t *testing.T) {
 
 func TestPostgresDatabaseProjectionChangesWithReferences(t *testing.T) {
 	original := PostgresDatabaseMount{
-		Database: "app", ConfigMapName: "producer-config",
+		Name: "sidecar", ConfigMapName: "producer-config",
 		AdminPassword: &corev1.SecretKeySelector{Name: "admin", Key: "password"},
 		RWPassword:    corev1.SecretKeySelector{Name: "rw", Key: "password"}, CASecretName: "primary-ca",
 	}
@@ -104,6 +94,7 @@ func TestPostgresDatabaseProjectionChangesWithReferences(t *testing.T) {
 		{"RW", func(m *PostgresDatabaseMount) { m.RWPassword.Name = "other-rw" }},
 		{"password key", func(m *PostgresDatabaseMount) { m.RWPassword.Key = "other-key" }},
 		{"CA", func(m *PostgresDatabaseMount) { m.CASecretName = "other-ca" }},
+		{"directory", func(m *PostgresDatabaseMount) { m.Name = "other-sidecar" }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			changed := original
@@ -113,6 +104,22 @@ func TestPostgresDatabaseProjectionChangesWithReferences(t *testing.T) {
 		})
 	}
 	other := original
-	other.Database = "other"
+	other.Name = "other"
 	assert.Equal(t, projection(PostgresDatabaseBundle{original, other}), projection(PostgresDatabaseBundle{other, original}), "spec reordering must not roll pods")
+}
+
+func TestPostgresDatabaseSidecarsUseSeparateDirectories(t *testing.T) {
+	pod := postgresRuntimePod()
+	// Both entries come from the same database publication.
+	shared := PostgresDatabaseMount{ConfigMapName: "metadata", RWPassword: corev1.SecretKeySelector{Name: "rw", Key: "password"}, CASecretName: "ca"}
+	abc, xyz := shared, shared
+	abc.Name, xyz.Name = "sidecar-abc", "sidecar-xyz"
+	require.NoError(t, PostgresDatabaseBundle{xyz, abc}.Inject(pod))
+	files := spltest.PostgresDatabaseFiles(t, pod)
+	assert.Len(t, files, 14, "each sidecar gets its own seven files")
+	for _, sidecar := range []string{"sidecar-abc", "sidecar-xyz"} {
+		assert.Equal(t, spltest.PostgresProjectedFile{Source: "metadata", Key: "CLUSTER_RW_ENDPOINT"}, files[sidecar+"/CLUSTER_RW_ENDPOINT"])
+		assert.Equal(t, spltest.PostgresProjectedFile{Source: "rw", Key: "password"}, files[sidecar+"/RW_PASSWORD"])
+		assert.Equal(t, spltest.PostgresProjectedFile{Source: "ca", Key: "ca.crt"}, files[sidecar+"/ca.crt"])
+	}
 }

@@ -36,8 +36,10 @@ var (
 	postgresDatabaseReservedNamePattern = regexp.MustCompile(`-bg-[0-9a-f]{10}-`)
 )
 
-// ValidatePostgresDatabaseMounts checks names, reference syntax, database-based
-// file collisions, and the reserved workload volume without constructing objects.
+// ValidatePostgresDatabaseMounts checks names, reference syntax, and the
+// reserved workload volume without constructing objects. Each entry's name is
+// its directory, so unique names keep the projected files apart, even when
+// several entries use the same database.
 func ValidatePostgresDatabaseMounts(mounts []PostgresDatabaseMountInput, volumeNames []string) error {
 	if len(mounts) > 10 {
 		return fmt.Errorf("postgresDatabaseMounts supports at most 10 entries")
@@ -48,7 +50,7 @@ func ValidatePostgresDatabaseMounts(mounts []PostgresDatabaseMountInput, volumeN
 	if slices.Contains(volumeNames, common.PostgresDatabaseVolumeName) {
 		return fmt.Errorf("volume %q is reserved for PostgresDatabase bundles", common.PostgresDatabaseVolumeName)
 	}
-	names, databases := make(map[string]bool), make(map[string]bool)
+	names := make(map[string]bool)
 	for _, mount := range mounts {
 		if len(mount.Name) > 60 || len(validation.IsDNS1123Label(mount.Name)) != 0 {
 			return fmt.Errorf("invalid PostgresDatabase mount name %q", mount.Name)
@@ -66,10 +68,6 @@ func ValidatePostgresDatabaseMounts(mounts []PostgresDatabaseMountInput, volumeN
 		if postgresDatabaseReservedNamePattern.MatchString(mount.Database) {
 			return fmt.Errorf("mount %q database name %q uses a name form reserved for blue/green resources", mount.Name, mount.Database)
 		}
-		if databases[mount.Database] {
-			return fmt.Errorf("database %q has conflicting PostgresDatabase bundle filenames", mount.Database)
-		}
-		databases[mount.Database] = true
 	}
 	return nil
 }

@@ -23,7 +23,9 @@ const ConditionPostgresDatabaseResolved ConditionType = "PostgresDatabaseResolve
 // and credentials into the Splunk container. It does not provision a database,
 // enable a sidecar, or configure Splunk to use PostgreSQL.
 type PostgresDatabaseMountSpec struct {
-	// Name identifies this entry. Files use the database name, not this name.
+	// Name identifies this entry and names the directory that holds its files,
+	// $SPLUNK_HOME/var/run/supervisor/postgresok/<name>. Give each consumer
+	// its own entry. Several entries can reference the same database.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=60

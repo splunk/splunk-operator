@@ -38,7 +38,7 @@ func TestApplyStatefulSetReplacesPostgresInitializerWithSmartStore(t *testing.T)
 	require.NoError(t, appsv1.AddToScheme(scheme))
 	c := fake.NewClientBuilder().WithScheme(scheme).Build()
 	current := initializerWorkload()
-	bundle := resources.PostgresDatabaseBundle{{Database: "appdb", ConfigMapName: "connection", RWPassword: corev1.SecretKeySelector{Name: "rw", Key: "password"}, CASecretName: "postgres-ca"}}
+	bundle := resources.PostgresDatabaseBundle{{Name: "connection", ConfigMapName: "connection", RWPassword: corev1.SecretKeySelector{Name: "rw", Key: "password"}, CASecretName: "postgres-ca"}}
 	require.NoError(t, bundle.Inject(&current.Spec.Template))
 	phase, err := ApplyStatefulSet(ctx, c, current)
 	require.NoError(t, err)

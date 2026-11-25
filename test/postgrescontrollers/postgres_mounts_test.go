@@ -68,6 +68,13 @@ var _ = Describe("PostgreSQL connections from mounted Splunk resources", func() 
 		}
 	})
 
+	It("publishes an inotify rename when a mounted PostgreSQL connection changes in place",
+		Label("tier:e2e-full", "sva:s1", "cloud:any", "variant:manager", "feature:postgres", "scenario:mounted-connection"),
+		NodeTimeout(testenv.ShortTimeout),
+		func(ctx SpecContext) {
+			verifyPostgresMountRefresh(ctx, testcaseEnvInst)
+		})
+
 	for _, tier := range []struct{ kind, topology string }{
 		{"Standalone", "s1"},
 		{"SearchHeadCluster", "shc"},
@@ -161,7 +168,7 @@ var _ = Describe("PostgreSQL connections from mounted Splunk resources", func() 
 				for _, pod := range pods.Items {
 					By("proving RW CRUD and strict TLS from the splunk container in " + pod.Name)
 					execCtx, cancel := context.WithTimeout(ctx, testenv.ReadinessPollTimeout)
-					stdout, stderr, execErr := deployment.PodExecCommandInNamespace(execCtx, pod.Name, namespace, "splunk", []string{"/bin/bash", "-s", "--", "appdb"}, script, false)
+					stdout, stderr, execErr := deployment.PodExecCommandInNamespace(execCtx, pod.Name, namespace, "splunk", []string{"/bin/bash", "-s", "--", "connection", "appdb"}, script, false)
 					cancel()
 					Expect(execErr).To(Succeed(), "Mounted PostgreSQL probe failed in %s: %s", pod.Name, stderr)
 					Expect(strings.TrimSpace(stdout)).To(Equal("CRUD_OK\nWRONG_CA_REJECTED\nHOSTNAME_MISMATCH_REJECTED"))

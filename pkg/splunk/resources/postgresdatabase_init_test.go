@@ -13,7 +13,7 @@ import (
 
 func TestPostgresDatabasePreparesRuntimeWithoutExposingCredentials(t *testing.T) {
 	pod := postgresRuntimePod()
-	bundle := PostgresDatabaseBundle{{Database: "app", ConfigMapName: "metadata"}}
+	bundle := PostgresDatabaseBundle{{Name: "app", ConfigMapName: "metadata"}}
 	require.NoError(t, bundle.Inject(pod))
 	require.Len(t, pod.Spec.InitContainers, 1, "prepare runtime parents before the main container mounts the projection")
 	init := pod.Spec.InitContainers[0]
@@ -29,7 +29,7 @@ func TestPostgresDatabasePreparesRuntimeWithoutExposingCredentials(t *testing.T)
 }
 
 func TestPostgresDatabaseRuntimeInitializerHonorsHomeAndRejectsUnwritableParents(t *testing.T) {
-	bundle := PostgresDatabaseBundle{{Database: "app", ConfigMapName: "metadata"}}
+	bundle := PostgresDatabaseBundle{{Name: "app", ConfigMapName: "metadata"}}
 	pod := postgresRuntimePod()
 	pod.Spec.Containers[0].Env = []corev1.EnvVar{{Name: "SPLUNK_HOME", Value: "/custom/splunk"}}
 	pod.Spec.Containers[0].VolumeMounts[0].MountPath = "/custom/splunk/var"

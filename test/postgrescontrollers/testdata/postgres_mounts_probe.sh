@@ -9,9 +9,10 @@ fail() {
 }
 
 home="${SPLUNK_HOME:?SPLUNK_HOME is required}"
-database="${1:?database argument is required}"
-root="$home/var/run/supervisor/postgresok"
-metadata="$root/$database"
+mount="${1:?mount name argument is required}"
+database="${2:?database argument is required}"
+# Every file for one mount entry lives in its own directory.
+metadata="$home/var/run/supervisor/postgresok/$mount"
 psql="$home/bin/psql"
 [[ -x "$psql" ]] || fail "The Splunk test image must contain SPLUNK_HOME/bin/psql."
 [[ "${SPLUNK_NODE_SIDECAR_POSTGRES_DISABLED:-}" == true ]] ||
@@ -20,8 +21,8 @@ psql="$home/bin/psql"
 for key in CLUSTER_RW_ENDPOINT DEFAULT_CLUSTER_PORT DATABASE_NAME ADMIN_USER_NAME RW_USER_NAME; do
     [[ -s "$metadata/$key" ]] || fail "A required mounted connection field is missing."
 done
-for file in "$database-admin" "$database-rw" "$database-ca.crt"; do
-    [[ -s "$root/$file" ]] || fail "A required mounted credential or CA file is missing."
+for file in ADMIN_PASSWORD RW_PASSWORD ca.crt; do
+    [[ -s "$metadata/$file" ]] || fail "A required mounted credential or CA file is missing."
 done
 
 unset PGPASSWORD PGHOSTADDR PGSERVICE PGSERVICEFILE PGOPTIONS PGSSLCERT PGSSLKEY
@@ -31,7 +32,7 @@ PGDATABASE="$(< "$metadata/DATABASE_NAME")"
 export PGHOST PGPORT PGDATABASE
 export LC_ALL=C
 export PGSSLMODE=verify-full
-export PGSSLROOTCERT="$root/$database-ca.crt"
+export PGSSLROOTCERT="$metadata/ca.crt"
 export PGCONNECT_TIMEOUT=10
 export LD_LIBRARY_PATH="$home/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 [[ "$PGDATABASE" == "$database" ]] || fail "Mounted database name differs from the requested database."
@@ -74,12 +75,12 @@ sql() {
 
 admin="$(< "$metadata/ADMIN_USER_NAME")"
 rw="$(< "$metadata/RW_USER_NAME")"
-use_role "$admin" "$root/$database-admin"
+use_role "$admin" "$metadata/ADMIN_PASSWORD"
 # The admin owns the table; PostgreSOK's default privileges grant subsequent
 # tables' CRUD permissions to the generated RW role.
 sql --command='CREATE TABLE IF NOT EXISTS public.postgresok_mount_probe (id integer PRIMARY KEY, value text NOT NULL); TRUNCATE public.postgresok_mount_probe;'
 
-use_role "$rw" "$root/$database-rw"
+use_role "$rw" "$metadata/RW_PASSWORD"
 [[ "$(sql --command='SELECT current_user;')" == "$rw" ]] ||
     fail "The connection did not use the mounted RW role."
 [[ "$(sql --command='SELECT current_database();')" == "$database" ]] ||
@@ -121,5 +122,5 @@ grep -Eiq 'server certificate.*does not match host name|certificate.*hostname.*m
     fail "The hostname-mismatch attempt did not fail hostname verification."
 printf 'HOSTNAME_MISMATCH_REJECTED\n'
 
-use_role "$admin" "$root/$database-admin"
+use_role "$admin" "$metadata/ADMIN_PASSWORD"
 sql --command='DROP TABLE public.postgresok_mount_probe;'

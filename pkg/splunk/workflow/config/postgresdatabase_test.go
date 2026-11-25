@@ -108,7 +108,7 @@ func TestResolvePostgresDatabaseMounts(t *testing.T) {
 			assert.Equal(t, "primary-ca", mounts[0].CASecretName)
 			assert.Equal(t, f.Database.Status.Databases[0].AdminUserSecretRef, mounts[0].AdminPassword)
 			assert.Equal(t, *f.Database.Status.Databases[0].RWUserSecretRef, mounts[0].RWPassword)
-			assert.Equal(t, "app", mounts[0].Database)
+			assert.Equal(t, "logical-alias", mounts[0].Name)
 			assert.Equal(t, f.Metadata.Name, mounts[0].ConfigMapName)
 			result := fmt.Sprintf("%+v", mounts)
 			assert.NotContains(t, result, "test-admin-password")

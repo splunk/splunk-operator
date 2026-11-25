@@ -62,16 +62,10 @@ func TestPostgresDatabaseMountsExcludeDeployer(t *testing.T) {
 		assert.NotEqual(t, resources.PostgresDatabaseVolumeName, volume.Name)
 	}
 
-	projection := func(ss *appsv1.StatefulSet) *corev1.ProjectedVolumeSource {
-		for _, volume := range ss.Spec.Template.Spec.Volumes {
-			if volume.Name == resources.PostgresDatabaseVolumeName {
-				return volume.Projected
-			}
-		}
-		t.Fatal("missing PostgresDatabase projected volume")
-		return nil
+	files := func(ss *appsv1.StatefulSet) map[string]spltest.PostgresProjectedFile {
+		return spltest.PostgresDatabaseFiles(t, &ss.Spec.Template)
 	}
-	assert.Equal(t, f.Metadata.Name, projection(members).Sources[0].ConfigMap.Name)
+	assert.Equal(t, f.Metadata.Name, files(members)["logical-alias/CLUSTER_RW_ENDPOINT"].Source)
 
 	require.NoError(t, c.Create(t.Context(), members))
 	f.Cluster.Status.Phase = new("Provisioning")
@@ -82,7 +76,7 @@ func TestPostgresDatabaseMountsExcludeDeployer(t *testing.T) {
 	require.NoError(t, err, "temporary PostgreSQL unavailability must not block SHC updates")
 	assert.Equal(t, cr.Spec.Image, pendingUpdate.Spec.Template.Spec.Containers[0].Image)
 	assert.Equal(t, int32(4), *pendingUpdate.Spec.Replicas)
-	assert.Equal(t, projection(members), projection(pendingUpdate))
+	assert.Equal(t, files(members), files(pendingUpdate))
 	f.Cluster.Status.Phase = new("Ready")
 	require.NoError(t, c.Update(t.Context(), f.Cluster))
 	members = pendingUpdate
@@ -108,8 +102,8 @@ func TestPostgresDatabaseMountsExcludeDeployer(t *testing.T) {
 	updated, err := getSearchHeadStatefulSet(t.Context(), c, cr)
 	require.NoError(t, err)
 	assert.NotEqual(t, members.Spec.Template, updated.Spec.Template)
-	assert.Equal(t, "replacement-config", projection(updated).Sources[0].ConfigMap.Name)
-	assert.Equal(t, "rotated-rw", projection(updated).Sources[1].Secret.Name)
+	assert.Equal(t, "replacement-config", files(updated)["logical-alias/CLUSTER_RW_ENDPOINT"].Source)
+	assert.Equal(t, "rotated-rw", files(updated)["logical-alias/RW_PASSWORD"].Source)
 	metadata := &corev1.ConfigMap{}
 	require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(f.Metadata), metadata))
 	assert.Equal(t, "updated.ns.svc.cluster.local", metadata.Data["CLUSTER_RW_ENDPOINT"])

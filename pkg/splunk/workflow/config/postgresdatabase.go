@@ -27,6 +27,8 @@ import (
 
 	enterpriseApi "github.com/splunk/splunk-operator/api/enterprise/v4"
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	pgdbtypes "github.com/splunk/splunk-operator/pkg/postgresql/database/types"
+	pgconninfo "github.com/splunk/splunk-operator/pkg/postgresql/shared/connectioninfo"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -110,9 +112,9 @@ func resolvePostgresDatabaseMount(ctx context.Context, reader client.Reader, nam
 		ref  *corev1.SecretKeySelector
 		user string
 	}
-	credentials := []credentialReference{{info.RWUserSecretRef, cm.Data["RW_USER_NAME"]}}
+	credentials := []credentialReference{{info.RWUserSecretRef, cm.Data[pgdbtypes.ConnectionKeyRWUser]}}
 	if spec.IncludeAdmin {
-		credentials = append(credentials, credentialReference{info.AdminUserSecretRef, cm.Data["ADMIN_USER_NAME"]})
+		credentials = append(credentials, credentialReference{info.AdminUserSecretRef, cm.Data[pgdbtypes.ConnectionKeyAdminUser]})
 	}
 	for _, credential := range credentials {
 		secret := &corev1.Secret{}
@@ -140,7 +142,7 @@ func resolvePostgresDatabaseMount(ctx context.Context, reader client.Reader, nam
 		return result, fmt.Errorf("%w: Secret %s/%s requires a PEM CA certificate in ca.crt", ErrPostgresDatabaseInvalid, namespace, ca.Name)
 	}
 	result = resources.PostgresDatabaseMount{
-		Database:      spec.Database,
+		Name:          spec.Name,
 		ConfigMapName: cm.Name,
 		RWPassword:    corev1.SecretKeySelector{Name: info.RWUserSecretRef.Name, Key: info.RWUserSecretRef.Key},
 		CASecretName:  ca.Name,
@@ -169,21 +171,22 @@ func readPostgresResource(ctx context.Context, reader client.Reader, namespace, 
 }
 
 func validatePostgresConnectionInfo(cm *corev1.ConfigMap, database string) error {
-	for _, key := range []string{"CLUSTER_RW_ENDPOINT", "DEFAULT_CLUSTER_PORT", "DATABASE_NAME", "ADMIN_USER_NAME", "RW_USER_NAME"} {
+	// Every mounted key must be present, so consumers never read an empty file.
+	for _, key := range pgdbtypes.MountedConnectionKeys {
 		if strings.TrimSpace(cm.Data[key]) == "" {
 			return fmt.Errorf("%w: ConfigMap %s/%s requires non-empty %s", ErrPostgresDatabaseInvalid, cm.Namespace, cm.Name, key)
 		}
 	}
-	if cm.Data["DATABASE_NAME"] != database {
+	if cm.Data[pgdbtypes.ConnectionKeyDatabaseName] != database {
 		return fmt.Errorf("%w: ConfigMap %s/%s database differs from the selected database", ErrPostgresDatabaseInvalid, cm.Namespace, cm.Name)
 	}
-	host := cm.Data["CLUSTER_RW_ENDPOINT"]
+	host := cm.Data[pgconninfo.KeyClusterRWEndpoint]
 	if host == "localhost" || strings.HasSuffix(host, ".localhost") || net.ParseIP(host) != nil || len(validation.IsDNS1123Subdomain(host)) != 0 {
 		return fmt.Errorf("%w: ConfigMap %s/%s requires a direct PostgreSQL DNS endpoint", ErrPostgresDatabaseInvalid, cm.Namespace, cm.Name)
 	}
-	port, err := strconv.Atoi(cm.Data["DEFAULT_CLUSTER_PORT"])
+	port, err := strconv.Atoi(cm.Data[pgconninfo.KeyDefaultClusterPort])
 	if err != nil || port < 1 || port > 65535 {
-		return fmt.Errorf("%w: ConfigMap %s/%s has an invalid DEFAULT_CLUSTER_PORT", ErrPostgresDatabaseInvalid, cm.Namespace, cm.Name)
+		return fmt.Errorf("%w: ConfigMap %s/%s has an invalid %s", ErrPostgresDatabaseInvalid, cm.Namespace, cm.Name, pgconninfo.KeyDefaultClusterPort)
 	}
 	return nil
 }

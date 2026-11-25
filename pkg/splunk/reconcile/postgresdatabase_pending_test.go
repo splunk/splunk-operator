@@ -33,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -83,6 +84,7 @@ func TestPostgresDatabasePendingPreservesProjectionForWorkloadUpdates(t *testing
 			specs[0].PostgresDatabaseRef.Name = "other"
 		}, configworkflow.ErrPostgresDatabasePending},
 		{"different database", func(specs []v4.PostgresDatabaseMountSpec, _ *appsv1.StatefulSet) { specs[0].Database = "other" }, configworkflow.ErrPostgresDatabaseInvalid},
+		{"different directory", func(specs []v4.PostgresDatabaseMountSpec, _ *appsv1.StatefulSet) { specs[0].Name = "renamed" }, configworkflow.ErrPostgresDatabasePending},
 		{"admin opt-in change", func(specs []v4.PostgresDatabaseMountSpec, _ *appsv1.StatefulSet) { specs[0].IncludeAdmin = true }, configworkflow.ErrPostgresDatabasePending},
 		{"different home", func(_ []v4.PostgresDatabaseMountSpec, ss *appsv1.StatefulSet) {
 			ss.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{Name: "SPLUNK_HOME", Value: "/custom/splunk"}}
@@ -100,6 +102,79 @@ func TestPostgresDatabasePendingPreservesProjectionForWorkloadUpdates(t *testing
 			assert.Equal(t, before, candidate)
 		})
 	}
+}
+
+func TestPostgresDatabaseLayoutUpgradeWaitsForDependencyRecovery(t *testing.T) {
+	featuregatetesting.SetFeatureGateDuringTest(t, config.DefaultMutableFeatureGate, config.PostgresController, true)
+	ctx := t.Context()
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, platformApi.AddToScheme(scheme))
+	require.NoError(t, appsv1.AddToScheme(scheme))
+	f := spltest.NewPostgresDatabaseBundleFixture(t)
+	cr := &v4.Standalone{Name: "search", Namespace: "ns", UID: "owner", Generation: 1}
+	specs := []v4.PostgresDatabaseMountSpec{{Name: "sidecar", Database: "app", PostgresDatabaseRef: corev1.LocalObjectReference{Name: "db"}, IncludeAdmin: true}}
+
+	// Pin the binding emitted by 2f7fc7231 for this spec and seed its database-based paths.
+	const legacyBinding = "f22cc6e0953e725b93dae09f08f2b4685dd4782ce73504573e5844eb8c699bbf"
+	legacy := postgresTestTemplate("splunk:previous")
+	legacy.Annotations = map[string]string{splcommon.PostgresDatabaseBindingAnnotation: legacyBinding}
+	legacy.Spec.Containers[0].VolumeMounts = append(legacy.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+		Name: resources.PostgresDatabaseVolumeName, MountPath: resources.PostgresDatabaseMountRoot, ReadOnly: true,
+	})
+	legacy.Spec.Volumes = append(legacy.Spec.Volumes, corev1.Volume{
+		Name: resources.PostgresDatabaseVolumeName,
+		Projected: &corev1.ProjectedVolumeSource{DefaultMode: new(int32(0440)), Sources: []corev1.VolumeProjection{
+			{ConfigMap: &corev1.ConfigMapProjection{Name: f.Metadata.Name, Items: []corev1.KeyToPath{
+				{Key: "CLUSTER_RW_ENDPOINT", Path: "app/CLUSTER_RW_ENDPOINT"},
+				{Key: "DEFAULT_CLUSTER_PORT", Path: "app/DEFAULT_CLUSTER_PORT"},
+				{Key: "DATABASE_NAME", Path: "app/DATABASE_NAME"},
+				{Key: "ADMIN_USER_NAME", Path: "app/ADMIN_USER_NAME"},
+				{Key: "RW_USER_NAME", Path: "app/RW_USER_NAME"},
+			}}},
+			{Secret: &corev1.SecretProjection{Name: f.RW.Name, Items: []corev1.KeyToPath{{Key: "custom-password", Path: "app-rw"}}}},
+			{Secret: &corev1.SecretProjection{Name: f.CA.Name, Items: []corev1.KeyToPath{{Key: "ca.crt", Path: "app-ca.crt"}}}},
+			{Secret: &corev1.SecretProjection{Name: f.Admin.Name, Items: []corev1.KeyToPath{{Key: "password", Path: "app-admin"}}}},
+		}},
+	})
+	previous := &appsv1.StatefulSet{
+		Name: "search", Namespace: cr.Namespace,
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: v4.GroupVersion.String(), Kind: "Standalone", Name: cr.Name, UID: cr.UID, Controller: new(true)}},
+		Spec:            appsv1.StatefulSetSpec{Template: legacy},
+	}
+	key := client.ObjectKeyFromObject(previous)
+	readyPhase := f.Cluster.Status.Phase
+	f.Cluster.Status.Phase = new("Provisioning")
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(append(f.Objects(), previous)...).Build()
+
+	desired := &appsv1.StatefulSet{Name: key.Name, Namespace: key.Namespace, Spec: appsv1.StatefulSetSpec{
+		Template: postgresTestTemplate("splunk:current"),
+	}}
+	before := desired.DeepCopy()
+	require.ErrorIs(t, ApplyPostgresDatabaseBundle(ctx, c, cr, specs, nil, &cr.Status.Conditions, desired), configworkflow.ErrPostgresDatabasePending)
+	assert.Equal(t, before, desired, "the reconciler must not get a partial template to apply")
+	stored := &appsv1.StatefulSet{}
+	require.NoError(t, c.Get(ctx, key, stored))
+	assert.Equal(t, legacy, stored.Spec.Template, "the old projection must stay in place during the outage")
+	assert.True(t, meta.IsStatusConditionFalse(cr.Status.Conditions, string(v4.ConditionPostgresDatabaseResolved)))
+
+	f.Cluster.Status.Phase = readyPhase
+	require.NoError(t, c.Update(ctx, f.Cluster))
+	require.NoError(t, ApplyPostgresDatabaseBundle(ctx, c, cr, specs, nil, &cr.Status.Conditions, desired))
+	assert.Equal(t, map[string]spltest.PostgresProjectedFile{
+		"sidecar/CLUSTER_RW_ENDPOINT":  {Source: f.Metadata.Name, Key: "CLUSTER_RW_ENDPOINT"},
+		"sidecar/DEFAULT_CLUSTER_PORT": {Source: f.Metadata.Name, Key: "DEFAULT_CLUSTER_PORT"},
+		"sidecar/DATABASE_NAME":        {Source: f.Metadata.Name, Key: "DATABASE_NAME"},
+		"sidecar/ADMIN_USER_NAME":      {Source: f.Metadata.Name, Key: "ADMIN_USER_NAME"},
+		"sidecar/RW_USER_NAME":         {Source: f.Metadata.Name, Key: "RW_USER_NAME"},
+		"sidecar/RW_PASSWORD":          {Source: f.RW.Name, Key: "custom-password"},
+		"sidecar/ADMIN_PASSWORD":       {Source: f.Admin.Name, Key: "password"},
+		"sidecar/ca.crt":               {Source: f.CA.Name, Key: "ca.crt"},
+	}, spltest.PostgresDatabaseFiles(t, &desired.Spec.Template))
+	binding := desired.Spec.Template.Annotations[splcommon.PostgresDatabaseBindingAnnotation]
+	assert.NotEmpty(t, binding)
+	assert.NotEqual(t, legacyBinding, binding)
+	assert.True(t, meta.IsStatusConditionTrue(cr.Status.Conditions, string(v4.ConditionPostgresDatabaseResolved)))
 }
 
 type postgresWarningRecorder struct{ warnings []string }
@@ -142,7 +217,7 @@ func TestPostgresDatabasePendingProjectionIsNotAliased(t *testing.T) {
 	previousTemplate := postgresTestTemplate("splunk:test")
 	previous := &previousTemplate
 	previous.Annotations = map[string]string{splcommon.PostgresDatabaseBindingAnnotation: "binding"}
-	bundle := resources.PostgresDatabaseBundle{{Database: "app", ConfigMapName: "metadata"}}
+	bundle := resources.PostgresDatabaseBundle{{Name: "app", ConfigMapName: "metadata"}}
 	require.NoError(t, bundle.Inject(previous))
 	desiredTemplate := postgresTestTemplate("splunk:test")
 	desired := &desiredTemplate

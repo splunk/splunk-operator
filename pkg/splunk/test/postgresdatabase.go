@@ -25,6 +25,7 @@ import (
 	"time"
 
 	platformApi "github.com/splunk/splunk-operator/api/platform/v1alpha1"
+	"github.com/splunk/splunk-operator/pkg/splunk/common"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -90,4 +91,40 @@ func NewPostgresDatabaseBundleFixture(t *testing.T) PostgresDatabaseBundleFixtur
 // Objects returns the fixture objects for a fake Kubernetes client.
 func (f PostgresDatabaseBundleFixture) Objects() []client.Object {
 	return []client.Object{f.Database, f.Cluster, f.Metadata, f.Admin, f.RW, f.CA}
+}
+
+// PostgresProjectedFile names the producer resource and key behind one mounted file.
+type PostgresProjectedFile struct {
+	Source, Key string
+}
+
+// PostgresDatabaseFiles maps each file path in a pod's PostgresDatabase
+// projection to its source, independent of the projection's source order.
+func PostgresDatabaseFiles(t testing.TB, pod *corev1.PodTemplateSpec) map[string]PostgresProjectedFile {
+	t.Helper()
+	for _, volume := range pod.Spec.Volumes {
+		if volume.Name != common.PostgresDatabaseVolumeName || volume.Projected == nil {
+			continue
+		}
+		files := make(map[string]PostgresProjectedFile)
+		add := func(source string, items []corev1.KeyToPath) {
+			for _, item := range items {
+				if _, duplicate := files[item.Path]; duplicate {
+					t.Fatalf("PostgresDatabase projection maps %q twice", item.Path)
+				}
+				files[item.Path] = PostgresProjectedFile{Source: source, Key: item.Key}
+			}
+		}
+		for _, source := range volume.Projected.Sources {
+			switch {
+			case source.ConfigMap != nil:
+				add(source.ConfigMap.Name, source.ConfigMap.Items)
+			case source.Secret != nil:
+				add(source.Secret.Name, source.Secret.Items)
+			}
+		}
+		return files
+	}
+	t.Fatal("missing PostgresDatabase projected volume")
+	return nil
 }

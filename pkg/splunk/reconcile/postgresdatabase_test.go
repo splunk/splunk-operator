@@ -80,7 +80,7 @@ func TestPostgresDatabaseMountsAreReadOnlyConsumers(t *testing.T) {
 	specs := []enterpriseApi.PostgresDatabaseMountSpec{{Name: "alias", PostgresDatabaseRef: corev1.LocalObjectReference{Name: "db"}, Database: "app"}}
 	desired := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{Template: postgresTestTemplate("splunk:test")}}
 	require.NoError(t, ApplyPostgresDatabaseBundle(t.Context(), c, cr, specs, nil, &cr.Status.Conditions, desired))
-	assert.Equal(t, f.Metadata.Name, desired.Spec.Template.Spec.Volumes[1].Projected.Sources[0].ConfigMap.Name)
+	assert.Equal(t, f.Metadata.Name, spltest.PostgresDatabaseFiles(t, &desired.Spec.Template)["alias/CLUSTER_RW_ENDPOINT"].Source)
 	for _, snapshot := range before {
 		after := snapshot.DeepCopyObject().(client.Object)
 		require.NoError(t, c.Get(t.Context(), client.ObjectKeyFromObject(snapshot), after))
@@ -125,4 +125,31 @@ func postgresTestTemplate(image string) corev1.PodTemplateSpec {
 		Volumes:         []corev1.Volume{{Name: "var", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}}},
 		Containers:      []corev1.Container{{Name: "splunk", Image: image, VolumeMounts: []corev1.VolumeMount{{Name: "var", MountPath: "/opt/splunk/var"}}}},
 	}}
+}
+
+func TestPostgresDatabaseBindingCoversEverySpecField(t *testing.T) {
+	abc := enterpriseApi.PostgresDatabaseMountSpec{Name: "sidecar-abc", PostgresDatabaseRef: corev1.LocalObjectReference{Name: "db"}, Database: "app"}
+	xyz := enterpriseApi.PostgresDatabaseMountSpec{Name: "sidecar-xyz", PostgresDatabaseRef: corev1.LocalObjectReference{Name: "db"}, Database: "app"}
+	hash := func(specs ...enterpriseApi.PostgresDatabaseMountSpec) string {
+		binding, err := postgresDatabaseBinding(specs)
+		require.NoError(t, err)
+		return binding
+	}
+	baseline := hash(abc, xyz)
+	assert.Equal(t, baseline, hash(xyz, abc), "entry order must not change the binding")
+	for _, tt := range []struct {
+		name   string
+		change func(*enterpriseApi.PostgresDatabaseMountSpec)
+	}{
+		{"name", func(s *enterpriseApi.PostgresDatabaseMountSpec) { s.Name = "renamed" }},
+		{"reference", func(s *enterpriseApi.PostgresDatabaseMountSpec) { s.PostgresDatabaseRef.Name = "other" }},
+		{"database", func(s *enterpriseApi.PostgresDatabaseMountSpec) { s.Database = "other" }},
+		{"admin access", func(s *enterpriseApi.PostgresDatabaseMountSpec) { s.IncludeAdmin = true }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			changed := abc
+			tt.change(&changed)
+			assert.NotEqual(t, baseline, hash(changed, xyz))
+		})
+	}
 }

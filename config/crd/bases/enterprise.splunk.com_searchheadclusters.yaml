@@ -7258,8 +7258,10 @@ spec:
                         Disabled by default; ordinary consumers receive only the RW password.
                       type: boolean
                     name:
-                      description: Name identifies this entry. Files use the database
-                        name, not this name.
+                      description: |-
+                        Name identifies this entry and names the directory that holds its files,
+                        $SPLUNK_HOME/var/run/supervisor/postgresok/<name>. Give each consumer
+                        its own entry. Several entries can reference the same database.
                       maxLength: 60
                       minLength: 1
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$

@@ -134,17 +134,12 @@ func PostgresDatabaseWorkloadPhase(phase v4.Phase, message string, conditions []
 	return phase, message
 }
 
+// postgresDatabaseBinding identifies the requested mounts. It hashes the whole
+// spec entries, so every field that shapes the projection, including fields
+// added later, invalidates a retained projection. Entry order does not matter.
 func postgresDatabaseBinding(specs []v4.PostgresDatabaseMountSpec) (string, error) {
-	type binding struct {
-		Reference, Database string
-		IncludeAdmin        bool
-	}
-	bindings := make([]binding, 0, len(specs))
-	for _, spec := range specs {
-		bindings = append(bindings, binding{Reference: spec.PostgresDatabaseRef.Name, Database: spec.Database, IncludeAdmin: spec.IncludeAdmin})
-	}
-	slices.SortFunc(bindings, func(a, b binding) int { return cmp.Compare(a.Database, b.Database) })
-	data, err := json.Marshal(bindings)
+	sorted := slices.SortedFunc(slices.Values(specs), func(a, b v4.PostgresDatabaseMountSpec) int { return cmp.Compare(a.Name, b.Name) })
+	data, err := json.Marshal(sorted)
 	if err != nil {
 		return "", fmt.Errorf("encode PostgreSQL mount bindings: %w", err)
 	}
