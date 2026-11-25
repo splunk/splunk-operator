@@ -136,21 +136,6 @@ func TestSQSInputsConf_Fields(t *testing.T) {
 	}
 }
 
-// The sqs_cp provider must use "sqs_smartbus_cp" as the field key prefix
-// instead of "sqs_smartbus".
-func TestSQSCPProvider_UsesCorrectFieldPrefix(t *testing.T) {
-	q := sqsQueue("q", "dlq", "us-east-2", "")
-	q.Provider = "sqs_cp"
-	entries := indexerNonSensitive(t, q, s3Storage("bucket/path", ""))
-
-	out, ok := findEntry(entries, "outputs")
-	require.True(t, ok)
-	fields := out.Value.Stanzas["remote_queue:q"]
-
-	assert.Equal(t, "sqs_smartbus_cp", fields["remote_queue.type"])
-	assert.Equal(t, "us-east-2", fields["remote_queue.sqs_smartbus_cp.auth_region"])
-}
-
 // encryption_scheme is written to both inputs.conf and outputs.conf when set.
 func TestSQSConf_EncryptionScheme(t *testing.T) {
 	for _, confFile := range []string{"outputs", "inputs"} {

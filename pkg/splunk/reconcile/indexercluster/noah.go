@@ -41,6 +41,7 @@ import (
 	reconcileutil "github.com/splunk/splunk-operator/pkg/splunk/reconcile"
 	"github.com/splunk/splunk-operator/pkg/splunk/resources"
 	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig"
+	"github.com/splunk/splunk-operator/pkg/splunk/splunkconfig/smartbus"
 	splutil "github.com/splunk/splunk-operator/pkg/splunk/util"
 	configworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/config"
 	indexerworkflow "github.com/splunk/splunk-operator/pkg/splunk/workflow/indexercluster"
@@ -258,12 +259,12 @@ func ensureNoahIndexerDefaults(ctx context.Context, client splcommon.ControllerC
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, fmt.Errorf("resolve queue config: %w", err)
 		}
-		smartBusEntries, smartBusCredentialEntries, err := splunkconfig.BuildSmartBusConfig(&resolved.Queue, &resolved.OS, resolved.AccessKey, resolved.SecretKey)
+		set, err := splunkconfig.ForRole(splcommon.SplunkIndexer).With(smartbus.Conf(&resolved.Queue, &resolved.OS, resolved.AccessKey, resolved.SecretKey)).Build()
 		if err != nil {
 			return resources.DefaultsConfigMap{}, resources.DefaultsSecret{}, err
 		}
-		structuralEntries = append(structuralEntries, smartBusEntries...)
-		credentialEntries = append(credentialEntries, smartBusCredentialEntries...)
+		structuralEntries = append(structuralEntries, set.NonSensitive...)
+		credentialEntries = append(credentialEntries, set.Secrets...)
 	}
 
 	owner := splcommon.AsOwner(cr, true)

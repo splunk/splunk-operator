@@ -32,9 +32,10 @@ type sqsProvider struct {
 
 var _ provider = (*sqsProvider)(nil)
 
-// providerKey is the field key prefix, e.g. "sqs_smartbus" or "sqs_smartbus_cp".
-func (builder *sqsProvider) providerKey() string {
-	if builder.provider == "sqs_cp" {
+// Only ingestors upload to CP. Indexer inputs, outputs and credentials use
+// regular Smartbus even when they reference the same sqs_cp Queue.
+func (builder *sqsProvider) providerKey(role common.InstanceType) string {
+	if builder.provider == "sqs_cp" && role == common.SplunkIngestor {
 		return "sqs_smartbus_cp"
 	}
 	return "sqs_smartbus"
@@ -47,8 +48,8 @@ func (builder *sqsProvider) s3Path() string {
 	return "s3://" + builder.s3.Path
 }
 
-func (builder *sqsProvider) baseFields() common.StanzaFields {
-	pk := builder.providerKey()
+func (builder *sqsProvider) baseFields(role common.InstanceType) common.StanzaFields {
+	pk := builder.providerKey(role)
 	fields := common.StanzaFields{
 		"remote_queue.type":                   pk,
 		"remote_queue." + pk + ".auth_region": builder.sqs.AuthRegion,
@@ -73,19 +74,19 @@ func (builder *sqsProvider) baseFields() common.StanzaFields {
 	return fields
 }
 
-func (builder *sqsProvider) outputsConf() common.ConfFileEntry {
+func (builder *sqsProvider) outputsConf(role common.InstanceType) common.ConfFileEntry {
 	return common.ConfFileEntry{
 		ConfFileName: "outputs",
 		Value: common.ConfFileValue{
 			Directory: sokAppDirectory,
-			Stanzas:   common.ConfFileStanzas{"remote_queue:" + builder.sqs.Name: builder.baseFields()},
+			Stanzas:   common.ConfFileStanzas{"remote_queue:" + builder.sqs.Name: builder.baseFields(role)},
 		},
 	}
 }
 
-func (builder *sqsProvider) inputsConf() common.ConfFileEntry {
-	fields := builder.baseFields()
-	pk := builder.providerKey()
+func (builder *sqsProvider) inputsConf(role common.InstanceType) common.ConfFileEntry {
+	fields := builder.baseFields(role)
+	pk := builder.providerKey(role)
 	fields["remote_queue."+pk+".dead_letter_queue.name"] = builder.sqs.DLQ
 
 	return common.ConfFileEntry{
@@ -99,8 +100,8 @@ func (builder *sqsProvider) inputsConf() common.ConfFileEntry {
 
 // secretConf carries only access_key/secret_key, in a directory distinct from the
 // non-sensitive entries. confFileName is "outputs" or "inputs".
-func (builder *sqsProvider) secretConf(confFileName, accessKey, secretKey string) common.ConfFileEntry {
-	pk := builder.providerKey()
+func (builder *sqsProvider) secretConf(role common.InstanceType, confFileName, accessKey, secretKey string) common.ConfFileEntry {
+	pk := builder.providerKey(role)
 	return common.ConfFileEntry{
 		ConfFileName: confFileName,
 		Value: common.ConfFileValue{

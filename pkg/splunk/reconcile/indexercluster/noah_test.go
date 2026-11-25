@@ -1175,58 +1175,90 @@ func assertPodNotFound(t *testing.T, client splcommon.ControllerClient, name, na
 }
 
 func TestEnsureNoahIndexerDefaultsCombinesNoahAndSmartBusCredentials(t *testing.T) {
-	ctx := t.Context()
-	scheme := pkgruntime.NewScheme()
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(enterpriseApi.AddToScheme(scheme))
-	client := newFakeClientBuilder(scheme).Build()
-	queue, objectStorage := newQueueOSFixture(t, ctx, client, "queue", "queue-secrets")
-	cr := &enterpriseApi.IndexerCluster{
-		TypeMeta:   metav1.TypeMeta{Kind: "IndexerCluster"},
-		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
-		Spec: enterpriseApi.IndexerClusterSpec{
-			NoahClusterRef:   &corev1.LocalObjectReference{Name: "noah"},
-			QueueRef:         &corev1.ObjectReference{Name: queue.Name},
-			ObjectStorageRef: &corev1.ObjectReference{Name: objectStorage.Name},
-		},
+	for _, provider := range []string{"sqs", "sqs_cp"} {
+		t.Run(provider, func(t *testing.T) {
+			ctx := t.Context()
+			scheme := pkgruntime.NewScheme()
+			utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+			utilruntime.Must(enterpriseApi.AddToScheme(scheme))
+			client := newFakeClientBuilder(scheme).Build()
+			queue, objectStorage := newQueueOSFixture(t, ctx, client, "queue", "queue-secrets")
+			queue.Spec.Provider = provider
+			require.NoError(t, client.Update(ctx, queue))
+			cr := &enterpriseApi.IndexerCluster{
+				TypeMeta:   metav1.TypeMeta{Kind: "IndexerCluster"},
+				ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+				Spec: enterpriseApi.IndexerClusterSpec{
+					NoahClusterRef:   &corev1.LocalObjectReference{Name: "noah"},
+					QueueRef:         &corev1.ObjectReference{Name: queue.Name},
+					ObjectStorageRef: &corev1.ObjectReference{Name: objectStorage.Name},
+				},
+			}
+
+			noahCredential := t.Name()
+			configMap, secret, err := ensureNoahIndexerDefaults(
+				ctx,
+				client,
+				cr,
+				enterpriseApi.NoahClusterSpec{Endpoint: "https://noah.example.invalid:8080", Tenant: "tenant"},
+				noahCredential,
+			)
+			require.NoError(t, err)
+			require.NotEmpty(t, configMap.Name)
+			require.NotEmpty(t, secret.Name)
+
+			storedConfigMap := &corev1.ConfigMap{}
+			require.NoError(t, client.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: configMap.Name}, storedConfigMap))
+			config := storedConfigMap.Data["conf-defaults.yml"]
+			assert.Contains(t, config, "https://noah.example.invalid:8080")
+			assert.Contains(t, config, "test-queue")
+			assert.NotContains(t, config, noahCredential)
+			assert.NotContains(t, config, "AKIAEXAMPLE")
+
+			storedSecret := &corev1.Secret{}
+			require.NoError(t, client.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: secret.Name}, storedSecret))
+			credentials := string(storedSecret.Data["conf-defaults.yml"])
+			assert.Contains(t, credentials, noahCredential)
+			assert.Contains(t, credentials, "AKIAEXAMPLE")
+			assert.Contains(t, credentials, "shhh-secret")
+
+			var defaults, secretDefaults struct {
+				Splunk struct {
+					Conf map[string]splcommon.ConfFileValue `yaml:"conf"`
+				} `yaml:"splunk"`
+			}
+			require.NoError(t, yaml.Unmarshal([]byte(config), &defaults))
+			require.NoError(t, yaml.Unmarshal([]byte(credentials), &secretDefaults))
+			// Noah stays in system/local; Smartbus and its credentials use separate apps.
+			require.Contains(t, defaults.Splunk.Conf, "server")
+			require.Contains(t, secretDefaults.Splunk.Conf, "server")
+			assert.Empty(t, defaults.Splunk.Conf["server"].Directory)
+			assert.Empty(t, secretDefaults.Splunk.Conf["server"].Directory)
+			for _, file := range []string{"inputs", "outputs"} {
+				require.Contains(t, defaults.Splunk.Conf, file)
+				require.Contains(t, secretDefaults.Splunk.Conf, file)
+				entry := defaults.Splunk.Conf[file]
+				assert.Equal(t, "/opt/splunk/etc/apps/100-sok/local", entry.Directory)
+				assert.Equal(t, "sqs_smartbus", entry.Stanzas["remote_queue:test-queue"]["remote_queue.type"])
+				secretEntry := secretDefaults.Splunk.Conf[file]
+				assert.Equal(t, "/opt/splunk/etc/apps/101-sok-secrets/local", secretEntry.Directory)
+				assert.Equal(t, splcommon.StanzaFields{
+					"remote_queue.sqs_smartbus.access_key": "AKIAEXAMPLE",
+					"remote_queue.sqs_smartbus.secret_key": "shhh-secret",
+				}, secretEntry.Stanzas["remote_queue:test-queue"])
+			}
+
+			_, rotatedSecret, err := ensureNoahIndexerDefaults(
+				ctx,
+				client,
+				cr,
+				enterpriseApi.NoahClusterSpec{Endpoint: "https://noah.example.invalid:8080", Tenant: "tenant"},
+				noahCredential+"-rotated",
+			)
+			require.NoError(t, err)
+			assert.NotEqual(t, secret.Name, rotatedSecret.Name)
+		})
 	}
-
-	noahCredential := t.Name()
-	configMap, secret, err := ensureNoahIndexerDefaults(
-		ctx,
-		client,
-		cr,
-		enterpriseApi.NoahClusterSpec{Endpoint: "https://noah.example.invalid:8080", Tenant: "tenant"},
-		noahCredential,
-	)
-	require.NoError(t, err)
-	require.NotEmpty(t, configMap.Name)
-	require.NotEmpty(t, secret.Name)
-
-	storedConfigMap := &corev1.ConfigMap{}
-	require.NoError(t, client.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: configMap.Name}, storedConfigMap))
-	config := storedConfigMap.Data["conf-defaults.yml"]
-	assert.Contains(t, config, "https://noah.example.invalid:8080")
-	assert.Contains(t, config, "test-queue")
-	assert.NotContains(t, config, noahCredential)
-	assert.NotContains(t, config, "AKIAEXAMPLE")
-
-	storedSecret := &corev1.Secret{}
-	require.NoError(t, client.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: secret.Name}, storedSecret))
-	credentials := string(storedSecret.Data["conf-defaults.yml"])
-	assert.Contains(t, credentials, noahCredential)
-	assert.Contains(t, credentials, "AKIAEXAMPLE")
-	assert.Contains(t, credentials, "shhh-secret")
-
-	_, rotatedSecret, err := ensureNoahIndexerDefaults(
-		ctx,
-		client,
-		cr,
-		enterpriseApi.NoahClusterSpec{Endpoint: "https://noah.example.invalid:8080", Tenant: "tenant"},
-		noahCredential+"-rotated",
-	)
-	require.NoError(t, err)
-	assert.NotEqual(t, secret.Name, rotatedSecret.Name)
 }
 
 func TestEnsureNoahIndexerDefaultsIgnoresEmptySmartBusReferences(t *testing.T) {

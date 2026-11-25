@@ -183,23 +183,67 @@ func TestIndexerCredentials_RejectSharedConfDirectory(t *testing.T) {
 	}
 }
 
-// The sqs_cp provider uses the sqs_smartbus_cp field prefix for credential keys.
-func TestIndexerCredentials_SQSCPFieldPrefix(t *testing.T) {
-	set := confSet(t,
-		&enterpriseApi.QueueSpec{
-			Provider: "sqs_cp",
-			SQS:      enterpriseApi.SQSSpec{Name: "cpq", DLQ: "dlq", AuthRegion: "us-east-2"},
-		},
-		s3Storage("bucket/path", ""),
-		common.SplunkIndexer, "AKIA", "shhh")
-	require.Len(t, set.Secrets, 2)
-
-	outputs, ok := findEntry(set.Secrets, "outputs")
-	require.True(t, ok)
-	stanza := outputs.Value.Stanzas["remote_queue:cpq"]
-	require.NotNil(t, stanza)
-	assert.Equal(t, "AKIA", stanza["remote_queue.sqs_smartbus_cp.access_key"])
-	assert.Equal(t, "shhh", stanza["remote_queue.sqs_smartbus_cp.secret_key"])
+// Only ingestors upload to CP. Reusing a feature across roles must not change
+// its provider selection or the caller's Queue spec.
+func TestConf_ProviderByRole(t *testing.T) {
+	for _, provider := range []string{"sqs", "sqs_cp"} {
+		t.Run(provider, func(t *testing.T) {
+			queue := sqsQueue("q", "dlq", "us-east-2", "https://sqs.example")
+			queue.Provider = provider
+			original := queue.DeepCopy()
+			storage := s3StorageWithEncryption("bucket/path", "https://s3.example", "sse-c", "https://kms.example", "alias/key")
+			feature := smartbus.Conf(queue, storage, "AKIA", "shhh")
+			ingestorType := "sqs_smartbus"
+			if provider == "sqs_cp" {
+				ingestorType = "sqs_smartbus_cp"
+			}
+			for _, tc := range []struct {
+				name      string
+				role      common.InstanceType
+				queueType string
+				files     []string
+			}{
+				{"ingestor", common.SplunkIngestor, ingestorType, []string{"outputs"}},
+				{"indexer", common.SplunkIndexer, "sqs_smartbus", []string{"inputs", "outputs"}},
+				{"ingestor again", common.SplunkIngestor, ingestorType, []string{"outputs"}},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					set, err := splunkconfig.ForRole(tc.role).With(feature).Build()
+					require.NoError(t, err)
+					require.Len(t, set.NonSensitive, len(tc.files)+1) // Includes default-mode.
+					require.Len(t, set.Secrets, len(tc.files))
+					for _, file := range tc.files {
+						entry, ok := findEntry(set.NonSensitive, file)
+						require.True(t, ok)
+						prefix := "remote_queue." + tc.queueType + "."
+						want := common.StanzaFields{
+							"remote_queue.type":                              tc.queueType,
+							prefix + "auth_region":                           "us-east-2",
+							prefix + "endpoint":                              "https://sqs.example",
+							prefix + "large_message_store.endpoint":          "https://s3.example",
+							prefix + "large_message_store.path":              "s3://bucket/path",
+							prefix + "large_message_store.encryption_scheme": "sse-c",
+							prefix + "large_message_store.kms_endpoint":      "https://kms.example",
+							prefix + "large_message_store.key_id":            "alias/key",
+						}
+						if file == "inputs" {
+							want[prefix+"dead_letter_queue.name"] = "dlq"
+						}
+						assert.Equal(t, want, entry.Value.Stanzas["remote_queue:q"], file)
+						assert.Equal(t, splunkconfig.SOKAppDir, entry.Value.Directory)
+						credentials, ok := findEntry(set.Secrets, file)
+						require.True(t, ok)
+						assert.Equal(t, common.StanzaFields{
+							prefix + "access_key": "AKIA",
+							prefix + "secret_key": "shhh",
+						}, credentials.Value.Stanzas["remote_queue:q"], file)
+						assert.Equal(t, splunkconfig.SOKSecretsAppDir, credentials.Value.Directory)
+					}
+					assert.Equal(t, original, queue)
+				})
+			}
+		})
+	}
 }
 
 // An ingestor (physical separation) only produces data — it needs outputs.conf
