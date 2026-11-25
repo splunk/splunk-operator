@@ -17,9 +17,10 @@
 Package smartbus is the SmartBus splunkconfig.ConfFeature: the remote-queue .conf
 settings a Splunk node needs to read from and write to a SmartBus queue.
 
-Two orthogonal axes: Contribute maps role to conf files, identically for every
-provider, while a provider implementation selected from QueueSpec.Provider decides
-what goes inside each stanza.
+Contribute maps role to conf files, identically for every provider. A provider
+implementation selected from QueueSpec.Provider renders each stanza for that
+role. For sqs_cp queues, only ingestors use sqs_smartbus_cp; indexers use
+sqs_smartbus for inputs, outputs and credential keys.
 
 Allowed imports from pkg/splunk/: common/, util/, splunkconfig/
 */

@@ -65,22 +65,22 @@ func (smartbus *feature) Contribute(role common.InstanceType) (splunkconfig.Conf
 	case common.SplunkIndexer:
 		return splunkconfig.ConfSet{
 			NonSensitive: []common.ConfFileEntry{
-				smartbus.provider.inputsConf(),
-				smartbus.provider.outputsConf(),
+				smartbus.provider.inputsConf(role),
+				smartbus.provider.outputsConf(role),
 				pipelineConf(nil),
 			},
-			Secrets: smartbus.secretsConf("inputs", "outputs"),
+			Secrets: smartbus.secretsConf(role, "inputs", "outputs"),
 		}, nil
 
 	case common.SplunkIngestor:
 		return splunkconfig.ConfSet{
 			NonSensitive: []common.ConfFileEntry{
-				smartbus.provider.outputsConf(),
+				smartbus.provider.outputsConf(role),
 				pipelineConf(common.ConfFileStanzas{
 					"pipeline:indexerPipe": {"disabled": "true"},
 				}),
 			},
-			Secrets: smartbus.secretsConf("outputs"),
+			Secrets: smartbus.secretsConf(role, "outputs"),
 		}, nil
 	}
 
@@ -88,23 +88,22 @@ func (smartbus *feature) Contribute(role common.InstanceType) (splunkconfig.Conf
 }
 
 // Empty credentials mean IRSA / workload identity, where no static keys exist.
-func (smartbus *feature) secretsConf(confFileNames ...string) []common.ConfFileEntry {
+func (smartbus *feature) secretsConf(role common.InstanceType, confFileNames ...string) []common.ConfFileEntry {
 	if smartbus.accessKey == "" || smartbus.secretKey == "" {
 		return nil
 	}
 	entries := make([]common.ConfFileEntry, 0, len(confFileNames))
 	for _, confFileName := range confFileNames {
-		entries = append(entries, smartbus.provider.secretConf(confFileName, smartbus.accessKey, smartbus.secretKey))
+		entries = append(entries, smartbus.provider.secretConf(role, confFileName, smartbus.accessKey, smartbus.secretKey))
 	}
 	return entries
 }
 
-// provider is the queue-provider axis: it emits stanzas and knows nothing about
-// Splunk roles. Only secretConf carries credentials.
+// provider emits queue stanzas for a role. Only secretConf carries credentials.
 type provider interface {
-	outputsConf() common.ConfFileEntry
-	inputsConf() common.ConfFileEntry
-	secretConf(confFileName, accessKey, secretKey string) common.ConfFileEntry
+	outputsConf(role common.InstanceType) common.ConfFileEntry
+	inputsConf(role common.InstanceType) common.ConfFileEntry
+	secretConf(role common.InstanceType, confFileName, accessKey, secretKey string) common.ConfFileEntry
 }
 
 // newProvider selects the provider implementation for a queue spec.

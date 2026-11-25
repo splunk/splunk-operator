@@ -5,7 +5,6 @@ nav_order: 1
 permalink: /docs/CustomResources.html
 ---
 
-
 # Custom Resource Guide
 
 The Splunk Operator provides a collection of
@@ -39,7 +38,6 @@ you can use to manage Splunk Enterprise deployments in your Kubernetes cluster.
 For examples on how to use these custom resources, please see
 [Configuring Splunk Enterprise Deployments](../reference/Examples.md).
 
-
 ## Metadata Parameters
 
 All resources in Kubernetes include a `metadata` section. You can use this
@@ -60,14 +58,13 @@ metadata:
   name: s1
   namespace: splunk
   finalizers:
-  - enterprise.splunk.com/delete-pvc
+    - enterprise.splunk.com/delete-pvc
 ```
 
 The `enterprise.splunk.com/delete-pvc` finalizer is optional, and may be
 used to tell the Splunk Operator that you would like it to remove all the
 [Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/)
 associated with the instance when you delete it.
-
 
 ## Common Spec Parameters for All Resources
 
@@ -90,17 +87,17 @@ spec:
     spec:
       type: LoadBalancer
   topologySpreadConstraints:
-  - maxSkew: 1
-    topologyKey: zone
-    whenUnsatisfiable: DoNotSchedule
-    labelSelector:
-      matchLabels:
-        foo: bar
+    - maxSkew: 1
+      topologyKey: zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          foo: bar
   extraEnv:
-  - name: ADDITIONAL_ENV_VAR_1
-    value: "test_value_1"
-  - name: ADDITIONAL_ENV_VAR_2
-    value: "test_value_2"
+    - name: ADDITIONAL_ENV_VAR_1
+      value: "test_value_1"
+    - name: ADDITIONAL_ENV_VAR_2
+      value: "test_value_2"
   resources:
     requests:
       memory: "512Mi"
@@ -114,21 +111,21 @@ The `spec` section is used to define the desired state for a resource. All
 custom resources provided by the Splunk Operator include the following
 configuration parameters:
 
-| Key                   | Type       | Description                                                                                                |
-| --------------------- | ---------- | ---------------------------------------------------------------------------------------------------------- |
-| image                 | string     | Container image to use for pod instances (overrides `RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variable |
-| imagePullPolicy       | string     | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                           |
-| disableResourceDefaults | boolean | Prevents the operator from filling in default CPU and memory requests and limits. Defaults to `false`. Set to `true` to preserve `resources` exactly as provided, including an empty value. |
-| livenessInitialDelaySeconds       | number     | Sets the initialDelaySeconds for Liveness probe (default: 300)                           |
-| readinessInitialDelaySeconds       | number     | Sets the initialDelaySeconds for Readiness probe (default: 10)                           |
-| extraEnv       | [EnvVar](https://v1-17.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#envvar-v1-core)     | Sets the extra environment variables to be passed to the Splunk instance containers. WARNING: Setting environment variables used by Splunk or Ansible will affect Splunk installation and operation                           |
-| schedulerName         | string     | Name of [Scheduler](https://kubernetes.io/docs/concepts/scheduling/kube-scheduler/) to use for pod placement (defaults to "default-scheduler") |
-| runtimeClassName      | string     | Name of a [RuntimeClass](https://kubernetes.io/docs/concepts/containers/runtime-class/) used to run the pods. The named RuntimeClass must already exist in the cluster or the pods will not run. Optional; when omitted, the cluster's default runtime handler is used. |
-| podAnnotations        | map[string]string | Sets annotations on Splunk instance pods. These annotations can override operator-provided pod annotations, including the Istio sidecar traffic annotations. |
-| affinity              | [Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#affinity-v1-core) | [Kubernetes Affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) rules that control how pods are assigned to particular nodes |
-| resources             | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | The settings for allocating [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance. Missing CPU and memory keys receive operator defaults unless `disableResourceDefaults` is `true`. The default settings should be considered for demo/test purposes. Please see [Hardware Resource Requirements](https://github.com/splunk/splunk-operator/blob/develop/docs/GettingStarted.md#hardware-resources-requirements) for production values.|
-| serviceTemplate       | [Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#service-v1-core) | Template used to create Kubernetes [Services](https://kubernetes.io/docs/concepts/services-networking/service/) |
-| topologySpreadConstraint       | [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/) | Template used to create Kubernetes [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/) |
+| Key                          | Type                                                                                                                      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| image                        | string                                                                                                                    | Container image to use for pod instances (overrides `RELATED_IMAGE_SPLUNK_ENTERPRISE` environment variable                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| imagePullPolicy              | string                                                                                                                    | Sets pull policy for all images (either "Always" or the default: "IfNotPresent")                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| disableResourceDefaults      | boolean                                                                                                                   | Prevents the operator from filling in default CPU and memory requests and limits. Defaults to `false`. Set to `true` to preserve `resources` exactly as provided, including an empty value.                                                                                                                                                                                                                                                                                                                                            |
+| livenessInitialDelaySeconds  | number                                                                                                                    | Sets the initialDelaySeconds for Liveness probe (default: 300)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| readinessInitialDelaySeconds | number                                                                                                                    | Sets the initialDelaySeconds for Readiness probe (default: 10)                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| extraEnv                     | [EnvVar](https://v1-17.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#envvar-v1-core)                  | Sets the extra environment variables to be passed to the Splunk instance containers. WARNING: Setting environment variables used by Splunk or Ansible will affect Splunk installation and operation                                                                                                                                                                                                                                                                                                                                    |
+| schedulerName                | string                                                                                                                    | Name of [Scheduler](https://kubernetes.io/docs/concepts/scheduling/kube-scheduler/) to use for pod placement (defaults to "default-scheduler")                                                                                                                                                                                                                                                                                                                                                                                         |
+| runtimeClassName             | string                                                                                                                    | Name of a [RuntimeClass](https://kubernetes.io/docs/concepts/containers/runtime-class/) used to run the pods. The named RuntimeClass must already exist in the cluster or the pods will not run. Optional; when omitted, the cluster's default runtime handler is used.                                                                                                                                                                                                                                                                |
+| podAnnotations               | map[string]string                                                                                                         | Sets annotations on Splunk instance pods. These annotations can override operator-provided pod annotations, including the Istio sidecar traffic annotations.                                                                                                                                                                                                                                                                                                                                                                           |
+| affinity                     | [Affinity](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#affinity-v1-core)                         | [Kubernetes Affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) rules that control how pods are assigned to particular nodes                                                                                                                                                                                                                                                                                                                                                      |
+| resources                    | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#resourcerequirements-v1-core) | The settings for allocating [compute resource requirements](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/) to use for each pod instance. Missing CPU and memory keys receive operator defaults unless `disableResourceDefaults` is `true`. The default settings should be considered for demo/test purposes. Please see [Hardware Resource Requirements](https://github.com/splunk/splunk-operator/blob/develop/docs/GettingStarted.md#hardware-resources-requirements) for production values. |
+| serviceTemplate              | [Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#service-v1-core)                           | Template used to create Kubernetes [Services](https://kubernetes.io/docs/concepts/services-networking/service/)                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| topologySpreadConstraint     | [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/)          | Template used to create Kubernetes [TopologySpreadConstraint](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/)                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ### Postgres Node Sidecar
 
@@ -205,23 +202,23 @@ The following additional configuration parameters may be used for all Splunk
 Enterprise resources, including: `Standalone`, `LicenseManager`,
 `SearchHeadCluster`, `ClusterManager`, `IndexerCluster` and `IngestorCluster`:
 
-| Key                | Type    | Description                                                                   |
-| ------------------ | ------- | ----------------------------------------------------------------------------- |
-| etcVolumeStorageConfig | StorageClassSpec  | Storage class spec for Splunk etc volume as described in [StorageClass](../deploy/StorageClass.md) |
-| varVolumeStorageConfig | StorageClassSpec  | Storage class spec for Splunk var volume as described in [StorageClass](../deploy/StorageClass.md) |
-| volumes            | [Volume](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#volume-v1-core) | List of one or more [Kubernetes volumes](https://kubernetes.io/docs/concepts/storage/volumes/). These will be mounted in all container pods as as `/mnt/<name>` |
-| defaults           | string  | Inline map of [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) overrides used to initialize the environment |
-| defaultsUrl        | string  | Full path or URL for one or more [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) files, separated by commas |
-| licenseUrl         | string  | Full path or URL for a Splunk Enterprise license file                         |
-| licenseManagerRef   | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `LicenseManager` instance (via `name` and optionally `namespace`) to use for licensing |
-| clusterManagerRef  | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core) | Reference to a Splunk Operator managed `ClusterManager` instance (via `name` and optionally `namespace`) to use for indexing |
-| monitoringConsoleRef  | string     | Logical name assigned to the Monitoring Console pod. You can set the name before or after the MC pod creation.|
-| serviceAccount | [ServiceAccount](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/) | Represents the service account used by the pods deployed by the CRD |
-| extraEnv | Extra environment variables | Extra environment variables to be passed to the Splunk instance containers |
-| readinessInitialDelaySeconds | readinessProbe [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes) | Defines `initialDelaySeconds` for Readiness probe |
-| livenessInitialDelaySeconds | livenessProbe [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) | Defines `initialDelaySeconds` for the Liveness probe |
-| imagePullSecrets | [imagePullSecrets](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/) | Config to pull images from private registry. Use in conjunction with `image` config from [common spec](#common-spec-parameters-for-all-resources) |
-| certs | []CertSpec | List of TLS certificates to mount into Splunk pods. Each entry references a Kubernetes Secret containing `tls.crt`, `tls.key`, and optionally `ca.crt`. An optional `role` field (`server` or `input`) controls the mount path: `server` mounts at `/mnt/tls/splunk-server-tls-cert/`, `input` at `/mnt/tls/splunk-input-tls-cert/`, and no role mounts at `/mnt/tls/<secretName>/`. When a referenced Secret's content changes, the operator automatically triggers a rolling restart. **Note:** cert secret rotation detection is supported for v4 CR types only (`Standalone`, `LicenseManager`, `SearchHeadCluster`, `ClusterManager`, `IndexerCluster`, `MonitoringConsole`, `IngestorCluster`). The deprecated v3 types (`ClusterMaster`, `LicenseMaster`) carry the `certs` field but do not watch for Secret changes. |
+| Key                          | Type                                                                                                                                                                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| etcVolumeStorageConfig       | StorageClassSpec                                                                                                                                                     | Storage class spec for Splunk etc volume as described in [StorageClass](../deploy/StorageClass.md)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| varVolumeStorageConfig       | StorageClassSpec                                                                                                                                                     | Storage class spec for Splunk var volume as described in [StorageClass](../deploy/StorageClass.md)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| volumes                      | [Volume](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#volume-v1-core)                                                                        | List of one or more [Kubernetes volumes](https://kubernetes.io/docs/concepts/storage/volumes/). These will be mounted in all container pods as as `/mnt/<name>`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| defaults                     | string                                                                                                                                                               | Inline map of [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) overrides used to initialize the environment                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| defaultsUrl                  | string                                                                                                                                                               | Full path or URL for one or more [default.yml](https://github.com/splunk/splunk-ansible/blob/develop/docs/advanced/default.yml.spec.md) files, separated by commas                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| licenseUrl                   | string                                                                                                                                                               | Full path or URL for a Splunk Enterprise license file                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| licenseManagerRef            | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core)                                                      | Reference to a Splunk Operator managed `LicenseManager` instance (via `name` and optionally `namespace`) to use for licensing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| clusterManagerRef            | [ObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#objectreference-v1-core)                                                      | Reference to a Splunk Operator managed `ClusterManager` instance (via `name` and optionally `namespace`) to use for indexing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| monitoringConsoleRef         | string                                                                                                                                                               | Logical name assigned to the Monitoring Console pod. You can set the name before or after the MC pod creation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| serviceAccount               | [ServiceAccount](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/)                                                                | Represents the service account used by the pods deployed by the CRD                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| extraEnv                     | Extra environment variables                                                                                                                                          | Extra environment variables to be passed to the Splunk instance containers                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| readinessInitialDelaySeconds | readinessProbe [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes)  | Defines `initialDelaySeconds` for Readiness probe                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| livenessInitialDelaySeconds  | livenessProbe [initialDelaySeconds](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command) | Defines `initialDelaySeconds` for the Liveness probe                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| imagePullSecrets             | [imagePullSecrets](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/)                                                            | Config to pull images from private registry. Use in conjunction with `image` config from [common spec](#common-spec-parameters-for-all-resources)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| certs                        | []CertSpec                                                                                                                                                           | List of TLS certificates to mount into Splunk pods. Each entry references a Kubernetes Secret containing `tls.crt`, `tls.key`, and optionally `ca.crt`. An optional `role` field (`server` or `input`) controls the mount path: `server` mounts at `/mnt/tls/splunk-server-tls-cert/`, `input` at `/mnt/tls/splunk-input-tls-cert/`, and no role mounts at `/mnt/tls/<secretName>/`. When a referenced Secret's content changes, the operator automatically triggers a rolling restart. **Note:** cert secret rotation detection is supported for v4 CR types only (`Standalone`, `LicenseManager`, `SearchHeadCluster`, `ClusterManager`, `IndexerCluster`, `MonitoringConsole`, `IngestorCluster`). The deprecated v3 types (`ClusterMaster`, `LicenseMaster`) carry the `certs` field but do not watch for Secret changes. |
 
 ## LicenseManager Resource Spec Parameters
 
@@ -242,7 +239,6 @@ Please see [Common Spec Parameters for All Resources](#common-spec-parameters-fo
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources).
 The `LicenseManager` resource does not provide any additional configuration parameters.
 
-
 ## Standalone Resource Spec Parameters
 
 ```yaml
@@ -254,17 +250,16 @@ metadata:
     app: SplunkStandAlone
     type: Splunk
   finalizers:
-  - enterprise.splunk.com/delete-pvc
+    - enterprise.splunk.com/delete-pvc
 ```
 
 In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
 the `Standalone` resource provides the following `Spec` configuration parameters:
 
-| Key        | Type    | Description                                       |
-| ---------- | ------- | ------------------------------------------------- |
-| replicas   | integer | The number of standalone replicas (miminum of 1, which is the default) |
-
+| Key      | Type    | Description                                                            |
+| -------- | ------- | ---------------------------------------------------------------------- |
+| replicas | integer | The number of standalone replicas (miminum of 1, which is the default) |
 
 ## SearchHeadCluster Resource Spec Parameters
 
@@ -281,9 +276,9 @@ In addition to [Common Spec Parameters for All Resources](#common-spec-parameter
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
 the `SearchHeadCluster` resource provides the following `Spec` configuration parameters:
 
-| Key      | Type    | Description                                                  |
-| -------- | ------- | ------------------------------------------------------------ |
-| replicas | integer | The number of search heads cluster members (minimum of 3, which is the default) |
+| Key            | Type                                                                                                                      | Description                                                                                                                                                                                     |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| replicas       | integer                                                                                                                   | The number of search heads cluster members (minimum of 3, which is the default)                                                                                                                 |
 | noahClusterRef | [LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#localobjectreference-v1-core) | Selects Noah coordination by name. The referenced `NoahCluster` must be in the same namespace. This field is mutually exclusive with `clusterManagerRef` and the deprecated `clusterMasterRef`. |
 
 To select Noah coordination instead of the classic architecture:
@@ -315,9 +310,9 @@ If provided, resources are managed separately for Search Head Deployer and Searc
 
 Additionally, node affinity specification was introduced for Search Head Deployer to separate it from Search Head Peers specification.
 
-| Key      | Type    | Description                                                  |
-| -------- | ------- | ------------------------------------------------------------ |
-| deployerNodeAffinity | *corev1.NodeAffinity | Search Head Deployer node affinity |
+| Key                  | Type                        | Description                                 |
+| -------------------- | --------------------------- | ------------------------------------------- |
+| deployerNodeAffinity | \*corev1.NodeAffinity       | Search Head Deployer node affinity          |
 | deployerResourceSpec | corev1.ResourceRequirements | Search Head Deployer resource specification |
 
 #### Example
@@ -391,27 +386,43 @@ secretKeyRef:
     key: s3_secret_key
 ```
 
-`Queue` stores the configuration for an external message queue and dead-letter queue. SOK does not create or manage those external resources. Queue inputs can be found in the table below. The supported provider is `sqs`.
+`Queue` stores the configuration for an external message queue and dead-letter queue. SOK does not create or manage those external resources. Queue inputs can be found in the table below. The supported providers are `sqs` and `sqs_cp`.
 
-| Key        | Type    | Required | Description                                       |
-| ---------- | ------- | -------- | ------------------------------------------------- |
-| provider   | string | Yes | Provider of message queue (Allowed value: `sqs`) |
-| sqs   | SQS | Yes if provider = `sqs` | SQS message queue inputs |
+| Key      | Type   | Required | Description                                                 |
+| -------- | ------ | -------- | ----------------------------------------------------------- |
+| provider | string | Yes      | Provider of message queue (Allowed values: `sqs`, `sqs_cp`) |
+| sqs      | SQS    | Yes      | SQS message queue inputs for either provider                |
+
+SOK selects the Splunk `remote_queue.type` and the matching setting prefixes
+according to the role consuming the Queue:
+
+| Queue provider | IngestorCluster outputs | IndexerCluster inputs and outputs |
+| -------------- | ----------------------- | --------------------------------- |
+| `sqs`          | `sqs_smartbus`          | `sqs_smartbus`                    |
+| `sqs_cp`       | `sqs_smartbus_cp`       | `sqs_smartbus`                    |
+
+With `provider: sqs_cp` and separate ingestion and indexing tiers, the ingestor
+is the Cloud Processor (CP) uploader. Indexers use the regular Smartbus type even
+when they reference the same `sqs_cp` Queue. Credential keys use the same
+role-specific prefixes as the queue settings. Selecting `sqs_cp` does not
+provision a CP queue or generate the additional CP routing configuration.
 
 SQS message queue inputs can be found in the table below.
 
-| Key        | Type    | Required | Description                                       |
-| ---------- | ------- | -------- | ------------------------------------------------- |
-| name   | string | Yes | Name of the physical queue |
-| authRegion   | string | No | Region used for authentication and endpoint resolution |
-| endpoint   | string | No | AWS SQS service endpoint. If omitted, SOK resolves it from `authRegion` |
-| dlq   | string | Yes | Name of the physical dead-letter queue |
-| secretKeyRef | object | No | Per-key selectors for AWS credentials. When not set, IRSA / workload identity is assumed. Contains `awsAccessKey` and `awsSecretKey`, each a `SecretKeySelector` with `name` and `key`. |
+| Key          | Type   | Required | Description                                                                                                                                                                             |
+| ------------ | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| name         | string | Yes      | Name of the physical queue                                                                                                                                                              |
+| authRegion   | string | No       | Region used for authentication and endpoint resolution                                                                                                                                  |
+| endpoint     | string | No       | AWS SQS service endpoint. If omitted, SOK resolves it from `authRegion`                                                                                                                 |
+| dlq          | string | Yes      | Name of the physical dead-letter queue                                                                                                                                                  |
+| secretKeyRef | object | No       | Per-key selectors for AWS credentials. When not set, IRSA / workload identity is assumed. Contains `awsAccessKey` and `awsSecretKey`, each a `SecretKeySelector` with `name` and `key`. |
 
 The provider, queue name, auth region, endpoint, and dead-letter queue are immutable after creation. `secretKeyRef` can be changed. If static credentials are configured, the referenced Secrets must be kept in the same namespace as the resource that uses them. SOK resolves the selected Secret keys and mounts generated credential-only defaults into the referenced `IndexerCluster` and `IngestorCluster` pods. Changes to the referenced credential Secret are watched. SOK creates a new credential Secret and rolls the affected pods declaratively.
 
 ## ClusterManager Resource Spec Parameters
+
 ClusterManager resource does not have a required spec parameter, but to configure SmartStore, you can specify indexes and volume configuration as below -
+
 ```yaml
 apiVersion: enterprise.splunk.com/v4
 kind: ClusterManager
@@ -420,7 +431,7 @@ metadata:
 spec:
   smartstore:
     defaults:
-        volumeName: msos_s2s3_vol
+      volumeName: msos_s2s3_vol
     indexes:
       - name: salesdata1
         remotePath: $_index_name
@@ -504,12 +515,12 @@ In addition to [Common Spec Parameters for All Resources](#common-spec-parameter
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
 the `IndexerCluster` resource provides the following `Spec` configuration parameters:
 
-| Key        | Type    | Required | Description                                           |
-| ---------- | ------- | -------- | ----------------------------------------------------- |
-| replicas   | integer | Yes | The number of indexer peers. Must be at least 3 |
-| noahClusterRef | [LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#localobjectreference-v1-core) | No | Selects Noah coordination by name. The referenced `NoahCluster` must be in the same namespace. |
-| queueRef   | corev1.ObjectReference | No | Message queue reference. Set together with `objectStorageRef` to enable index-only mode |
-| objectStorageRef   | corev1.ObjectReference | No | Object storage reference. Set together with `queueRef` |
+| Key              | Type                                                                                                                      | Required | Description                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| replicas         | integer                                                                                                                   | Yes      | The number of indexer peers. Must be at least 3                                                |
+| noahClusterRef   | [LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#localobjectreference-v1-core) | No       | Selects Noah coordination by name. The referenced `NoahCluster` must be in the same namespace. |
+| queueRef         | corev1.ObjectReference                                                                                                    | No       | Message queue reference. Set together with `objectStorageRef` to enable index-only mode        |
+| objectStorageRef | corev1.ObjectReference                                                                                                    | No       | Object storage reference. Set together with `queueRef`                                         |
 
 When both references are set, SOK configures the indexer peers to consume from the remote queue and use the object storage for large messages.
 
@@ -524,23 +535,24 @@ metadata:
   name: ic
 spec:
   replicas: 3
-  queueRef: 
+  queueRef:
     name: queue
   objectStorageRef:
     name: os
 ```
-Note:  `queueRef` and `objectStorageRef` are required fields in case of IngestorCluster resource since they will be used to connect the IngestorCluster to Queue and ObjectStorage resources.
+
+Note: `queueRef` and `objectStorageRef` are required fields in case of IngestorCluster resource since they will be used to connect the IngestorCluster to Queue and ObjectStorage resources.
 
 In addition to [Common Spec Parameters for All Resources](#common-spec-parameters-for-all-resources)
 and [Common Spec Parameters for All Splunk Enterprise Resources](#common-spec-parameters-for-all-splunk-enterprise-resources),
 the `IngestorCluster` resource provides the following `Spec` configuration parameters:
 
-| Key        | Type    | Required | Description                                           |
-| ---------- | ------- | -------- | ----------------------------------------------------- |
-| replicas   | integer | No | The number of ingestor pods (defaults to 1) |
-| queueRef   | corev1.ObjectReference | Yes | Message queue reference |
-| objectStorageRef   | corev1.ObjectReference | Yes | Object storage reference |
-| users | []SplunkUser | No | Additional Splunk users to create or update on every pod. See [Additional Users](#additional-users) |
+| Key              | Type                   | Required | Description                                                                                         |
+| ---------------- | ---------------------- | -------- | --------------------------------------------------------------------------------------------------- |
+| replicas         | integer                | No       | The number of ingestor pods (defaults to 1)                                                         |
+| queueRef         | corev1.ObjectReference | Yes      | Message queue reference                                                                             |
+| objectStorageRef | corev1.ObjectReference | Yes      | Object storage reference                                                                            |
+| users            | []SplunkUser           | No       | Additional Splunk users to create or update on every pod. See [Additional Users](#additional-users) |
 
 ### Additional Users
 
@@ -571,11 +583,11 @@ spec:
         name: observability-user
 ```
 
-| Key | Type | Required | Description |
-| --- | ---- | -------- | ----------- |
-| name | string | Yes | Splunk username. Lowercase letters, digits, `_` and `-` only, unique within the list, and not `admin` |
-| roles | []string | Yes | At least one non-empty, unique role. Roles must already exist in Splunk, either built in or defined through Splunk configuration |
-| passwordSecretRef.name | string | Yes | Name of a Secret in the same namespace. Must be a non-empty DNS-1123 subdomain (enforced by the validating webhook) |
+| Key                    | Type     | Required | Description                                                                                                                      |
+| ---------------------- | -------- | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| name                   | string   | Yes      | Splunk username. Lowercase letters, digits, `_` and `-` only, unique within the list, and not `admin`                            |
+| roles                  | []string | Yes      | At least one non-empty, unique role. Roles must already exist in Splunk, either built in or defined through Splunk configuration |
+| passwordSecretRef.name | string   | Yes      | Name of a Secret in the same namespace. Must be a non-empty DNS-1123 subdomain (enforced by the validating webhook)              |
 
 SOK reads each referenced Secret and writes the users into the CR's credentials Secret (`sok-ingestorcluster-creds-<hash>`), which is mounted into the pods and appended last to `SPLUNK_DEFAULTS_URL`. splunk-ansible then creates or updates each user through the splunkd REST API after splunkd starts.
 
@@ -607,20 +619,20 @@ spec:
 
 `ObjectStorage` stores the large messages that exceed the queue message-size limit. SOK does not create or manage the external bucket. ObjectStorage inputs can be found in the table below. The supported provider is `s3`.
 
-| Key        | Type    | Required | Description                                       |
-| ---------- | ------- | -------- | ------------------------------------------------- |
-| provider   | string | Yes | Provider of object storage (Allowed value: `s3`) |
-| s3   | S3 | Yes if provider = `s3` | S3 object storage inputs |
+| Key      | Type   | Required               | Description                                      |
+| -------- | ------ | ---------------------- | ------------------------------------------------ |
+| provider | string | Yes                    | Provider of object storage (Allowed value: `s3`) |
+| s3       | S3     | Yes if provider = `s3` | S3 object storage inputs                         |
 
 S3 object storage inputs can be found in the table below.
 
-| Key        | Type    | Required | Description                                       |
-| ---------- | ------- | -------- | ------------------------------------------------- |
-| path   | string | Yes | Remote storage location for messages that are larger than the underlying maximum message size |
-| endpoint   | string | No | S3-compatible service endpoint. If omitted, SOK resolves it from the Queue `authRegion` |
-| encryptionScheme | string | No | Encryption scheme used by remote storage. Allowed values: `sse-s3`, `sse-c`, `none` |
-| kmsEndpoint | string | No | KMS endpoint for generating data keys; auto-derived from the Queue region when not provided |
-| kmsKeyId | string | No | ID of the primary KMS key (UUID, alias, or ARN) |
+| Key              | Type   | Required | Description                                                                                   |
+| ---------------- | ------ | -------- | --------------------------------------------------------------------------------------------- |
+| path             | string | Yes      | Remote storage location for messages that are larger than the underlying maximum message size |
+| endpoint         | string | No       | S3-compatible service endpoint. If omitted, SOK resolves it from the Queue `authRegion`       |
+| encryptionScheme | string | No       | Encryption scheme used by remote storage. Allowed values: `sse-s3`, `sse-c`, `none`           |
+| kmsEndpoint      | string | No       | KMS endpoint for generating data keys; auto-derived from the Queue region when not provided   |
+| kmsKeyId         | string | No       | ID of the primary KMS key (UUID, alias, or ARN)                                               |
 
 All ObjectStorage spec inputs are immutable after creation. `kmsKeyId` is required when `encryptionScheme` is `sse-c`.
 
@@ -637,27 +649,27 @@ metadata:
 EOF
 ```
 
-Use the Monitoring Console to view detailed topology and performance information about your Splunk Enterprise deployment. See [What can the Monitoring Console do?](https://docs.splunk.com/Documentation/Splunk/latest/DMC/WhatcanDMCdo) in the Splunk Enterprise documentation. 
+Use the Monitoring Console to view detailed topology and performance information about your Splunk Enterprise deployment. See [What can the Monitoring Console do?](https://docs.splunk.com/Documentation/Splunk/latest/DMC/WhatcanDMCdo) in the Splunk Enterprise documentation.
 
-The Splunk Operator now includes a CRD for the Monitoring Console (MC). This offers a number of advantages available to other CR's, including: customizable resource allocation, app management, and license management. 
+The Splunk Operator now includes a CRD for the Monitoring Console (MC). This offers a number of advantages available to other CR's, including: customizable resource allocation, app management, and license management.
 
-* An MC pod is not created automatically in the default namespace when using other Splunk Operator CR's. 
-* When upgrading to the latest Splunk Operator, any previously automated MC pods will be deleted. 
-* To associate a new MC pod with an existing CR, you must update any CR's and add the `monitoringConsoleRef` parameter. 
+- An MC pod is not created automatically in the default namespace when using other Splunk Operator CR's.
+- When upgrading to the latest Splunk Operator, any previously automated MC pods will be deleted.
+- To associate a new MC pod with an existing CR, you must update any CR's and add the `monitoringConsoleRef` parameter.
 
-The MC pod is referenced by using the `monitoringConsoleRef` parameter. There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace.  When a pod that references the `monitoringConsoleRef` parameter is created or deleted, the MC pod will automatically update itself and create or remove connections to those pods.
-
+The MC pod is referenced by using the `monitoringConsoleRef` parameter. There is no preferred order when running an MC pod; you can start the pod before or after the other CR's in the namespace. When a pod that references the `monitoringConsoleRef` parameter is created or deleted, the MC pod will automatically update itself and create or remove connections to those pods.
 
 ## Examples of Guaranteed and Burstable QoS
 
 You can change the CPU and memory resources, and assign different Quality of Services (QoS) classes to your pods. Here are some examples:
-  
+
 ### A Guaranteed QoS Class example:
-Set equal ```requests``` and ```limits``` values for CPU and memory to establish a QoS class of Guaranteed. 
 
-*Note: A pod will not start on a node that cannot meet the CPU and memory ```requests``` values.*
+Set equal `requests` and `limits` values for CPU and memory to establish a QoS class of Guaranteed.
 
-Example: The minimum resource requirements for a Standalone Splunk Enterprise instance in production are 24 vCPU and 12GB RAM. 
+_Note: A pod will not start on a node that cannot meet the CPU and memory `requests` values._
+
+Example: The minimum resource requirements for a Standalone Splunk Enterprise instance in production are 24 vCPU and 12GB RAM.
 
 ```yaml
 apiVersion: enterprise.splunk.com/v4
@@ -672,13 +684,14 @@ spec:
       cpu: "24"
     limits:
       memory: "12Gi"
-      cpu: "24"  
+      cpu: "24"
 ```
 
 ### A Burstable QoS Class example:
-Set the ```requests``` value for CPU and memory lower than the ```limits``` value to establish a QoS class of Burstable. 
 
-Example: This Standalone Splunk Enterprise instance should start with minimal indexing and search capacity, but will be allowed to scale up if Kubernetes is able to allocate additional CPU and Memory up to the ```limits``` values.
+Set the `requests` value for CPU and memory lower than the `limits` value to establish a QoS class of Burstable.
+
+Example: This Standalone Splunk Enterprise instance should start with minimal indexing and search capacity, but will be allowed to scale up if Kubernetes is able to allocate additional CPU and Memory up to the `limits` values.
 
 ```yaml
 apiVersion: enterprise.splunk.com/v4
@@ -693,10 +706,11 @@ spec:
       cpu: "4"
     limits:
       memory: "12Gi"
-      cpu: "24"  
+      cpu: "24"
 ```
 
 ### A BestEffort QoS Class example:
+
 Set `disableResourceDefaults` to `true` and omit requests and limits to prevent the operator from adding resource defaults:
 
 ```yaml
@@ -713,9 +727,9 @@ With no requests or limits set for any container, Kubernetes assigns the pod the
 
 ### Pod Resources Management
 
-__CPU Throttling__
+**CPU Throttling**
 
-Kubernetes starts throttling CPUs if a pod's demand for CPU exceeds the value set in the ```limits``` parameter. If your nodes have extra CPU resources available, leaving the ```limits``` value unset will allow the pods to utilize more CPUs.
+Kubernetes starts throttling CPUs if a pod's demand for CPU exceeds the value set in the `limits` parameter. If your nodes have extra CPU resources available, leaving the `limits` value unset will allow the pods to utilize more CPUs.
 
 ## Status Conditions
 
@@ -723,25 +737,25 @@ All Splunk Enterprise Custom Resources include Kubernetes-standard [status condi
 
 ### Condition Types
 
-| Condition Type | Description |
-|----------------|-------------|
-| `Ready` | Indicates whether the resource is fully operational and all replicas are ready |
-| `Progressing` | Indicates whether the resource is being updated, scaled, or initialized |
-| `Paused` | Indicates whether reconciliation is paused via the pause annotation |
-| `Stalled` | Indicates a non-recoverable failure that requires user intervention before reconciliation can resume |
+| Condition Type | Description                                                                                          |
+| -------------- | ---------------------------------------------------------------------------------------------------- |
+| `Ready`        | Indicates whether the resource is fully operational and all replicas are ready                       |
+| `Progressing`  | Indicates whether the resource is being updated, scaled, or initialized                              |
+| `Paused`       | Indicates whether reconciliation is paused via the pause annotation                                  |
+| `Stalled`      | Indicates a non-recoverable failure that requires user intervention before reconciliation can resume |
 
 ### Condition Fields
 
 Each condition includes the following fields:
 
-| Field | Description |
-|-------|-------------|
-| `type` | The condition type (Ready, Progressing, Paused, or Stalled) |
-| `status` | Either "True", "False", or "Unknown" |
-| `reason` | A machine-readable reason code for the condition's state |
-| `message` | A human-readable description of the condition |
-| `lastTransitionTime` | The last time the condition status changed |
-| `observedGeneration` | The generation of the CR spec that was observed |
+| Field                | Description                                                 |
+| -------------------- | ----------------------------------------------------------- |
+| `type`               | The condition type (Ready, Progressing, Paused, or Stalled) |
+| `status`             | Either "True", "False", or "Unknown"                        |
+| `reason`             | A machine-readable reason code for the condition's state    |
+| `message`            | A human-readable description of the condition               |
+| `lastTransitionTime` | The last time the condition status changed                  |
+| `observedGeneration` | The generation of the CR spec that was observed             |
 
 ### Example Status with Conditions
 
@@ -833,6 +847,7 @@ kubectl describe standalone example
 ## Troubleshooting
 
 #### CR Status Message
+
 The Splunk Enterprise CRDs with the Splunk Operator have a field `cr.Status.message` which provides a detailed view of the CR's current status.
 
 Here is an example of a Standalone with a message indicating an invalid CR config:
@@ -855,20 +870,21 @@ bash# kubectl get stdaln -o yaml | grep -i message -A 5 -B 5
     resourceRevMap: {}
     selector: ""
 ```
+
 #### Terminal Failures
 
 Some failure states are non-recoverable without external intervention. When the operator detects one, it stops reconciling the CR immediately — the CR is **not requeued** — and sets `status.phase` to `Error` with `Stalled=True` in the status conditions. The CR remains in this state until the root cause is resolved and the operator detects the change.
 
 **What triggers a terminal failure**
 
-| Cause | `Stalled` condition message | Affected CRs |
-|-------|----------------------------|---------------|
-| A container is stuck in a non-recoverable waiting state: `ErrImagePull`, `ImagePullBackOff`, `InvalidImageName`, `ErrInvalidImage`, `CreateContainerConfigError`, `CreateContainerError`, or `RunContainerError` | `Pod stuck in terminal state — manual fix required` | All |
-| The TLS Secret referenced by `spec.certs[]` is missing a required key (`tls.crt` or `tls.key`) | `cert secret <namespace>/<name> is missing required key "<key>"` | All |
-| The CR spec fails validation during reconciliation (e.g. missing required field, invalid value) | `<CR type> spec validation failed` | All |
-| The Queue or ObjectStorage CR referenced by an IndexerCluster or IngestorCluster cannot be found | `Referenced Queue or ObjectStorage CR not found` | IndexerCluster, IngestorCluster |
-| `clusterManagerRef` is empty at the point where it is required at runtime | `empty Cluster Manager reference` | IndexerCluster |
-| A Secret referenced by `spec.users[].passwordSecretRef` is missing or has no non-empty `password` key | `referenced spec.users password Secret not found or missing its password key` | IngestorCluster |
+| Cause                                                                                                                                                                                                            | `Stalled` condition message                                                   | Affected CRs                    |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------- |
+| A container is stuck in a non-recoverable waiting state: `ErrImagePull`, `ImagePullBackOff`, `InvalidImageName`, `ErrInvalidImage`, `CreateContainerConfigError`, `CreateContainerError`, or `RunContainerError` | `Pod stuck in terminal state — manual fix required`                           | All                             |
+| The TLS Secret referenced by `spec.certs[]` is missing a required key (`tls.crt` or `tls.key`)                                                                                                                   | `cert secret <namespace>/<name> is missing required key "<key>"`              | All                             |
+| The CR spec fails validation during reconciliation (e.g. missing required field, invalid value)                                                                                                                  | `<CR type> spec validation failed`                                            | All                             |
+| The Queue or ObjectStorage CR referenced by an IndexerCluster or IngestorCluster cannot be found                                                                                                                 | `Referenced Queue or ObjectStorage CR not found`                              | IndexerCluster, IngestorCluster |
+| `clusterManagerRef` is empty at the point where it is required at runtime                                                                                                                                        | `empty Cluster Manager reference`                                             | IndexerCluster                  |
+| A Secret referenced by `spec.users[].passwordSecretRef` is missing or has no non-empty `password` key                                                                                                            | `referenced spec.users password Secret not found or missing its password key` | IngestorCluster                 |
 
 **Detecting a terminal failure**
 
@@ -895,6 +911,7 @@ kubectl describe pod <pod-name> -n <namespace>
 Once the root cause is resolved and the operator successfully reconciles the CR, the `Stalled` condition is cleared and a Kubernetes **Normal** event with reason `StalledResolved` is emitted.
 
 For a pod stuck in a terminal container state:
+
 1. Inspect the failing pod with `kubectl describe pod <pod-name> -n <namespace>` to read the `Waiting.Reason` and `Waiting.Message`.
 2. Fix the root cause (correct the image tag, provide the missing `imagePullSecret`, create the missing Secret or ConfigMap).
 3. Delete the stuck pods — the StatefulSet controller recreates them and the operator resumes reconciliation.
@@ -904,28 +921,34 @@ kubectl delete pod <stuck-pod-name> -n <namespace>
 ```
 
 For a malformed TLS Secret:
+
 1. Update or recreate the Secret to include both `tls.crt` and `tls.key`.
 2. The operator detects the fix and resumes automatically on the next reconcile cycle.
 
 For a missing Queue or ObjectStorage CR (IndexerCluster, IngestorCluster):
+
 1. Create the missing CR in the namespace specified by the corresponding object reference, or in the cluster's namespace when no reference namespace is set.
 2. The operator resumes automatically on the next reconcile cycle.
 
 For a missing or incomplete `spec.users` password Secret (IngestorCluster):
+
 1. Read the `ResolveUsersFailed` event with `kubectl describe` to find the user and Secret name.
 2. Create the Secret in the CR's namespace, or add a non-empty `password` key to it.
 3. The operator detects the Secret change and resumes automatically.
 
 For a spec validation failure:
+
 1. Check the `Stalled` condition `message` and operator logs to identify the invalid field.
 2. Correct the spec with `kubectl edit` or `kubectl patch`.
 3. The operator processes the spec change and resumes reconciliation automatically.
 
 For an empty ClusterManager reference (IndexerCluster):
+
 1. Ensure `spec.clusterManagerRef.name` is set on the IndexerCluster.
 2. Apply the corrected spec — the operator resumes automatically.
 
 #### Pause Annotations
+
 The Splunk Operator controller reconciles every Splunk Enterprise CR. However, there might be circumstances wherein the influence of the Splunk Operator is not desired and needs to be paused. Every Splunk Enterprise CR has its own pause annotation associated with it, which when configured ensures that the Splunk Operator controller reconcile is paused for it. Below is a table listing the pause annotations:
 
 **What pausing affects:**
@@ -934,18 +957,18 @@ When a CR is paused, the Splunk Operator returns before normal reconcile work af
 **What pausing does not affect:**
 Pausing only suspends the Splunk Operator's reconcile loop for that CR. Standard Kubernetes components continue operating normally: the kubelet still enforces liveness, readiness, and startup probes and will restart containers that fail them; the StatefulSet controller still manages pod replacement if pods are deleted; and any other controllers (e.g. cert-manager, ingress) continue their own reconciliation. Pausing does not stop or freeze the running Splunk pods themselves.
 
-| Customer Resource Definition | Annotation |
-| ----------- | --------- |
-| queue.enterprise.splunk.com | "queue.enterprise.splunk.com/paused" |
-| clustermaster.enterprise.splunk.com | "clustermaster.enterprise.splunk.com/paused" |
-| clustermanager.enterprise.splunk.com | "clustermanager.enterprise.splunk.com/paused" |
-| indexercluster.enterprise.splunk.com | "indexercluster.enterprise.splunk.com/paused" |
-| ingestorcluster.enterprise.splunk.com | "ingestorcluster.enterprise.splunk.com/paused" |
-| objectstorage.enterprise.splunk.com | "objectstorage.enterprise.splunk.com/paused" |
-| licensemaster.enterprise.splunk.com | "licensemaster.enterprise.splunk.com/paused" |
+| Customer Resource Definition            | Annotation                                       |
+| --------------------------------------- | ------------------------------------------------ |
+| queue.enterprise.splunk.com             | "queue.enterprise.splunk.com/paused"             |
+| clustermaster.enterprise.splunk.com     | "clustermaster.enterprise.splunk.com/paused"     |
+| clustermanager.enterprise.splunk.com    | "clustermanager.enterprise.splunk.com/paused"    |
+| indexercluster.enterprise.splunk.com    | "indexercluster.enterprise.splunk.com/paused"    |
+| ingestorcluster.enterprise.splunk.com   | "ingestorcluster.enterprise.splunk.com/paused"   |
+| objectstorage.enterprise.splunk.com     | "objectstorage.enterprise.splunk.com/paused"     |
+| licensemaster.enterprise.splunk.com     | "licensemaster.enterprise.splunk.com/paused"     |
 | monitoringconsole.enterprise.splunk.com | "monitoringconsole.enterprise.splunk.com/paused" |
 | searchheadcluster.enterprise.splunk.com | "searchheadcluster.enterprise.splunk.com/paused" |
-| standalone.enterprise.splunk.com | "standalone.enterprise.splunk.com/paused" |
+| standalone.enterprise.splunk.com        | "standalone.enterprise.splunk.com/paused"        |
 
 `Note: Removal of the annotation resets the default behavior`
 
@@ -966,7 +989,8 @@ spec:
 ```
 
 #### admin-managed-pv Annotations
-The admin-managed-pv annotation in the splunk-operator's Custom Resource allows the admin to control whether Persistent Volumes (PVs) are dynamically created for the StatefulSet associated with the CR. If set to `true`, no PVs will be created, and the Persistent Volume Claim templates in the StatefulSet manifest will include a selector block to match `app.kubernetes.io/instance` and `app.kubernetes.io/name` labels for pre-created PVs. This means that `/opt/splunk/etc` and `/opt/splunk/var` related PVCs will contain code block like below 
+
+The admin-managed-pv annotation in the splunk-operator's Custom Resource allows the admin to control whether Persistent Volumes (PVs) are dynamically created for the StatefulSet associated with the CR. If set to `true`, no PVs will be created, and the Persistent Volume Claim templates in the StatefulSet manifest will include a selector block to match `app.kubernetes.io/instance` and `app.kubernetes.io/name` labels for pre-created PVs. This means that `/opt/splunk/etc` and `/opt/splunk/var` related PVCs will contain code block like below
 
 ```
 apiVersion: v1
@@ -978,7 +1002,7 @@ kind: PersistentVolumeClaim
       app.kubernetes.io/name: cluster-manager
 ```
 
-To match selector definition like this, Persistent Volume must set labels accordingly 
+To match selector definition like this, Persistent Volume must set labels accordingly
 
 ```
 apiVersion: v1
@@ -992,7 +1016,8 @@ metadata:
 
 When admin-managed-pv is set to `false`, PVs will be dynamically created as usual, providing dedicated persistent storage for the StatefulSet.
 
-Here is an example of a Standalone with the admin-managed-pv annotation set. After 
+Here is an example of a Standalone with the admin-managed-pv annotation set. After
+
 ```
 apiVersion: enterprise.splunk.com/v4
 kind: Standalone
@@ -1003,7 +1028,9 @@ metadata:
   annotations:
     enterprise.splunk.com/admin-managed-pv: "true"
 ```
+
 ##### PV label values
+
 In order to prepare labels for CR's persistent volumes you need to know values beforehand
 Below is a table listing `app.kubernetes.io/name` values mapped to CRDs
 | Customer Resource Definition | app.kubernetes.io/name value |
@@ -1019,6 +1046,7 @@ Below is a table listing `app.kubernetes.io/name` values mapped to CRDs
 | standalone.enterprise.splunk.com | standalone |
 
 `app.kubernetes.io/instance` value consist of three elements concatenated with hyphens
+
 1. "splunk"
 2. provided by admin CR name
 3. CRD kind name
@@ -1026,6 +1054,7 @@ Below is a table listing `app.kubernetes.io/name` values mapped to CRDs
 For example `clusterManager` CR named "test" will have set `app.kubernetes.io/instance` as `splunk-test-cluster-manager`
 
 #### Container Logs
+
 The Splunk Enterprise CRDs deploy Splunkd in Kubernetes pods running [docker-splunk](https://github.com/splunk/docker-splunk) container images. Adding a couple of environment variables to the CR spec as follows produces `detailed container logs`:
 
 ```
@@ -1046,6 +1075,7 @@ spec:
 ```
 
 From the standalone above, here is a snippet from the detailed contianer log:
+
 ```
 TASK [splunk_common : Ensure license path] *************************************
 task path: /opt/ansible/roles/splunk_common/tasks/licenses/add_license.yml:15
@@ -1068,6 +1098,6 @@ ok: [localhost] => {
 }
 ```
 
-__POD Eviction - OOM__
+**POD Eviction - OOM**
 
-As oppose to throttling in case of CPU cycles starvation,  Kubernetes will evict a pod from the node if the pod's memory demands exceeds the value set in the ```limits``` parameter.
+As oppose to throttling in case of CPU cycles starvation, Kubernetes will evict a pod from the node if the pod's memory demands exceeds the value set in the `limits` parameter.
