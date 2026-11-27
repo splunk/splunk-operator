@@ -6,6 +6,8 @@ nav_order: 1
 
 # Managed PostgreSQL — Architecture Overview
 
+Use these diagrams to find which controller owns a step. If you are responding to an incident, start with [status and events](operate/observability/index.md#find-the-failing-component).
+
 This page is the map of how the Splunk Operator manages PostgreSQL. It shows the
 components involved, how each controller reconciles, and the lifecycle phases a
 `PostgresCluster` and `PostgresDatabase` move through.
@@ -264,9 +266,5 @@ stateDiagram-v2
 
 ## Where to go next
 
-- Operational guides: [scaling up](scaling-up.md), [scaling out](scaling-out.md),
-  [minor version upgrades](minor-version-upgrade.md),
-  [backup to object storage](backup-object-storage.md),
-  [backup with volume snapshots](backup-volume-snapshots.md),
-  [shared cluster readiness checks](deploy/verify.md),
-  [managed roles](postgresdatabase-managed-roles.md).
+- To set up PostgreSQL and check readiness, see [Deploy PostgreSQL](deploy/index.md).
+- To maintain a running cluster or resolve a failure, see [Operate PostgreSQL](operate/index.md).

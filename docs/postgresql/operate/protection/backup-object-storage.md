@@ -1,30 +1,29 @@
 ---
-title: Automated Backups via Object Storage (Barman)
-parent: PostgreSQL
+title: Back up to object storage
+parent: Protect and recover data
+grand_parent: Operate PostgreSQL
 nav_order: 2
 ---
 
 Image references below are template variables. Set them to approved complete
 `tag@sha256` references and render standalone YAML with `envsubst` before applying.
-See [image configuration](deploy/public-artifacts.md#pull-a-selected-image) for the
+See [image configuration](../../deploy/public-artifacts.md#pull-a-selected-image) for the
 required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
 
 
 # Automated Backups via Object Storage (Barman)
 
-If you are deploying the Helm-owned shared cluster, [configure backups in the Deploy guide](deploy/provision.md#configure-backups-before-enabling-the-cluster). Helm creates the class and cluster. Skip the class and cluster setup examples on this page for that deployment.
-
-This guide is for **platform teams** configuring automated PostgreSQL backups to S3-compatible object storage and **users** who need to understand backup status on their **`PostgresCluster`** instances.
+If Helm owns the shared cluster, [configure backups in Deploy](../../deploy/provision.md#configure-backups-before-enabling-the-cluster). Skip the class and cluster setup examples below. Once backups are enabled, [check a backup run](#53-verify-a-backup-run). Then [test recovery from the archive](disaster-recovery.md#run-an-isolated-restore-drill).
 
 The Splunk Operator uses the **barman-cloud CNPG plugin** (`barman-cloud.cloudnative-pg.io`) as the backup method. This enables:
 
 - **Full base backups** stored in object storage
-- **Continuous WAL archiving** — every WAL segment is shipped to the store immediately, enabling Point-In-Time Recovery (PITR) to any moment between backups
+- **Continuous WAL archiving** so you can replay archived changes as far as the archive allows
 - **Retention policies** — automatic pruning of old backups
 
 For CNPG backup internals, see [CloudNativePG — Barman Cloud Plugin](https://cloudnative-pg.io/plugin-barman-cloud/docs/).
 
-> **Choosing a backup method:** See [Automated Backups via Volume Snapshots](./backup-volume-snapshots.md) for the alternative CSI-based method. Both methods can coexist on the same cluster.
+> **Choosing a backup method:** See [Automated Backups via Volume Snapshots](backup-volume-snapshots.md) for the alternative CSI-based method. Both methods can coexist on the same cluster.
 
 ---
 
@@ -38,7 +37,7 @@ The operator:
 
 CNPG then:
 
-1. Archives every WAL segment to the `ObjectStore` destination as it is produced.
+1. Archives completed WAL segments to the `ObjectStore` destination.
 2. At each scheduled time, takes a full base backup and uploads it to the store.
 3. Updates schedule metadata on the `ScheduledBackup` status.
 
@@ -48,7 +47,7 @@ The Splunk Operator surfaces backup state on `PostgresCluster.status.backupStatu
 
 ## 2. Prerequisites
 
-- The **barman-cloud CNPG plugin** (`barmancloud.cnpg.io/v1 ObjectStore` CRD) must be installed on the cluster. The SOK Helm chart can install it with `plugin-barman-cloud.enabled=true`; see [backend Helm configuration](../deploy/Helm.md#postgresql-backend-controllers). When managing backends separately, install the plugin before creating PostgreSQL resources:
+- The **barman-cloud CNPG plugin** (`barmancloud.cnpg.io/v1 ObjectStore` CRD) must be installed on the cluster. The SOK Helm chart can install it with `plugin-barman-cloud.enabled=true`; see [backend Helm configuration](../../../deploy/Helm.md#postgresql-backend-controllers). When managing backends separately, install the plugin before creating PostgreSQL resources:
   ```bash
   helm upgrade --install barman-cloud cnpg/plugin-barman-cloud \
     --namespace cnpg-system --create-namespace
@@ -169,7 +168,7 @@ The operator creates and manages a `barmancloud.cnpg.io/v1 ObjectStore` resource
 
 The operator writes two conditions on every `PostgresCluster`:
 
-**`ObjectStoreReady`** — tracks the managed `ObjectStore` resource:
+`ObjectStoreReady` reports the status of the managed `ObjectStore`:
 
 | Status | Reason | Meaning |
 |--------|--------|---------|
@@ -177,7 +176,7 @@ The operator writes two conditions on every `PostgresCluster`:
 | `True` | `ObjectStoreDisabled` | Barman not configured in the class |
 | `False` | `ObjectStoreReconcileFailed` | Error creating/updating the ObjectStore |
 
-**`BackupReady`** — tracks the scheduled backup:
+`BackupReady` reports the status of the scheduled backup:
 
 | Status | Reason | Meaning |
 |--------|--------|---------|
@@ -201,18 +200,33 @@ status:
 | Field | Description |
 |-------|-------------|
 | `objectStore.enabled` | Whether object store backups are active |
-| `objectStore.lastScheduleTime` | When CNPG last ran a full base backup (populated after first backup) |
+| `objectStore.lastScheduleTime` | When CNPG last scheduled a base backup. This is not proof that it completed. |
 | `objectStore.nextScheduleTime` | Next scheduled base backup time |
 
 Note: WAL archiving runs **continuously** regardless of the schedule — the schedule controls only full base backups. `lastScheduleTime` and `nextScheduleTime` are empty until the first scheduled base backup fires.
 
-### 5.3 Verifying backups in S3
+### 5.3 Verify a backup run
+
+Find the CNPG `Backup` for the run you want to check. For an on-demand backup, use the name you gave it. For a scheduled backup, match `spec.cluster.name`, the scheduled run time, and the owner reference to the Barman `ScheduledBackup`. The Barman backup uses `spec.method: plugin` and `spec.pluginConfiguration.name: barman-cloud.cloudnative-pg.io`.
+
+Set `NAMESPACE` to the cluster namespace and `BACKUP` to the selected resource name. Make sure that `status.phase` is `completed`. A scheduled run time or an old file in the bucket does not show that this run succeeded.
 
 ```bash
-aws s3 ls s3://<bucket>/<prefix>/ --recursive | head -20
+kubectl get backups.postgresql.cnpg.io -n "$NAMESPACE"
+kubectl get backup.postgresql.cnpg.io "$BACKUP" -n "$NAMESPACE" -o yaml
 ```
 
-You should see both `base/` (full backups) and `wals/` (WAL segments):
+Set `BACKUP_ID` to the value of `status.backupId`. If the backup does not report an ID, use its start and stop times to identify the matching entry in the Barman backup catalog. Do not count this check as a pass if you cannot match the run.
+
+Set `DESTINATION_PATH` to the configured S3 destination, including its prefix. Set `SERVER_NAME` to the source cluster's archive name. Use the same `serverName` that you plan to use for recovery. Make sure that the matching base backup and the archived WAL are under that server directory:
+
+```bash
+ARCHIVE_ROOT="${DESTINATION_PATH%/}/$SERVER_NAME"
+aws s3 ls "$ARCHIVE_ROOT/base/$BACKUP_ID/" --recursive
+aws s3 ls "$ARCHIVE_ROOT/wals/" --recursive
+```
+
+For example, the base backup and WAL are under `my-cluster/`:
 
 ```
 2026-04-30T02:00:01Z   my-cluster/base/20260430T020000/backup.info
@@ -245,6 +259,26 @@ The `ObjectStore` status also shows the recovery window (first recoverability po
 kubectl get objectstore <cluster-name>-object-store -n <namespace> -o jsonpath='{.status}' | jq .
 ```
 
+### Take an on-demand base backup
+
+If the next scheduled backup is too late, create a CloudNativePG `Backup`. Use a new backup name. Set the namespace and cluster name to those of the managed CNPG cluster. Make sure that Barman backups are already configured before you apply this manifest.
+
+```yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: Backup
+metadata:
+  name: mydb-before-maintenance
+  namespace: <namespace>
+spec:
+  cluster:
+    name: <cnpg-cluster-name>
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+```
+
+[Check the backup run and its archive](#53-verify-a-backup-run) using the name `mydb-before-maintenance`. The on-demand backup does not change the schedule.
+
 ---
 
 ## 6. Retention
@@ -274,7 +308,7 @@ See [Restoring a PostgresCluster §8 (PITR)](restore-from-volume-snapshot.md#8-p
 
 ## 8. Schedule format
 
-See [Automated Backups via Volume Snapshots — Schedule format](./backup-volume-snapshots.md#7-schedule-format). The same 5-field cron applies; the operator translates it to CNPG's 6-field format internally.
+See [Automated Backups via Volume Snapshots — Schedule format](backup-volume-snapshots.md#7-schedule-format). The same 5-field cron applies; the operator translates it to CNPG's 6-field format internally.
 
 ---
 

@@ -23,7 +23,7 @@ Before you install the controllers, choose an artifact source and a webhook cert
 | Backups and recovery | [Configure shared PostgreSQL backups](provision.md#configure-backups-before-enabling-the-cluster). Choose the destination, credentials, schedule, and retention before enabling the cluster. |
 | Initial cluster sizing | [Size the cluster](cluster-policy.md#size-the-cluster-before-provisioning) for instance count, CPU, memory, storage, and connections. Choose a StorageClass and check node capacity. |
 | Connections | Decide whether the application needs PgBouncer. If it does, choose a mode that supports the driver's behavior. Review `sharedPostgres.connectionPooler` before enabling the cluster. |
-| Monitoring | Prepare a metrics collector. See the [dashboard requirements](../PostgreSQLObservabilityDashboard.md#assumptions) and [custom-metrics guide](../operate/observability/custom-metrics.md). |
+| Monitoring | Prepare a metrics collector. See the [dashboard requirements](../operate/observability/postgresql-observability-dashboard.md#assumptions) and [custom-metrics guide](../operate/observability/custom-metrics.md). |
 
 Start with [controller installation](install.md) to choose an artifact source. Use the [release catalog and verification guide](public-artifacts.md) when you need exact versions or verification steps. Retention on deletion is not a backup.
 
@@ -38,4 +38,4 @@ If both controllers are ready, start at step 2. If the Helm-owned cluster alread
 
 ## After deployment
 
-Use the operating guides for [backups and recovery](../backup-and-restore-choices.md), [scaling](../scaling-out.md), and [upgrades](../major-version-upgrade.md). If setup fails, start with the diagnostics on the page for the failed step.
+After the shared cluster is ready and the applicable checks pass, use [Operate PostgreSQL](../operate/index.md) to maintain it. If setup fails, start with the diagnostics on the page for the failed step.

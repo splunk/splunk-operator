@@ -1,20 +1,21 @@
 ---
-title: Automated Backups via Volume Snapshots
-parent: PostgreSQL
-nav_order: 1
+title: Back up with volume snapshots
+parent: Protect and recover data
+grand_parent: Operate PostgreSQL
+nav_order: 3
 ---
 
 Image references below are template variables. Set them to approved complete
 `tag@sha256` references and render standalone YAML with `envsubst` before applying.
-See [image configuration](deploy/public-artifacts.md#pull-a-selected-image) for the
+See [image configuration](../../deploy/public-artifacts.md#pull-a-selected-image) for the
 required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
 
 
 # Automated Backups via Volume Snapshots
 
-The Helm-owned shared cluster does not expose snapshot backup settings. For that deployment, use [Barman object storage](deploy/provision.md#configure-backups-before-enabling-the-cluster). The snapshot procedures below apply to clusters with class-level snapshot policy.
+The Helm-owned shared cluster does not expose snapshot backup settings. For that deployment, use [Barman object storage](../../deploy/provision.md#configure-backups-before-enabling-the-cluster). The snapshot procedures below apply to clusters with class-level snapshot policy.
 
-This guide is for **platform teams** configuring automated PostgreSQL backups and **users** who need to understand backup status on their **`PostgresCluster`** instances. The Splunk Operator uses Kubernetes CSI **Volume Snapshots** as the backup method, delegating snapshot execution to CloudNativePG.
+CloudNativePG takes snapshots through the Kubernetes Container Storage Interface (CSI). If a cluster already uses snapshots, [check backup status](#4-observing-backup-status) and [find the resulting snapshots](#5-finding-your-snapshots). After those checks pass, [test a snapshot restore](disaster-recovery.md#41-scenario-a--volume-snapshot-restore).
 
 For CNPG backup internals, see [CloudNativePG — Volume Snapshots (1.30)](https://cloudnative-pg.io/docs/devel/backup).
 
@@ -87,7 +88,7 @@ spec:
 - `config.backup.schedule` is **required** when `config.backup.enabled` is `true`.
 - At least one of `cnpg.backup.volumeSnapshot` or `cnpg.backup.barmanObjectStore` is **required** when `config.backup.enabled` is `true`.
 
-> **Object storage backups:** For S3/Barman-based backups instead of (or alongside) volume snapshots, see [Automated Backups via Object Storage](./backup-object-storage.md).
+> **Object storage backups:** For S3/Barman-based backups instead of (or alongside) volume snapshots, see [Automated Backups via Object Storage](backup-object-storage.md).
 
 ### 3.2 PostgresCluster (user / application team)
 
@@ -170,7 +171,7 @@ kubectl get volumesnapshots -n <namespace>
 
 ## 6. Snapshot retention
 
-**Important:** CNPG does **not** automatically prune volume snapshots. Automatic retention only applies to object storage backups — see [Automated Backups via Object Storage](./backup-object-storage.md#6-retention).
+**Important:** CNPG does **not** automatically prune volume snapshots. Automatic retention only applies to object storage backups — see [Automated Backups via Object Storage](backup-object-storage.md#6-retention).
 
 Cleanup depends on `snapshotOwnerReference`:
 

@@ -1,20 +1,19 @@
 ---
-title: Vertical Scaling
-parent: PostgreSQL
-nav_order: 6
+title: Change resources or expand storage
+parent: Scale and upgrade PostgreSQL
+grand_parent: Operate PostgreSQL
+nav_order: 2
 ---
 
 Image references below are template variables. Set them to approved complete
 `tag@sha256` references and render standalone YAML with `envsubst` before applying.
-See [image configuration](deploy/public-artifacts.md#pull-a-selected-image) for the
+See [image configuration](../../deploy/public-artifacts.md#pull-a-selected-image) for the
 required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
 
 
 # PostgresCluster Vertical Scaling
 
-This document describes how to change CPU and memory resources, and how to expand storage, for a `PostgresCluster`. It covers what the operator does during each operation, what level of interruption to expect, and how to track progress.
-
-Adding or removing instances is not covered here — see [Scaling](scaling-out.md).
+Use this procedure to change CPU or memory per instance or to expand its storage. If you need to change the number of instances, [add or remove instances](scaling-out.md) instead. If Helm owns the cluster, [set resources or storage in Helm values](index.md#if-helm-owns-the-shared-cluster). Use the status checks below for either deployment.
 
 ### How vertical scaling works
 
@@ -25,12 +24,12 @@ Each can be defined in either field:
 - `PostgresClusterClass.spec.config.resources` / `PostgresClusterClass.spec.config.storage`
 - `PostgresCluster.spec.resources` / `PostgresCluster.spec.storage`
 
-If both are set, the `PostgresCluster` value takes effect for that cluster. Removing a `spec.resources` override returns the cluster to the class default on the next reconcile. `spec.storage` cannot be removed once set — the admission webhook rejects the update (see [Validation rules](#validation-rules)).
+If both are set, the `PostgresCluster` value takes effect for that cluster. Removing a `spec.resources` override returns the cluster to the class default on the next reconcile. After you set `spec.storage`, the admission webhook [rejects requests to remove it](#validation-rules).
 
 When resources or storage change:
 
 - the operator patches the managed CNPG `Cluster` spec
-- CNPG applies the change — CPU/memory triggers a rolling restart; storage triggers PVC expansion
+- CNPG restarts instances in sequence for CPU or memory changes. For storage changes, it expands the PVCs.
 - `PostgresCluster.status.phase` moves to `Provisioning` while the change is in progress
 - the cluster returns to `Ready` once CNPG is healthy and all PVCs have finished resizing
 
@@ -49,7 +48,7 @@ CNPG transitions through `PhaseInplacePrimaryRestart`, `PhaseApplyingConfigurati
 
 Storage changes are **one-directional**: `spec.storage` can only be increased. The admission webhook rejects any attempt to decrease it.
 
-CNPG expands the underlying PVCs in place using the Kubernetes volume expansion API. No pod restarts are required in most cases, though the kubelet may need to resize the filesystem while the pod is running. Progress is tracked via `cnpgCluster.status.resizingPVC` — the operator holds `status.phase=Provisioning` until that list is empty.
+CNPG expands the existing PVCs through the Kubernetes volume expansion API. This usually does not restart Pods. The kubelet can resize a filesystem while the Pod runs. The operator keeps `status.phase=Provisioning` until `cnpgCluster.status.resizingPVC` is empty.
 
 Storage expansion requires the `StorageClass` to have `allowVolumeExpansion: true`. If the class does not support expansion, the PVC resize will remain pending indefinitely.
 
@@ -62,13 +61,13 @@ Storage expansion requires the `StorageClass` to have `allowVolumeExpansion: tru
 
 ### Procedure
 
-1. Confirm the cluster is `Ready`.
+1. Make sure that the cluster is `Ready`.
 2. Update `spec.resources` or `spec.storage` in the tracked manifest.
 3. Review and commit the manifest change.
 4. Apply the manifest with `kubectl apply`.
 5. Watch progress until `status.phase=Ready`.
 
-Example — increase CPU and memory:
+Example: increase CPU and memory
 
 ```yaml
 apiVersion: platform.splunk.com/v1alpha1
@@ -93,7 +92,7 @@ spec:
       memory: "2Gi"
 ```
 
-Example — expand storage:
+Example: expand storage
 
 ```yaml
 apiVersion: platform.splunk.com/v1alpha1
@@ -144,7 +143,7 @@ Common events include:
 - `ClusterUpdateStarted` — operator patched the CNPG cluster spec
 - `ClusterReady` — cluster returned to a healthy state
 
-You may also see additional namespace events from CNPG and Kubernetes:
+CNPG and Kubernetes can report these events in the namespace:
 
 - CNPG lifecycle events such as `InplacePrimaryRestart`, `Switchover`, `ApplyingConfiguration`
 - Kubernetes PVC events such as `Resizing`, `FileSystemResizeSuccessful`

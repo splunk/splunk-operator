@@ -1,27 +1,17 @@
 ---
-title: Observability Dashboard
-parent: PostgreSQL
-nav_order: 4
+title: Sample Grafana dashboard
+parent: Monitor and diagnose PostgreSQL
+grand_parent: Operate PostgreSQL
+nav_order: 1
 ---
 
 # PostgreSQL Observability Dashboard Example
 
-This file provides a reference Grafana dashboard for the PostgreSQL observability model described in the PostgreSQL observability notes.
-
-The dashboard JSON lives at:
-
-- [PostgreSQLObservabilityDashboard.json](./PostgreSQLObservabilityDashboard.json)
+Download the [sample Grafana dashboard](postgresql-observability-dashboard.json) to compare PostgreSQL, PgBouncer, and Splunk Operator metrics.
 
 ## Purpose
 
-This dashboard is a reference artifact only.
-
-It is meant to show how a Grafana dashboard could combine:
-
-- runtime PostgreSQL and PgBouncer metrics exposed through the `PostgresCluster` observability path
-- controller metrics emitted by the PostgreSQL controllers
-
-It is not meant to imply that Grafana runtime resources are managed by the operator.
+The dashboard combines runtime metrics for PostgreSQL and PgBouncer with metrics from the PostgreSQL controllers. The Splunk Operator does not deploy or manage Grafana.
 
 ## Panels Included
 
@@ -63,11 +53,7 @@ Use the following complementary metrics together:
 | `splunk_operator_postgres_provisioning_duration_seconds` | One complete, user-visible time-to-Ready cycle. | Included: CNPG/Kubernetes convergence, image pulls, scheduling, recovery, retries, operator downtime, and time between reconciles. |
 | `controller_runtime_reconcile_time_seconds` | One active controller reconcile invocation. | Excluded between invocations: a `RequeueAfter` delay or time while a dependency converges does not accumulate. Synchronous API and database calls within that invocation are included. |
 
-A high time-to-Ready P99 with a low reconcile-time P99 indicates that most of
-the delay occurred outside active controller work, commonly while waiting for
-CNPG, Kubernetes, or another dependency. These aggregate histograms should not
-be subtracted to calculate an exact dependency-wait duration; use resource
-phase and condition transitions to identify the specific blocker.
+If time-to-Ready P99 is high and reconcile-time P99 is low, look for waits outside active controller work. Check resource phases and conditions to find what delayed readiness. Do not subtract the two aggregate histograms to measure the wait.
 
 Both metrics use `controller="postgrescluster"` or
 `controller="postgresdatabase"`, so their series can be grouped and joined by
@@ -118,7 +104,7 @@ The sample queries assume:
 - the PgBouncer metrics services are named `<cluster>-pooler-rw-metrics` and `<cluster>-pooler-ro-metrics`
 - the controller metrics branch is present for the `splunk_operator_postgres_*` metrics
 
-If your Prometheus relabeling differs, you may need to adjust the dashboard queries.
+If Prometheus relabels these metrics differently, compare its labels with the dashboard queries. Update the queries where the labels differ.
 
 ## Import Notes
 
@@ -131,7 +117,7 @@ To use the dashboard:
 
 ## Notes On Candidate Metrics
 
-Some PgBouncer queries in the sample use metrics that are good candidates but should still be verified against actual exporter output in the merged branch:
+Before you use the sample PgBouncer panels, make sure that the exporter provides these metrics:
 
 - `cnpg_pgbouncer_pools_cl_waiting`
 - `cnpg_pgbouncer_pools_maxwait`

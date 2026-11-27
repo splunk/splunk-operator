@@ -1,18 +1,19 @@
 ---
-title: Recovering PostgresDatabase Terminal Failures
-parent: PostgreSQL
-nav_order: 5
+title: Recover a failed database resource
+parent: Manage database access
+grand_parent: Operate PostgreSQL
+nav_order: 2
 ---
 
 # Recovering PostgresDatabase Terminal Failures
 
-This guide explains how to recover a `PostgresDatabase` when the operator stops reconciliation after detecting a terminal failure.
+Use this procedure when the operator reports a terminal failure for a `PostgresDatabase`. A terminal failure stops retries for the current specification.
 
 ## When this applies
 
-During `PostgresDatabase` reconciliation, the operator creates or validates role Secrets, publishes role intent for the `PostgresCluster` controller to reconcile, creates databases and ConfigMaps, and then grants privileges for each configured read-write role (the default is `<database>_rw`). See [PostgresDatabase Managed Roles](postgresdatabase-managed-roles.md) for the role handoff between controllers.
+The operator first creates or checks role Secrets. It tells the `PostgresCluster` controller which roles the database needs. It creates databases and ConfigMaps, then grants privileges to each read-write role. The default role is `<database>_rw`. See [managed database roles](postgresdatabase-managed-roles.md) for how the controllers share this work.
 
-Most reconciliation errors are treated as retryable and reconciliation continues automatically. Some known user-actionable errors are terminal because retrying the same spec is not expected to succeed without user intervention. When a terminal failure is detected, the operator marks the `PostgresDatabase` as `Failed`, records a failure type in status, and stops retrying that same spec generation.
+The operator retries most errors. If retrying the same specification cannot fix a known failure, the operator marks `PostgresDatabase` as `Failed`. It records the failure type and stops retries for that generation.
 
 ## Terminal reconciliation failures
 
@@ -23,7 +24,7 @@ When this happens, the operator:
 - stops retrying that failure for the current `metadata.generation`
 - resumes after a spec change creates a new generation
 
-`status.conditions` is the canonical status surface for users and automation. `status.reconcileFailureType` is controller state used to decide whether reconciliation should stay blocked for the current generation.
+Read `status.conditions` to find the failed step. The controller uses `status.reconcileFailureType` to decide whether to block retries for the current generation.
 
 Internally, terminal errors use a generic terminal marker and the controller maps that marker to a status failure type for the phase being reconciled.
 

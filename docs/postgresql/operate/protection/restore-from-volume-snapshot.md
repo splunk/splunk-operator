@@ -1,18 +1,21 @@
 ---
-title: Restoring from a Volume Snapshot
-parent: PostgreSQL
-nav_order: 6
+title: Restore API and compatibility
+parent: Protect and recover data
+grand_parent: Operate PostgreSQL
+nav_order: 5
 ---
 
 Image references below are template variables. Set them to approved complete
 `tag@sha256` references and render standalone YAML with `envsubst` before applying.
-See [image configuration](deploy/public-artifacts.md#pull-a-selected-image) for the
+See [image configuration](../../deploy/public-artifacts.md#pull-a-selected-image) for the
 required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
 
 
 # Restoring a PostgresCluster
 
-This guide covers restoring a PostgreSQL cluster from a backup. It is intended for **users** who need to recover a `PostgresCluster`. Three restore modes are supported:
+Use this page for restore fields, target types, and compatibility rules. If you are responding to data loss or rehearsing a restore, start with the [recovery runbook](disaster-recovery.md#3-failure-mode--recovery-path).
+
+The API supports three restore modes:
 
 - **Volume snapshot** — recover to the exact moment a snapshot was taken ([§3](#3-performing-a-restore)).
 - **Point-in-time recovery (PITR)** — recover to an arbitrary timestamp, transaction ID, or LSN by replaying WAL from an object-store archive on top of a volume snapshot or object-store base backup ([§8](#8-point-in-time-recovery-pitr)).
@@ -24,7 +27,7 @@ Before following this guide, ensure your `PostgresClusterClass` has backups conf
 
 ## 1. How restore works
 
-Restoring a cluster is modelled as **creating a new `PostgresCluster`** with a `bootstrapFrom` field that points to an existing `VolumeSnapshot`. The operator bootstraps the underlying database from the snapshot instead of initializing a fresh empty database.
+Create a new `PostgresCluster` to restore data. Set `bootstrapFrom` to the volume snapshot or object-storage source. The operator loads that backup instead of initializing an empty database.
 
 The original cluster is not affected — it continues running independently. You manage both clusters separately and delete the original when you are satisfied with the restored one.
 
@@ -169,7 +172,7 @@ The operator will:
 2. Publish role intent on the `PostgresDatabase` and wait for the `PostgresCluster` to reconcile the managed roles (`myapp_admin`, `myapp_rw`).
 3. Grant the appropriate privileges on the database.
 
-Your application can then connect using the generated secrets. The data is immediately accessible — the credential sweep does not affect the data itself, only the ability to authenticate. For more detail, see [PostgresDatabase Managed Roles](postgresdatabase-managed-roles.md).
+Your application can then connect using the generated secrets. The data is immediately accessible — the credential sweep does not affect the data itself, only the ability to authenticate. For more detail, see [PostgresDatabase Managed Roles](../access/postgresdatabase-managed-roles.md).
 
 ---
 

@@ -1,16 +1,15 @@
 ---
-title: Minor Version Upgrades
-parent: PostgreSQL
+title: Upgrade within one major version
+parent: Scale and upgrade PostgreSQL
+grand_parent: Operate PostgreSQL
 nav_order: 3
 ---
 
 ## PostgreSQL Minor Version Upgrades
 
-This document describes how to perform a PostgreSQL minor version upgrade for a Splunk Operator `PostgresCluster`, what upgrade behaviors are available, and what level of interruption to expect.
+Use this procedure to change the image within one PostgreSQL major version. If Helm owns the cluster, [change the pinned image in Helm values](index.md#if-helm-owns-the-shared-cluster). The same readiness and client checks apply.
 
-Examples here use `17.10 -> 17.12`, but the same process applies to any minor version upgrade within the same PostgreSQL major version.
-
-Backups and major-version upgrades are not covered here.
+The examples use `17.10 -> 17.12`. If the first number changes, use the [major version upgrade guide](major-version-upgrade.md) instead.
 
 ### How minor upgrades work
 
@@ -212,13 +211,13 @@ Common events include:
 - `ClusterUpdateStarted`
 - `ClusterReady`
 
-You may also see additional namespace events from CNPG and Kubernetes, such as:
+CNPG and Kubernetes can report these events in the namespace:
 
 - CNPG lifecycle events like `UpgradingInstance` and `Switchover`
 - `PostgresDatabase` readiness events
 - normal pod lifecycle events such as `Scheduled`, `Pulling`, `Started`, and `Killing`
 
-`ClusterDegraded` is not part of the intended steady-state upgrade sequence, but it may still appear during adjacent reconciliation transitions.
+`ClusterDegraded` is not an expected upgrade event. It can appear during other reconciliation transitions.
 
 ### Rollback to the earlier patch version
 

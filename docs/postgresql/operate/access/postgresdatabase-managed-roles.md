@@ -1,10 +1,13 @@
 ---
-title: PostgresDatabase Managed Roles
-parent: PostgreSQL
-nav_order: 7
+title: Inspect managed database roles
+parent: Manage database access
+grand_parent: Operate PostgreSQL
+nav_order: 1
 ---
 
 # PostgresDatabase Managed Roles
+
+If an application cannot log in, use this page to find the expected role, Secret, and reconciliation status. If `PostgresDatabase` reports a terminal failure, [fix the failure and let reconciliation resume](postgresdatabase-privileges-retry.md).
 
 A `PostgresDatabase` declares one or more application databases for an existing
 `PostgresCluster`. For each `spec.databases[]` entry, the operator manages two
