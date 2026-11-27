@@ -45,29 +45,29 @@ versions are independent of PostgreSQL image versions.
 
 ## Published release
 
-The November 6, 2026 release is in `releases/postgresok-2026-11-06/`. Include the build identifier `postgresok-ac78e560-43371564` if you report an issue.
+The November 27, 2026 release is in `releases/postgresok-2026-11-27/`. Include the build identifier `postgresok-4a5880a4-44271065` if you report an issue. The [November 6 manifest](../releases/postgresok-2026-11-06/release-manifest.json) remains available.
 It contains six images and two Helm charts. Each image includes `linux/amd64`
 and `linux/arm64`.
 
 | Component | Published version tag | Docker Hub |
 | --- | --- | --- |
-| CNPG | `v1-30-1-splunk.1-ci.a1b7ebc9e8ad` | [Tags](https://hub.docker.com/r/splunk/postgresok-cnpg/tags) |
-| PostgreSQL 17 | `17.10-splunk.1-ci.a1b7ebc9e8ad` | [Tags](https://hub.docker.com/r/splunk/postgresok-postgresql/tags) |
-| PostgreSQL 18 | `18.1-splunk.1-ci.a1b7ebc9e8ad` | [Tags](https://hub.docker.com/r/splunk/postgresok-postgresql/tags) |
-| PgBouncer | `pgbouncer-1-26-0-splunk.1-ci.a1b7ebc9e8ad` | [Tags](https://hub.docker.com/r/splunk/postgresok-pgbouncer/tags) |
-| Barman controller | `v0-15-1-splunk.1-ci.a1b7ebc9e8ad` | [Tags](https://hub.docker.com/r/splunk/postgresok-plugin-barman-cloud/tags) |
-| Barman sidecar | `v0-15-1-splunk.1-ci.a1b7ebc9e8ad` | [Tags](https://hub.docker.com/r/splunk/postgresok-plugin-barman-cloud-sidecar/tags) |
-| CNPG chart | `0.29.1-splunk.1.p43368666.ga1b7ebc9e8ad` | [Tags](https://hub.docker.com/r/splunk/postgresok-helm-cloudnative-pg/tags) |
-| Barman chart | `0.8.1-splunk.1.p43368666.ga1b7ebc9e8ad` | [Tags](https://hub.docker.com/r/splunk/postgresok-helm-plugin-barman-cloud/tags) |
+| CNPG | `v1-30-1-splunk.3-ci.e3f9db841236` | [Tags](https://hub.docker.com/r/splunk/postgresok-cnpg/tags) |
+| PostgreSQL 17 | `17.12-splunk.4-ci.e3f9db841236` | [Tags](https://hub.docker.com/r/splunk/postgresok-postgresql/tags) |
+| PostgreSQL 18 | `18.1-splunk.4-ci.e3f9db841236` | [Tags](https://hub.docker.com/r/splunk/postgresok-postgresql/tags) |
+| PgBouncer | `pgbouncer-1-26-0-splunk.4-ci.e3f9db841236` | [Tags](https://hub.docker.com/r/splunk/postgresok-pgbouncer/tags) |
+| Barman controller | `v0-15-1-splunk.10-ci.e3f9db841236` | [Tags](https://hub.docker.com/r/splunk/postgresok-plugin-barman-cloud/tags) |
+| Barman sidecar | `v0-15-1-splunk.10-ci.e3f9db841236` | [Tags](https://hub.docker.com/r/splunk/postgresok-plugin-barman-cloud-sidecar/tags) |
+| CNPG chart | `0.29.1-splunk.1.p44238692.ge3f9db841236` | [Tags](https://hub.docker.com/r/splunk/postgresok-helm-cloudnative-pg/tags) |
+| Barman chart | `0.8.1-splunk.1.p44238692.ge3f9db841236` | [Tags](https://hub.docker.com/r/splunk/postgresok-helm-plugin-barman-cloud/tags) |
 
 The published image tags include a `-ci.` suffix. Use the complete tags unchanged,
 together with the digests in the release manifest.
 
 ## Select and verify a release
 
-The public [release manifest](../releases/postgresok-2026-11-06/release-manifest.json),
-[production signing public key](../releases/postgresok-2026-11-06/postgresok-production-signing.pub),
-and [key fingerprint](../releases/postgresok-2026-11-06/postgresok-production-signing.spki.sha256)
+The public [release manifest](../releases/postgresok-2026-11-27/release-manifest.json),
+[production signing public key](../releases/postgresok-2026-11-27/postgresok-production-signing.pub),
+and [key fingerprint](../releases/postgresok-2026-11-27/postgresok-production-signing.spki.sha256)
 are linked above. Save all three files in the same directory. The manifest covers
 all six images and both charts. This public catalog retains artifact versions,
 source revisions, public references, digests, and chart package checksums.
@@ -75,7 +75,7 @@ It omits internal registry locations and CI evidence links and uses the
 `public-release` manifest format, version 1. Its SHA-256 is:
 
 ```text
-d5926a0cc4cbc9c5ca30aab5879a22ab2d29743b216a53c85aac4f3ac1f72840
+17a9be298863578c2b3fa93147009f00c8b3b13f4cce6865d61b72a8ee49b9d6
 ```
 
 From that directory, check the manifest against the SHA-256 above:
@@ -85,7 +85,7 @@ set -euo pipefail
 export RELEASE_MANIFEST="$PWD/release-manifest.json"
 MANIFEST_SHA256="$(shasum -a 256 "$RELEASE_MANIFEST" | awk '{print $1}')"
 test "$MANIFEST_SHA256" = \
-  "d5926a0cc4cbc9c5ca30aab5879a22ab2d29743b216a53c85aac4f3ac1f72840"
+  "17a9be298863578c2b3fa93147009f00c8b3b13f4cce6865d61b72a8ee49b9d6"
 ```
 
 The checksum detects changes to the file. It does not identify the publisher or replace signature verification. Use the manifest's `public` references to download artifacts. You need only public registry access and the verification files above.

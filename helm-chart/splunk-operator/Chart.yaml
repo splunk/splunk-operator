@@ -58,11 +58,11 @@ dependencies:
     condition: cert-manager.enabled
   - name: postgresok-helm-cloudnative-pg
     alias: cloudnative-pg
-    version: "0.29.1-splunk.1.p43368666.ga1b7ebc9e8ad"
+    version: "0.29.1-splunk.1.p44238692.ge3f9db841236"
     repository: "oci://registry-1.docker.io/splunk"
     condition: cloudnative-pg.enabled
   - name: postgresok-helm-plugin-barman-cloud
     alias: plugin-barman-cloud
-    version: "0.8.1-splunk.1.p43368666.ga1b7ebc9e8ad"
+    version: "0.8.1-splunk.1.p44238692.ge3f9db841236"
     repository: "oci://registry-1.docker.io/splunk"
     condition: plugin-barman-cloud.enabled

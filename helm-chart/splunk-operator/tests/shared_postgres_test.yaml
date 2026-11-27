@@ -56,12 +56,15 @@ tests:
     documentIndex: 1
     asserts:
       - equal: {path: spec.postgresVersion, value: "18"}
-      - matchRegex:
+      - equal:
           path: 'spec.images.postgresql["17"]'
-          pattern: '^registry-1.docker.io/splunk/postgresok-postgresql:17.10-splunk.1-ci.a1b7ebc9e8ad@sha256:[0-9a-f]{64}$'
-      - matchRegex:
+          value: registry-1.docker.io/splunk/postgresok-postgresql:17.12-splunk.4-ci.e3f9db841236@sha256:60301caf5317a74aaa2d5847fcd329da9d532419e08b70aefb2794d82c1c8bce
+      - equal:
           path: 'spec.images.postgresql["18"]'
-          pattern: '^registry-1.docker.io/splunk/postgresok-postgresql:18.1-splunk.1-ci.a1b7ebc9e8ad@sha256:[0-9a-f]{64}$'
+          value: registry-1.docker.io/splunk/postgresok-postgresql:18.1-splunk.4-ci.e3f9db841236@sha256:70d8e6c26d459bf5ad8821b815a3a594997e0d7bca7f4e9364ede8e34a683881
+      - equal:
+          path: spec.images.pgbouncer
+          value: registry-1.docker.io/splunk/postgresok-pgbouncer:pgbouncer-1-26-0-splunk.4-ci.e3f9db841236@sha256:f8af01929141923be0c77ad27ce83099eff305a921717c396bf5e7817ef1c4e2
   - it: passes storage resources and scheduling to the class
     set:
       sharedPostgres.storageClass: encrypted

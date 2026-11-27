@@ -11,7 +11,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: &cnpgImage registry-1.docker.io/splunk/postgresok-cnpg:v1-30-1-splunk.1-ci.a1b7ebc9e8ad@sha256:942ba5ac9def0ce28078dd9427ef000cc9f3daf956f947b256e57987a6d2ad7f
+          value: &cnpgImage registry-1.docker.io/splunk/postgresok-cnpg:v1-30-1-splunk.3-ci.e3f9db841236@sha256:1748ab4c6f04cb9c2a2d2a573bafffe52063cd3e04da43e22b40160edb95d177
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -26,7 +26,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: registry-1.docker.io/splunk/postgresok-plugin-barman-cloud:v0-15-1-splunk.1-ci.a1b7ebc9e8ad@sha256:4666ed27c5a86b45f6d69b12644e1840b73610adf8bf325343fe609159d372ba
+          value: registry-1.docker.io/splunk/postgresok-plugin-barman-cloud:v0-15-1-splunk.10-ci.e3f9db841236@sha256:645383fbfa30118538d616494cbf47049beb852f8dacf5e4af2698b1de317587
       - equal:
           path: spec.selector.matchLabels["app.kubernetes.io/name"]
           value: plugin-barman-cloud
@@ -36,7 +36,7 @@ tests:
     asserts:
       - equal:
           path: data.SIDECAR_IMAGE
-          value: registry-1.docker.io/splunk/postgresok-plugin-barman-cloud-sidecar:v0-15-1-splunk.1-ci.a1b7ebc9e8ad@sha256:288674a51fb4a574dbb778a2b9f125fe81614f00e429617c963401296d588b66
+          value: registry-1.docker.io/splunk/postgresok-plugin-barman-cloud-sidecar:v0-15-1-splunk.10-ci.e3f9db841236@sha256:82c49fcb005a8993fa3e04040bde1744607958b130a088af435b7564f4067602
   - it: passes CNPG mirror credentials and bootstrap reference together
     template: charts/cloudnative-pg/templates/deployment.yaml
     set:
@@ -49,7 +49,7 @@ tests:
           value: [{name: cnpg-reader}]
       - equal:
           path: spec.template.spec.containers[0].image
-          value: &cnpgMirrorImage mirror.example.com/backend/cnpg:v1-30-1-splunk.1-ci.a1b7ebc9e8ad@sha256:942ba5ac9def0ce28078dd9427ef000cc9f3daf956f947b256e57987a6d2ad7f
+          value: &cnpgMirrorImage mirror.example.com/backend/cnpg:v1-30-1-splunk.3-ci.e3f9db841236@sha256:1748ab4c6f04cb9c2a2d2a573bafffe52063cd3e04da43e22b40160edb95d177
       - contains:
           path: spec.template.spec.containers[0].env
           content:
@@ -68,7 +68,7 @@ tests:
           value: [{name: barman-reader}]
       - equal:
           path: spec.template.spec.containers[0].image
-          value: mirror.example.com/backend/barman:v0-15-1-splunk.1-ci.a1b7ebc9e8ad@sha256:4666ed27c5a86b45f6d69b12644e1840b73610adf8bf325343fe609159d372ba
+          value: mirror.example.com/backend/barman:v0-15-1-splunk.10-ci.e3f9db841236@sha256:645383fbfa30118538d616494cbf47049beb852f8dacf5e4af2698b1de317587
   - it: passes an independent Barman sidecar mirror
     template: charts/plugin-barman-cloud/templates/configmap.yaml
     set:
@@ -78,7 +78,7 @@ tests:
     asserts:
       - equal:
           path: data.SIDECAR_IMAGE
-          value: workloads.example.com/backend/sidecar:v0-15-1-splunk.1-ci.a1b7ebc9e8ad@sha256:288674a51fb4a574dbb778a2b9f125fe81614f00e429617c963401296d588b66
+          value: workloads.example.com/backend/sidecar:v0-15-1-splunk.10-ci.e3f9db841236@sha256:82c49fcb005a8993fa3e04040bde1744607958b130a088af435b7564f4067602
   - it: omits both controllers and CRDs by default
     asserts:
       - hasDocuments:

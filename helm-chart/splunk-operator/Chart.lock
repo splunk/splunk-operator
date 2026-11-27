@@ -4,9 +4,9 @@ dependencies:
   version: v1.21.3
 - name: postgresok-helm-cloudnative-pg
   repository: oci://registry-1.docker.io/splunk
-  version: 0.29.1-splunk.1.p43368666.ga1b7ebc9e8ad
+  version: 0.29.1-splunk.1.p44238692.ge3f9db841236
 - name: postgresok-helm-plugin-barman-cloud
   repository: oci://registry-1.docker.io/splunk
-  version: 0.8.1-splunk.1.p43368666.ga1b7ebc9e8ad
-digest: sha256:7ffb1c373849eac0430ed7a32cb2d8d4396ddcf3316c318782ee2bedfc9182fa
-generated: "2026-11-09T14:59:48.315776+01:00"
+  version: 0.8.1-splunk.1.p44238692.ge3f9db841236
+digest: sha256:24bd66121165e73ac41c210fd74f912684ea635a8482197be9dddda32a63bacc
+generated: "2026-11-27T11:52:09.059999+01:00"

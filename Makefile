@@ -198,7 +198,7 @@ docs-preview: ## Preview documentation locally with Jekyll (requires Ruby and bu
 HELM_OPERATOR_CHART = helm-chart/splunk-operator
 HELM_UF_CHART = helm-chart/splunk-universalforwarder
 HELM_ENTERPRISE_CHART = helm-chart/splunk-enterprise
-POSTGRES_RELEASE_MANIFEST ?= docs/postgresql/releases/postgresok-2026-11-06/release-manifest.json
+POSTGRES_RELEASE_MANIFEST ?= docs/postgresql/releases/postgresok-2026-11-27/release-manifest.json
 
 .PHONY: helm-dependencies
 helm-dependencies: ## Build and verify locked operator chart dependencies

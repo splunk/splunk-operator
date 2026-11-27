@@ -1,0 +1,284 @@
+{
+  "manifest_type": "public-release",
+  "schema_version": 1,
+  "release": {
+    "created_at": "2026-11-27T10:40:49Z",
+    "version": "postgresok-4a5880a4-44271065"
+  },
+  "source": {
+    "ref": "main",
+    "commit": "4a5880a47e8f1dc125107b371513a44b636797e9"
+  },
+  "artifacts": [
+    {
+      "id": "cloudnative-pg",
+      "kind": "image",
+      "version": "v1-30-1-splunk.3-ci.e3f9db841236",
+      "sources": [
+        {
+          "archive_sha256": "a7a814f2c5a67412de95061190772f6f297727c2a6178b0f54fbf766b8d56a59",
+          "commit": "2a35abb4628f209d149825ef3c38011e0701ff2f",
+          "kind": "source-archive",
+          "ref": "v1.30.1",
+          "repository": "https://github.com/cloudnative-pg/cloudnative-pg"
+        },
+        {
+          "commit": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "kind": "patch",
+          "path": "patches/cloudnative-pg/0001-pin-grpc-1.83.2.patch",
+          "ref": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "sha256": "3f3c27e2061551c924fa752aabab44057ad3293b3bc58bdb9cf1b36796419385"
+        },
+        {
+          "commit": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "kind": "patch",
+          "path": "patches/cloudnative-pg/0002-x-net-0.62.0.patch",
+          "ref": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "sha256": "80ad93e3bfa744c709e8ea026267f50faec2beed89d45b99e6355f45dd33105b"
+        }
+      ],
+      "public": {
+        "digest": "sha256:1748ab4c6f04cb9c2a2d2a573bafffe52063cd3e04da43e22b40160edb95d177",
+        "reference": "registry-1.docker.io/splunk/postgresok-cnpg:v1-30-1-splunk.3-ci.e3f9db841236@sha256:1748ab4c6f04cb9c2a2d2a573bafffe52063cd3e04da43e22b40160edb95d177"
+      }
+    },
+    {
+      "id": "postgresql-17",
+      "kind": "image",
+      "version": "17.12-splunk.4-ci.e3f9db841236",
+      "sources": [
+        {
+          "archive_sha256": "fdd6056ff16a5ef679d160d5339465c8ab48036b29fe63b9fb1c40254dc8e555",
+          "commit": "702b3dc86d35bcc08c8e23cffa3c4d9fe9d32c85",
+          "kind": "source-archive",
+          "ref": "REL_17_12",
+          "repository": "https://github.com/postgres/postgres"
+        },
+        {
+          "commit": "c54c55427325a089e5ebcf47ad89af50680c7e8e",
+          "kind": "splcore-source",
+          "ref": "c54c55427325a089e5ebcf47ad89af50680c7e8e"
+        },
+        {
+          "commit": "c54c55427325a089e5ebcf47ad89af50680c7e8e",
+          "kind": "patch",
+          "path": "thirdparty/postgresql/postgresql-17.4-pgflex-path-env.patch",
+          "ref": "c54c55427325a089e5ebcf47ad89af50680c7e8e",
+          "sha256": "d1ec2860c230e428c239e37ebb8a2efe41b14d7ce3e75b93209107463b81d351"
+        },
+        {
+          "commit": "c54c55427325a089e5ebcf47ad89af50680c7e8e",
+          "kind": "patch",
+          "path": "thirdparty/postgresql/postgres-17.4-ldflags_sl.patch",
+          "ref": "c54c55427325a089e5ebcf47ad89af50680c7e8e",
+          "sha256": "c141c7a181b65c0d3f9612c96394a0cb63a93627d601d96988ea4e59c14d5a7c"
+        },
+        {
+          "commit": "c54c55427325a089e5ebcf47ad89af50680c7e8e",
+          "kind": "patch",
+          "path": "thirdparty/postgresql/postgresql-17.6-prefix_fix.patch",
+          "ref": "c54c55427325a089e5ebcf47ad89af50680c7e8e",
+          "sha256": "e2c0884f7759c4577d1c603452cf5cf264c4f0e177fbc162f38945d5366903f7"
+        },
+        {
+          "commit": "c54c55427325a089e5ebcf47ad89af50680c7e8e",
+          "kind": "patch",
+          "path": "thirdparty/postgresql/postgresql-17.7-tls13-guc.patch",
+          "ref": "c54c55427325a089e5ebcf47ad89af50680c7e8e",
+          "sha256": "dc2bb2c3e3bd3a5e03609898d7930e213aca09b613f55d2ac47ae39c78eca614"
+        }
+      ],
+      "public": {
+        "digest": "sha256:60301caf5317a74aaa2d5847fcd329da9d532419e08b70aefb2794d82c1c8bce",
+        "reference": "registry-1.docker.io/splunk/postgresok-postgresql:17.12-splunk.4-ci.e3f9db841236@sha256:60301caf5317a74aaa2d5847fcd329da9d532419e08b70aefb2794d82c1c8bce"
+      }
+    },
+    {
+      "id": "postgresql-18",
+      "kind": "image",
+      "version": "18.1-splunk.4-ci.e3f9db841236",
+      "sources": [
+        {
+          "archive_sha256": "bde6fc3ea30063a0f9bc721b9a6c63527606edb47d24e79889cebae9f91ee1e2",
+          "commit": "4b324845ba5d24682b9b3708a769f00d160afbd7",
+          "kind": "source-archive",
+          "ref": "REL_18_1",
+          "repository": "https://github.com/postgres/postgres"
+        },
+        {
+          "archive_sha256": "2e4911d4275bab397260986a10948f48d736d8c31685eebc67ddb9c4cba43916",
+          "commit": "4648c46e938bc1cf4cff3972b1be707e2237153b",
+          "kind": "build-recipe",
+          "ref": "4648c46e938bc1cf4cff3972b1be707e2237153b",
+          "repository": "https://github.com/cloudnative-pg/postgres-containers"
+        }
+      ],
+      "public": {
+        "digest": "sha256:70d8e6c26d459bf5ad8821b815a3a594997e0d7bca7f4e9364ede8e34a683881",
+        "reference": "registry-1.docker.io/splunk/postgresok-postgresql:18.1-splunk.4-ci.e3f9db841236@sha256:70d8e6c26d459bf5ad8821b815a3a594997e0d7bca7f4e9364ede8e34a683881"
+      }
+    },
+    {
+      "id": "pgbouncer",
+      "kind": "image",
+      "version": "pgbouncer-1-26-0-splunk.4-ci.e3f9db841236",
+      "sources": [
+        {
+          "archive_sha256": "de3f205627b418b581138c37d6d72b2999bf5401f6f5dbe30a4613e2f63b3f1d",
+          "commit": "7d38761c8f6c757238fde9f942cf9fe0cd272ae3",
+          "kind": "source-archive",
+          "ref": "pgbouncer_1_26_0",
+          "repository": "https://github.com/pgbouncer/pgbouncer"
+        }
+      ],
+      "public": {
+        "digest": "sha256:f8af01929141923be0c77ad27ce83099eff305a921717c396bf5e7817ef1c4e2",
+        "reference": "registry-1.docker.io/splunk/postgresok-pgbouncer:pgbouncer-1-26-0-splunk.4-ci.e3f9db841236@sha256:f8af01929141923be0c77ad27ce83099eff305a921717c396bf5e7817ef1c4e2"
+      }
+    },
+    {
+      "id": "plugin-barman-cloud",
+      "kind": "image",
+      "version": "v0-15-1-splunk.10-ci.e3f9db841236",
+      "sources": [
+        {
+          "archive_sha256": "71784b3bb10c92e63f61048404a24b7754bcd383a9313588802189a5aced8368",
+          "commit": "6216b7dd552f389952d3de77712d9522a79d9548",
+          "kind": "source-archive",
+          "ref": "v0.15.1",
+          "repository": "https://github.com/cloudnative-pg/plugin-barman-cloud"
+        },
+        {
+          "commit": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "kind": "patch",
+          "path": "patches/plugin-barman-cloud/0001-x-net-0.62.0.patch",
+          "ref": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "sha256": "ac2978de190050da69bc3f42606da0ede4dd5a75ae61bc559324882716af789d"
+        },
+        {
+          "commit": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "kind": "patch",
+          "path": "patches/plugin-barman-cloud/0002-otel-go-1.47.0.patch",
+          "ref": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "sha256": "8313fdba5b117ca4c57697ea8b79f98632add730901691086ea3841df60607cd"
+        },
+        {
+          "commit": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "kind": "patch",
+          "path": "patches/plugin-barman-cloud/0003-pyasn1-0.6.5.patch",
+          "ref": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "sha256": "c68ff4c3e61a893dbd188ccb5d181145354cf0d1f9fbe3177807090fa91b3fae"
+        },
+        {
+          "commit": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "kind": "patch",
+          "path": "patches/plugin-barman-cloud/0004-otel-python-1.45.2.patch",
+          "ref": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "sha256": "009179e897e7a4c7b98daa8a560442eb8228f8f09b24f65a7ec85371222dcf9a"
+        },
+        {
+          "commit": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "kind": "patch",
+          "path": "patches/plugin-barman-cloud/0005-certifi-2026.11.20.patch",
+          "ref": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "sha256": "95425f2131f195fad403d746ec128f7c095c3a94f9cd3b69a9aa69bb00fcb931"
+        }
+      ],
+      "public": {
+        "digest": "sha256:645383fbfa30118538d616494cbf47049beb852f8dacf5e4af2698b1de317587",
+        "reference": "registry-1.docker.io/splunk/postgresok-plugin-barman-cloud:v0-15-1-splunk.10-ci.e3f9db841236@sha256:645383fbfa30118538d616494cbf47049beb852f8dacf5e4af2698b1de317587"
+      }
+    },
+    {
+      "id": "plugin-barman-cloud-sidecar",
+      "kind": "image",
+      "version": "v0-15-1-splunk.10-ci.e3f9db841236",
+      "sources": [
+        {
+          "archive_sha256": "71784b3bb10c92e63f61048404a24b7754bcd383a9313588802189a5aced8368",
+          "commit": "6216b7dd552f389952d3de77712d9522a79d9548",
+          "kind": "source-archive",
+          "ref": "v0.15.1",
+          "repository": "https://github.com/cloudnative-pg/plugin-barman-cloud"
+        },
+        {
+          "commit": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "kind": "patch",
+          "path": "patches/plugin-barman-cloud/0001-x-net-0.62.0.patch",
+          "ref": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "sha256": "ac2978de190050da69bc3f42606da0ede4dd5a75ae61bc559324882716af789d"
+        },
+        {
+          "commit": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "kind": "patch",
+          "path": "patches/plugin-barman-cloud/0002-otel-go-1.47.0.patch",
+          "ref": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "sha256": "8313fdba5b117ca4c57697ea8b79f98632add730901691086ea3841df60607cd"
+        },
+        {
+          "commit": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "kind": "patch",
+          "path": "patches/plugin-barman-cloud/0003-pyasn1-0.6.5.patch",
+          "ref": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "sha256": "c68ff4c3e61a893dbd188ccb5d181145354cf0d1f9fbe3177807090fa91b3fae"
+        },
+        {
+          "commit": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "kind": "patch",
+          "path": "patches/plugin-barman-cloud/0004-otel-python-1.45.2.patch",
+          "ref": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "sha256": "009179e897e7a4c7b98daa8a560442eb8228f8f09b24f65a7ec85371222dcf9a"
+        },
+        {
+          "commit": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "kind": "patch",
+          "path": "patches/plugin-barman-cloud/0005-certifi-2026.11.20.patch",
+          "ref": "e3f9db841236d0d1cc9fda4c842d28f724516954",
+          "sha256": "95425f2131f195fad403d746ec128f7c095c3a94f9cd3b69a9aa69bb00fcb931"
+        }
+      ],
+      "public": {
+        "digest": "sha256:82c49fcb005a8993fa3e04040bde1744607958b130a088af435b7564f4067602",
+        "reference": "registry-1.docker.io/splunk/postgresok-plugin-barman-cloud-sidecar:v0-15-1-splunk.10-ci.e3f9db841236@sha256:82c49fcb005a8993fa3e04040bde1744607958b130a088af435b7564f4067602"
+      }
+    },
+    {
+      "id": "chart-cloudnative-pg",
+      "kind": "chart",
+      "version": "0.29.1-splunk.1.p44238692.ge3f9db841236",
+      "sources": [
+        {
+          "archive_sha256": "2a145763fe09674f8f553bf4ca421bda25e702afdbc1b73bc457a8919424d8bc",
+          "commit": "effa01d9a7d6fa390712a83bbadad1784940f2f4",
+          "kind": "source-archive",
+          "ref": "cloudnative-pg-v0.29.1",
+          "repository": "https://github.com/cloudnative-pg/charts"
+        }
+      ],
+      "public": {
+        "digest": "sha256:7f2126ab380e56835dbec7ced4bf8094f12c32187b9a5c1ca76da538273a274a",
+        "reference": "registry-1.docker.io/splunk/postgresok-helm-cloudnative-pg:0.29.1-splunk.1.p44238692.ge3f9db841236@sha256:7f2126ab380e56835dbec7ced4bf8094f12c32187b9a5c1ca76da538273a274a"
+      },
+      "package_sha256": "6d10e286e9c9296d9de1c557478ad36d06184e39ee0082085de58c45b7821337"
+    },
+    {
+      "id": "chart-barman-cloud",
+      "kind": "chart",
+      "version": "0.8.1-splunk.1.p44238692.ge3f9db841236",
+      "sources": [
+        {
+          "archive_sha256": "3d680dafcec4c84a697cb76fdfbf6568319d75a7e846465c4dc6f56f1d67c887",
+          "commit": "7eed5c2f629adeb08d894a23ece1aa06225de15a",
+          "kind": "source-archive",
+          "ref": "plugin-barman-cloud-v0.8.1",
+          "repository": "https://github.com/cloudnative-pg/charts"
+        }
+      ],
+      "public": {
+        "digest": "sha256:6dc296299fafb9b2b5fcfad478023c0655f93edec79900568d0c588c0e0f11e6",
+        "reference": "registry-1.docker.io/splunk/postgresok-helm-plugin-barman-cloud:0.8.1-splunk.1.p44238692.ge3f9db841236@sha256:6dc296299fafb9b2b5fcfad478023c0655f93edec79900568d0c588c0e0f11e6"
+      },
+      "package_sha256": "04bbffaed54def38068d8d162802a71ded330d2bf9dba1d208bfb49c1f78d39d"
+    }
+  ]
+}

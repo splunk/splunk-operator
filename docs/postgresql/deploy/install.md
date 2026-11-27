@@ -124,7 +124,7 @@ If you do not already run CNPG, continue to [apply the Helm configuration](#appl
 
 ### Use an existing CNPG installation
 
-Use CloudNativePG 1.30.1 as the minimum for this deployment path. This is the upstream version in the [published backend release manifest](../releases/postgresok-2026-11-06/release-manifest.json). A newer CNPG version is not necessarily compatible. Check the versions listed for your Splunk Operator release.
+Use CloudNativePG 1.30.1 as the minimum for this deployment path. This is the upstream version in the [published backend release manifest](../releases/postgresok-2026-11-27/release-manifest.json). A newer CNPG version is not necessarily compatible. Check the versions listed for your Splunk Operator release.
 
 Before you install, make sure that CNPG meets the version requirement. Make sure that it watches the namespace for shared PostgreSQL. If the version is below the minimum, upgrade CNPG through its own installation method. Do not install a second CNPG controller to work around an incompatible version.
 
