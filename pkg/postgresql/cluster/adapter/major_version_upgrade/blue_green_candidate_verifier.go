@@ -503,9 +503,14 @@ FROM pg_replication_slots WHERE slot_name = $1 AND slot_type = 'logical'`, slotN
 
 const candidateGuardBody = `
 BEGIN
-  IF pg_catalog.pg_replication_origin_session_is_setup() THEN
-    RETURN NULL;
-  END IF;
+  BEGIN
+    IF pg_catalog.pg_replication_origin_session_is_setup() THEN
+      RETURN NULL;
+    END IF;
+  EXCEPTION WHEN insufficient_privilege THEN
+    -- An ordinary caller must reach the candidate-write rejection below.
+    NULL;
+  END;
   RAISE EXCEPTION 'ordinary writes are disabled while this blue/green candidate is synchronizing';
 END;
 `

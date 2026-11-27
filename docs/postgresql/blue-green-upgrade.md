@@ -68,6 +68,21 @@ managed database definitions, schema, and access policies unchanged. Ordinary
 blue application DML can continue while green copies and catches up. Green's
 candidate write guards prevent ordinary application writes.
 
+Before cutover, `INSERT`, `UPDATE`, `DELETE`, and `TRUNCATE` on green that reach
+the guard return SQLSTATE `P0001` with the message
+`ordinary writes are disabled while this blue/green candidate is synchronizing`.
+Ordinary reads and logical replication continue without granting application
+roles access to PostgreSQL replication-origin functions.
+
+Before updating to an operator build with this guard change, finish or cancel
+any active pre-cutover blue/green attempt created by an earlier development
+build. The operator verifies the exact guard definition and does not rewrite
+installed guards. An older definition is rejected with
+`CandidateRebuildRequired`. If a pre-commit attempt is rejected after the
+update, [cancel it](#cancel-an-attempt), complete
+[retained-environment cleanup](#clean-up-the-retained-environment), and start a
+new attempt with a fresh candidate.
+
 Wait for the latest upgrade entry to reach `ReadyForSwitchover` and for its
 candidate readiness conditions to pass. The green identity and candidate
 endpoints are recorded under that entry's `blueGreen` status. They are not the
