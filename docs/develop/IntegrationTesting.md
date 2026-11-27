@@ -83,7 +83,7 @@ Pooler pods. Synthetic unit/envtest fixture images
 are intentionally not published and must never be used for live tests.
 
 EKS and Kraken PostgreSQL CI resolve these inputs from the checked-in
-[public release catalog](../postgresql/releases/postgresok-2026-11-06/release-manifest.json)
+[public release catalog](../postgresql/releases/postgresok-2026-11-27/release-manifest.json)
 before provisioning. `POSTGRES_RELEASE_MANIFEST` selects another reviewed catalog;
 explicit `TEST_PG*_IMAGE` variables override workload defaults. The shared CI
 helper verifies the public CNPG chart's archive checksum and installs it with the

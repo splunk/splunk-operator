@@ -296,9 +296,9 @@ sharedPostgres:
     tolerations: []
   images:
     postgresql:
-      "17": registry-1.docker.io/splunk/postgresok-postgresql:17.10-splunk.1-ci.a1b7ebc9e8ad@sha256:d5d86314dbe7a2d1c1db3a37af3b21c2362d98026252cfa3fdec4f829ef31124
-      "18": registry-1.docker.io/splunk/postgresok-postgresql:18.1-splunk.1-ci.a1b7ebc9e8ad@sha256:c2c5451783e970f5e198007934d18065c8b362c2702ec80899e054f66dfebc9a
-    pgbouncer: registry-1.docker.io/splunk/postgresok-pgbouncer:pgbouncer-1-26-0-splunk.1-ci.a1b7ebc9e8ad@sha256:7156f136f47e0cdee12d2b0a8ee117090454d5d323b0f7312ef2fc9176e19c51
+      "17": registry-1.docker.io/splunk/postgresok-postgresql:17.12-splunk.4-ci.e3f9db841236@sha256:60301caf5317a74aaa2d5847fcd329da9d532419e08b70aefb2794d82c1c8bce
+      "18": registry-1.docker.io/splunk/postgresok-postgresql:18.1-splunk.4-ci.e3f9db841236@sha256:70d8e6c26d459bf5ad8821b815a3a594997e0d7bca7f4e9364ede8e34a683881
+    pgbouncer: registry-1.docker.io/splunk/postgresok-pgbouncer:pgbouncer-1-26-0-splunk.4-ci.e3f9db841236@sha256:f8af01929141923be0c77ad27ce83099eff305a921717c396bf5e7817ef1c4e2
     imagePullSecrets: []
   connectionPooler:
     enabled: true
