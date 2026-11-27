@@ -1,10 +1,13 @@
 ---
-title: Blue/green Major Upgrades
-parent: PostgreSQL
+title: Use the blue/green upgrade strategy
+parent: Scale and upgrade PostgreSQL
+grand_parent: Operate PostgreSQL
 nav_order: 5
 ---
 
 ## Blue/green major upgrades
+
+Use this strategy only after you check the [major upgrade requirements](major-version-upgrade.md). The shared Helm chart [does not expose the major upgrade workflow](index.md#if-helm-owns-the-shared-cluster).
 
 The `blueGreen` strategy creates a target-major CNPG environment, imports the
 managed schema, and copies data using logical replication. Applications continue

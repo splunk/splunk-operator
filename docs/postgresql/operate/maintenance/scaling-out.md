@@ -1,22 +1,21 @@
 ---
-title: Scaling
-parent: PostgreSQL
-nav_order: 5
+title: Add or remove instances
+parent: Scale and upgrade PostgreSQL
+grand_parent: Operate PostgreSQL
+nav_order: 1
 ---
 
 Image references below are template variables. Set them to approved complete
 `tag@sha256` references and render standalone YAML with `envsubst` before applying.
-See [image configuration](deploy/public-artifacts.md#pull-a-selected-image) for the
+See [image configuration](../../deploy/public-artifacts.md#pull-a-selected-image) for the
 required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
 
 
 # PostgresCluster Scaling
 
-This document describes how to scale out or scale down a Splunk Operator `PostgresCluster` by changing the number of instances, what guard rails the operator enforces, and what level of interruption to expect.
+Use this procedure to change the number of instances. If you need larger volumes or more resources per instance, [change CPU, memory, or storage](scaling-up.md) instead. If Helm owns the cluster, [set its instance count in Helm values](index.md#if-helm-owns-the-shared-cluster). Use the status checks below for either deployment.
 
-Examples here use scaling between 1, 2, and 3 instances. The same process applies to any value of `spec.instances`.
-
-Major-version upgrades, minor-version upgrades, and backups are not covered here.
+These examples change `spec.instances` between 1, 2, and 3. Use the same procedure for other permitted instance counts.
 
 ### How scaling works
 
@@ -109,12 +108,12 @@ kubectl get events -n $NS --sort-by=.lastTimestamp
 
 ### Scale-down
 
-Scale-down removes a read replica. CNPG never evicts the primary as part of scaling — its scale-down logic explicitly skips the primary pod and removes the replica with the highest serial. Writes on the RW endpoint are not interrupted.
+When you scale down, CNPG removes the read replica with the highest serial number. It leaves the primary in place. Writes on the read-write (RW) endpoint continue.
 
 What to expect:
 
 - the replica with the highest serial is drained and removed; the primary keeps serving
-- read clients connected directly to the evicted replica's pod-level endpoint will see their connection dropped and should reconnect via the RO service
+- CNPG drops direct connections to the replica it removes. If a read-only (RO) endpoint is still available, reconnect through that service.
 - CNPG phase typically stays `PhaseHealthy` throughout; scale progress is tracked via `status.readyInstances`
 - `PostgresCluster.status.phase` moves `Ready -> Provisioning -> Ready`
 - if scaling down to `1`, the RO endpoint loses its backend and the operator publishes empty RO endpoint values in the access `ConfigMap` — see [Read-only endpoint unavailability](#read-only-endpoint-unavailability-when-fewer-than-two-instances-are-ready)
@@ -127,16 +126,16 @@ Procedure is the same as scale-out: edit `spec.instances` in the manifest, revie
 
 ### Read-only endpoint unavailability when fewer than two instances are ready
 
-CNPG does not publish a usable read-only service until at least two instances are ready. The operator surfaces this honestly: whenever `cnpgCluster.status.readyInstances < 2`, the access `ConfigMap` is generated with the RO endpoint values cleared:
+A usable read-only service needs at least two ready instances. If `cnpgCluster.status.readyInstances < 2` after scaling completes, the operator clears the read-only values in the access `ConfigMap`:
 
 - `CLUSTER_RO_ENDPOINT` is set to `""` (the key remains present so the contract is stable)
 - `CLUSTER_POOLER_RO_ENDPOINT` is set to `""` (when the connection pooler is enabled)
 
 In practice this applies to the steady-state case where `spec.instances=1`: CNPG holds `readyInstances=1`, the cluster reaches `phase=Ready`, and the access `ConfigMap` exposes the RW endpoints normally while the RO keys are empty.
 
-Scaling is owned entirely by the cluster component: while a scale is in flight — `cnpgCluster.status.readyInstances` not yet equal to the desired `instances`, even while CNPG holds `phase=Healthy` — the cluster reports `Provisioning` and the reconcile short-circuits before the pooler and `ConfigMap` components run. They react only once the instance count has settled, so the access `ConfigMap` is never (re)generated against a transient mid-scale ready count and the prior contents are left in place. The RO endpoint value therefore reflects the settled ready count, not a momentary dip during a scale-out or scale-down.
+Until the ready count matches the requested count, `PostgresCluster` reports `Provisioning`, even if CNPG reports `Healthy`. The operator leaves the pooler and access `ConfigMap` unchanged during this time. After scaling completes, the read-only endpoint value reflects the final ready count.
 
-Two distinct triggers govern the read-only path; they are intentionally split:
+The operator uses different counts for the read-only endpoint value and the pooler resource:
 
 | Surface                                | Gated on                              | Why                                                                                                                |
 | -------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -209,7 +208,7 @@ Common events include:
 - `ClusterUpdateStarted`
 - `ClusterReady`
 
-You may also see additional namespace events from CNPG and Kubernetes:
+CNPG and Kubernetes can report these events in the namespace:
 
 - CNPG lifecycle events like `CreatingReplica`, `Switchover`, `FailOver`
 - normal pod lifecycle events such as `Scheduled`, `Pulling`, `Started`, and `Killing`

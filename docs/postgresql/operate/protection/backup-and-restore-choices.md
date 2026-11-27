@@ -1,20 +1,21 @@
 ---
-title: Backup and Restore Choices
-parent: PostgreSQL
-nav_order: 0
+title: Plan backup and recovery
+parent: Protect and recover data
+grand_parent: Operate PostgreSQL
+nav_order: 1
 ---
 
 Image references below are template variables. Set them to approved complete
 `tag@sha256` references and render standalone YAML with `envsubst` before applying.
-See [image configuration](deploy/public-artifacts.md#pull-a-selected-image) for the
+See [image configuration](../../deploy/public-artifacts.md#pull-a-selected-image) for the
 required numeric-leading PostgreSQL tags and same-namespace pull Secrets.
 
 
 # Backup and Restore Choices
 
-If you are deploying the Helm-owned shared cluster, [configure Barman backups in Deploy](deploy/provision.md#configure-backups-before-enabling-the-cluster). The shared chart does not configure snapshot backups. Use the comparisons below to plan recovery. Use the restore paths that match your cluster's backup policy.
+Use the comparison below to choose a backup method and see which restore paths it supports. If you are recovering data now, start with the [recovery runbook](disaster-recovery.md#3-failure-mode--recovery-path).
 
-This page helps platform administrators choose a PostgreSQL backup method, configure the platform, and select a restore path. It covers the supported choices at a practical level. The detailed provider and recovery procedures are linked at the [end](#detailed-procedures).
+If Helm owns the shared cluster, [configure Barman in Deploy](../../deploy/provision.md#configure-backups-before-enabling-the-cluster). The chart does not configure snapshot backups. The class and cluster examples on this page apply to independently managed resources.
 
 ## Decision summary
 
@@ -64,7 +65,7 @@ Limitations:
 - restore time depends on object-store access and the amount of data transferred; and
 - PITR is only possible while the required base backup and WAL segments are retained.
 
-Both providers may be configured on the same class. When backups are enabled, the operator creates an independent scheduled backup for each configured provider.
+You can configure both providers on the same class. If backups are enabled, the operator creates a separate schedule for each provider.
 
 ## Platform setup
 

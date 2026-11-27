@@ -1,7 +1,8 @@
 ---
 title: Custom PostgreSQL metrics
-parent: PostgreSQL
-nav_order: 8
+parent: Monitor and diagnose PostgreSQL
+grand_parent: Operate PostgreSQL
+nav_order: 2
 ---
 
 # Custom PostgreSQL metrics
@@ -481,5 +482,5 @@ kubectl describe postgrescluster orders-postgres -n apps
 
 Once your collector is scraping the PostgreSQL endpoint, use its query interface
 to confirm the new series and labels. The reference
-[observability dashboard](../../PostgreSQLObservabilityDashboard.md) describes the
+[observability dashboard](postgresql-observability-dashboard.md) describes the
 repository's example monitoring setup and assumptions.

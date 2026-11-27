@@ -1,16 +1,15 @@
 ---
-title: Major Version Upgrades
-parent: PostgreSQL
+title: Upgrade to a new major version
+parent: Scale and upgrade PostgreSQL
+grand_parent: Operate PostgreSQL
 nav_order: 4
 ---
 
 ## PostgreSQL Major Version Upgrades
 
-This document describes how to perform a PostgreSQL major version upgrade for a Splunk Operator `PostgresCluster`, what safety checks the operator performs, and what to monitor during the upgrade.
+Use this procedure for a supported major transition on an independently managed cluster. If Helm owns the shared cluster, [see the chart limits](index.md#if-helm-owns-the-shared-cluster) before choosing a strategy.
 
-Examples here use `17 -> 18`, but the same process applies to other supported PostgreSQL major versions.
-
-Minor-version upgrades, scaling, and backup configuration are covered separately.
+For a patch within one major version, use the [minor upgrade procedure](minor-version-upgrade.md).
 
 ### How major upgrades work
 
@@ -188,7 +187,7 @@ At the `PostgresCluster` level, expect `status.postgresMajorUpgradeStatus[n].pha
 
 The `phase` field and the conditions in `status.postgresMajorUpgradeStatus[n].conditions` are independent. While the phase is `PreUpgradeBackup` or `PostUpgradeBackup` and the backup has not yet completed, the active condition is `MajorUpgradeRetryableFailure` (the operator is waiting for the backup, not failing). The phase advances to the next step only after the backup is confirmed.
 
-Each status entry may contain conditions:
+Each status entry can include these conditions:
 
 | Condition | Meaning |
 | --- | --- |
@@ -296,6 +295,6 @@ The pre-upgrade backup name is recorded in `status.postgresMajorUpgradeStatus[n]
 
 In all cases the recovery instruction is the same: restore the cluster from the named pre-upgrade backup.
 
-For object-storage (Barman) backups, see [Backup and restore with object storage](backup-object-storage.md).
+For object-storage (Barman) backups, see [Backup and restore with object storage](../protection/backup-object-storage.md).
 
-For volume-snapshot backups, see [Restore from volume snapshot](restore-from-volume-snapshot.md).
+For volume-snapshot backups, see [Restore from volume snapshot](../protection/restore-from-volume-snapshot.md).
